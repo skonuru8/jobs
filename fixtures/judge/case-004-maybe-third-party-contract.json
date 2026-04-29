@@ -1,0 +1,32 @@
+{
+  "_note": "MAYBE — third_party_contract flag, W2 only but no end client named, decent skills",
+  "input": {
+    "job": {
+      "title": "Java Full Stack Developer - W2 only",
+      "company": "ASCII Group LLC",
+      "employment_type": "contract",
+      "seniority": "mid",
+      "domain": null,
+      "required_skills": [
+        { "name": "java",        "importance": "required",  "years_required": 5 },
+        { "name": "node.js",     "importance": "required",  "years_required": 3 },
+        { "name": "typescript",  "importance": "required",  "years_required": 2 },
+        { "name": "graphql",     "importance": "required",  "years_required": null },
+        { "name": "vue.js",      "importance": "preferred", "years_required": null }
+      ],
+      "years_experience": { "min": 8, "max": null },
+      "education_required": { "minimum": "", "field": "" },
+      "visa_sponsorship": null,
+      "responsibilities": [
+        "Build REST and GraphQL APIs in Java and Node.js",
+        "Develop Vue.js frontend components"
+      ],
+      "flags": ["posted_at_missing", "currency_unsupported", "third_party_contract"]
+    },
+    "score": {
+      "total": 0.661,
+      "components": { "skills": 0.59, "semantic": 0.66, "yoe": 0.6, "seniority": 1.0, "location": 0.5 }
+    }
+  },
+  "expected_verdict": "MAYBE"
+}

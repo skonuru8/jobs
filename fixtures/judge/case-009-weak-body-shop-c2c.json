@@ -1,0 +1,33 @@
+{
+  "_note": "WEAK — third_party_contract + W2-only staffing listing, no named end client, very low skills score",
+  "input": {
+    "job": {
+      "title": "Java Full Stack Developer",
+      "company": "Sincera Technologies Inc",
+      "employment_type": "contract",
+      "seniority": "mid",
+      "domain": "finance",
+      "required_skills": [
+        { "name": "java",        "importance": "required",  "years_required": 7 },
+        { "name": "jee",         "importance": "required",  "years_required": 5 },
+        { "name": "linux",       "importance": "required",  "years_required": 3 },
+        { "name": "shell scripting","importance": "required","years_required": null },
+        { "name": "devops",      "importance": "required",  "years_required": null },
+        { "name": "teamcity",    "importance": "preferred", "years_required": null }
+      ],
+      "years_experience": { "min": 7, "max": 15 },
+      "education_required": { "minimum": "", "field": "" },
+      "visa_sponsorship": null,
+      "responsibilities": [
+        "Develop Java EE applications for capital markets",
+        "Maintain Linux-based deployment pipelines"
+      ],
+      "flags": ["posted_at_missing", "third_party_contract", "salary_missing", "education_unparsed"]
+    },
+    "score": {
+      "total": 0.572,
+      "components": { "skills": 0.20, "semantic": 0.65, "yoe": 0.8, "seniority": 1.0, "location": 0.5 }
+    }
+  },
+  "expected_verdict": "WEAK"
+}

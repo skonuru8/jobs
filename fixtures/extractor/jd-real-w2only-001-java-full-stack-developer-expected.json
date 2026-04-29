@@ -1,0 +1,68 @@
+{
+  "required_skills": [
+    {
+      "name": "vue.js",
+      "years_required": null,
+      "importance": "required",
+      "category": "framework",
+      "quote": "Hands on Experience in Vue3Js, .NET, NodeJS (Mandatory)"
+    },
+    {
+      "name": ".net",
+      "years_required": null,
+      "importance": "required",
+      "category": "framework",
+      "quote": "Hands on Experience in Vue3Js, .NET, NodeJS (Mandatory)"
+    },
+    {
+      "name": "node.js",
+      "years_required": null,
+      "importance": "required",
+      "category": "framework",
+      "quote": "Hands on Experience in Vue3Js, .NET, NodeJS (Mandatory)"
+    },
+    {
+      "name": "javascript",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": "Firm grasp of the JavaScript and TypeScript language and its nuances, including ES6+ syntax"
+    },
+    {
+      "name": "typescript",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": "Firm grasp of the JavaScript and TypeScript language and its nuances, including ES6+ syntax"
+    },
+    {
+      "name": "graphql",
+      "years_required": null,
+      "importance": "required",
+      "category": "other",
+      "quote": "Understanding of REST, GraphQL APIs, the document request model, and offline storage"
+    }
+  ],
+  "years_experience": {
+    "min": 8,
+    "max": null,
+    "quote": "Relevant Experience (in Yrs.): 8+yrs."
+  },
+  "education_required": {
+    "minimum": "",
+    "field": "",
+    "quote": null
+  },
+  "responsibilities": [
+    "Hands on Experience in Vue3Js, .NET, NodeJS",
+    "Firm grasp of the JavaScript and TypeScript language",
+    "Knowledge of object-oriented programming",
+    "Ability to write well-documented, clean JavaScript code",
+    "Rock solid at working with third-party dependencies",
+    "Understanding of REST, GraphQL APIs",
+    "Excellent communication skills"
+  ],
+  "visa_sponsorship": false,
+  "security_clearance": "none",
+  "domain": null
+}

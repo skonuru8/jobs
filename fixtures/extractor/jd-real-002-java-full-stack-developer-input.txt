@@ -1,0 +1,87 @@
+Java Full Stack Developer - Sincera Technologies, Inc. - Hybrid in NYC, NY, US | Dice.com
+Sincera Technologies, Inc.
+Java Full Stack Developer
+Hybrid in NYC, NY, US • Posted 21 days ago • Updated 21 days ago Contract W2
+Contract Corp To Corp
+Contract Independent
+Hybrid
+Depends on Experience
+Fitment Dice Job Match Score™
+📊 Calculating match score...
+Job Details
+Skills
+Java Full Stack Developer
+Spring
+Angular
+React
+Summary
+Title : Java Full Stack Developer
+Location : NYC, NY (Hybrid 3 days a week)
+Employment type : C2C or full time
+Location : NYC / NJ - Inperson first round interview is mandatory.
+Technology
+The ideal candidate should have the skills listed below but in addition should be a self-driven, dedicated individual who works well in a team and thinks and acts strategically. In addition, the candidate should respond well to change and quickly pick up new concepts in an ever-moving regulatory landscape. When faced with a problem, the candidate should be able to ask questions and leverage the skill set of those around him/her. Daily responsibilities include, transforming requirements into code, attending scrum meetings, reporting on project status, and learning our in-house frameworks and Java best practices.
+Position Description:
+We are looking for a strong java developer and help deliver key initiatives. The applicant should be a solid Java programmer, with strong design and implementation fundamentals. Prior experience in finance or legal operations will be useful, however, the ability and willingness to quickly master new technical and business concepts will be considered. The applicant will be working with an energetic team of highly intellectual and creative developers who work on bleeding edge projects using a variety of different technologies.
+Skills Required:
+7 to 15 years of hands-on experience on Java/JEE. Should be able to write optimized, efficient and clean code.
+Strong Object-Oriented Programming and Design Pattern concepts with practical experience of leveraging the same during development.
+Linux, Unix, Shell Scripting.
+Strong analytical and problem-solving skills. Candidate should be able to design and then implement solutions.
+DevOps knowledge packaging and deploying web applications using Jenkins, Teamcity etc.
+Team player with strong attitude and work ethics.
+Strong oral and written communication skills. Candidate is expected to work with global teams and hence should be clear in both verbal and written communication.
+Write unit tests that exercise all major logic components of the code.
+Skill Desired:
+JAVA 8+
+Strong Database skills including PL/SQL and query tuning.
+Spring/Spring Boot/Hibernate.
+Layered Architecture, Component based Architecture.
+Unix OS, Scripting, Python or Perl
+Experience in development on other application types (Web applications, batch, or streaming)
+Employers have access to artificial intelligence language tools (“AI”) that help generate and enhance job descriptions and AI may have been used to create this description. The position description has been reviewed for accuracy and Dice believes it to correctly reflect the job opportunity. Dice Id: 91135616
+Position Id: 8929055
+Posted 21 days ago
+Create job alert
+Never miss an opportunity! Create an alert based on the job you applied for.
+Create alert
+Similar Jobs
+Motion Recruitment Partners, LLC
+Senior Full Stack Java Developer
+Jersey City, New Jersey
+•
+Today
+Grow your career as a Senior Full Stack Java Developer with an innovative global bank in Jersey City, NJ. Contract role with strong possibility of extension and/or conversion. Will require working a hybrid schedule 2-3 days onsite per week. Join one of the world&#x27;s most renowned global banks and trusted brand with over 200 years of continuously evolving financial services worldwide. You will work alongside some of the smartest minds in the industry who are excited to share their knowledge and to
+Easy Apply
+Contract
+$95 - $97
+Swanktek Inc
+Java Full Stack Developer with AI
+New York, New York
+•
+27d ago
+Job Description Key AI Skills: GitHub Copilot and Open AI LLM Models and Prompt Engineering. Job Functions/Duties and Responsibilities: Work closely with Product Owners, Business analysts and other IT partners located globally on day-to-day basis to ensure smooth delivery of projects Understand, follow, and ensure that system architecture and integration design standards are in alignment with broader platform strategies and business goals. Provide stable technical solutions which are robust an
+Easy Apply
+Contract, Third Party
+Depends on Experience
+Sensiple Inc.
+Java Developer
+New York, New York
+•
+Today
+Sensiple Inc is a New Jersey corporation with over two decades of expertise in technology-driven solutions specializing in Customer Experience, Contact Centre Solutions, Digital Transformation, Cloud Computing & Independent Testing. With an expert team that has enriched experience in executing & developing sustainable IT strategies in Healthcare, Technology, Retail, Logistics, Education, Telecommunications, Government and Media, we help our diverse customers to envision the future. By developing
+Easy Apply
+Contract
+Depends on Experience
+TekShapers
+Java Developer
+Hybrid in New York, New York
+•
+14d ago
+Employment type W2 Job Title JavaDeveloper Job Location New York Duration 12+ Months Experience level - Min. 12Years MandatorySkills Java, J2EE, Core Java, Angular, React, SpringJob DescriptionWe are looking for a technically proficient java developer that will work on creating new applications and enhancingexisting applications for the TC application team and work with global partners in business unit and Operations areas. The candidate will be involved in working on cutting edge technolog
+Easy Apply
+Full-time, Contract, Third Party
+Depends on Experience
+Search all similar jobs
+✕
+Apply Now

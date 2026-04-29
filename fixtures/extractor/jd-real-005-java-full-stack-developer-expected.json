@@ -1,0 +1,203 @@
+{
+  "required_skills": [
+    {
+      "name": "java",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": ""
+    },
+    {
+      "name": "spring",
+      "years_required": null,
+      "importance": "required",
+      "category": "framework",
+      "quote": ""
+    },
+    {
+      "name": "spring boot",
+      "years_required": null,
+      "importance": "required",
+      "category": "framework",
+      "quote": ""
+    },
+    {
+      "name": "microservices",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": ""
+    },
+    {
+      "name": "kafka",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": ""
+    },
+    {
+      "name": "ci/cd",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": ""
+    },
+    {
+      "name": "jenkins",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "CI/CD pipelines (e.g., Jenkins, GitHub Actions, GitLab, Maven)"
+    },
+    {
+      "name": "github actions",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "CI/CD pipelines (e.g., Jenkins, GitHub Actions, GitLab, Maven)"
+    },
+    {
+      "name": "gitlab",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "CI/CD pipelines (e.g., Jenkins, GitHub Actions, GitLab, Maven)"
+    },
+    {
+      "name": "maven",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "CI/CD pipelines (e.g., Jenkins, GitHub Actions, GitLab, Maven)"
+    },
+    {
+      "name": "junit",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": ""
+    },
+    {
+      "name": "json",
+      "years_required": null,
+      "importance": "required",
+      "category": "other",
+      "quote": ""
+    },
+    {
+      "name": "hadoop",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "Knowledge of Hadoop & Spark (required for coding test)"
+    },
+    {
+      "name": "spark",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "Knowledge of Hadoop & Spark (required for coding test)"
+    },
+    {
+      "name": "rest services",
+      "years_required": null,
+      "importance": "required",
+      "category": "other",
+      "quote": "Build REST-based microservices and integrate with external/internal APIs."
+    },
+    {
+      "name": "agile",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "Collaborate closely with cross-functional teams in an Agile environment."
+    },
+    {
+      "name": "scrum",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "Agile/Scrum experience"
+    },
+    {
+      "name": "angular",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "framework",
+      "quote": "Angular (preferred)"
+    },
+    {
+      "name": "spark",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "tool",
+      "quote": "Spark (already required, but advanced experience is a plus)"
+    },
+    {
+      "name": "app engine",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "cloud",
+      "quote": "App Engine"
+    },
+    {
+      "name": "application servers",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "other",
+      "quote": "Experience with application servers"
+    },
+    {
+      "name": "cloud-native architecture",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "methodology",
+      "quote": "Exposure to cloud-native architecture (Cloud experience is not required , but useful)"
+    },
+    {
+      "name": "kafka",
+      "years_required": null,
+      "importance": "nice_to_have",
+      "category": "tool",
+      "quote": "Kafka (nice to have but preferred)"
+    },
+    {
+      "name": "bpm tools",
+      "years_required": null,
+      "importance": "nice_to_have",
+      "category": "tool",
+      "quote": "BPM tools such as Camunda"
+    },
+    {
+      "name": "camunda",
+      "years_required": null,
+      "importance": "nice_to_have",
+      "category": "tool",
+      "quote": "BPM tools such as Camunda"
+    }
+  ],
+  "years_experience": {
+    "min": null,
+    "max": null,
+    "quote": null
+  },
+  "education_required": {
+    "minimum": "",
+    "field": "",
+    "quote": null
+  },
+  "responsibilities": [
+    "Develop high-quality, efficient, and testable application code.",
+    "Participate in the entire Software Development Life Cycle (SDLC).",
+    "Lead technical design, development, troubleshooting, and documentation for multi-platform systems.",
+    "Build REST-based microservices and integrate with external/internal APIs.",
+    "Create flowcharts, architectural diagrams, and documentation for solution design.",
+    "Maintain existing applications, resolve technical issues, and reduce technical debt.",
+    "Perform code reviews and ensure adherence to engineering best practices.",
+    "Ensure performance, scalability, and reliability of applications.",
+    "Collaborate closely with cross-functional teams in an Agile environment."
+  ],
+  "visa_sponsorship": null,
+  "security_clearance": "none",
+  "domain": null
+}

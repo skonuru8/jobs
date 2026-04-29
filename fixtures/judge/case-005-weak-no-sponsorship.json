@@ -1,0 +1,32 @@
+{
+  "_note": "WEAK — visa_sponsorship = false, OPT candidate cannot apply regardless of skills",
+  "input": {
+    "job": {
+      "title": "Senior Java Backend Engineer",
+      "company": "JPMorgan Chase",
+      "employment_type": "full_time",
+      "seniority": "senior",
+      "domain": "fintech",
+      "required_skills": [
+        { "name": "java",        "importance": "required",  "years_required": 5 },
+        { "name": "spring boot", "importance": "required",  "years_required": 3 },
+        { "name": "aws",         "importance": "required",  "years_required": 2 },
+        { "name": "kafka",       "importance": "required",  "years_required": 2 },
+        { "name": "postgresql",  "importance": "preferred", "years_required": null }
+      ],
+      "years_experience": { "min": 5, "max": 8 },
+      "education_required": { "minimum": "bachelor", "field": "Computer Science" },
+      "visa_sponsorship": false,
+      "responsibilities": [
+        "Build high-throughput payment microservices",
+        "Lead backend design for trading platform"
+      ],
+      "flags": ["posted_at_missing"]
+    },
+    "score": {
+      "total": 0.810,
+      "components": { "skills": 0.85, "semantic": 0.75, "yoe": 1.0, "seniority": 1.0, "location": 1.0 }
+    }
+  },
+  "expected_verdict": "WEAK"
+}

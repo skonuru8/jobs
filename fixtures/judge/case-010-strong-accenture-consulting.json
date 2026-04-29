@@ -1,0 +1,33 @@
+{
+  "_note": "STRONG — Accenture (large consulting but named end clients), skills ceiling 0.85, strong overall",
+  "input": {
+    "job": {
+      "title": "Java Full Stack Developer",
+      "company": "Accenture LLP",
+      "employment_type": "full_time",
+      "seniority": "mid",
+      "domain": "enterprise saas",
+      "required_skills": [
+        { "name": "java",        "importance": "required",  "years_required": 5 },
+        { "name": "spring boot", "importance": "required",  "years_required": 3 },
+        { "name": "angular",     "importance": "required",  "years_required": 3 },
+        { "name": "microservices","importance": "required", "years_required": null },
+        { "name": "aws",         "importance": "preferred", "years_required": null }
+      ],
+      "years_experience": { "min": 5, "max": 8 },
+      "education_required": { "minimum": "bachelor", "field": "Computer Science" },
+      "visa_sponsorship": null,
+      "responsibilities": [
+        "Architect and implement microservices for enterprise clients",
+        "Build Angular frontend modules",
+        "Collaborate with cross-functional delivery teams"
+      ],
+      "flags": ["posted_at_missing", "education_unparsed"]
+    },
+    "score": {
+      "total": 0.857,
+      "components": { "skills": 0.85, "semantic": 0.76, "yoe": 1.0, "seniority": 1.0, "location": 1.0 }
+    }
+  },
+  "expected_verdict": "STRONG"
+}

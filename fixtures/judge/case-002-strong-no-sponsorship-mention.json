@@ -1,0 +1,34 @@
+{
+  "_note": "STRONG — sponsorship not mentioned (null), strong skill match, EPAM Systems (product company)",
+  "input": {
+    "job": {
+      "title": "Senior Java Full Stack Developer (ReactJS)",
+      "company": "EPAM Systems",
+      "employment_type": "full_time",
+      "seniority": "senior",
+      "domain": "enterprise saas",
+      "required_skills": [
+        { "name": "java",        "importance": "required",  "years_required": 5 },
+        { "name": "spring boot", "importance": "required",  "years_required": 3 },
+        { "name": "react",       "importance": "required",  "years_required": 2 },
+        { "name": "aws",         "importance": "required",  "years_required": 2 },
+        { "name": "microservices","importance": "required", "years_required": null },
+        { "name": "docker",      "importance": "preferred", "years_required": null },
+        { "name": "kubernetes",  "importance": "preferred", "years_required": null }
+      ],
+      "years_experience": { "min": 5, "max": null },
+      "education_required": { "minimum": "bachelor", "field": "" },
+      "visa_sponsorship": null,
+      "responsibilities": [
+        "Architect and implement scalable microservices",
+        "Lead technical discussions with product teams"
+      ],
+      "flags": ["posted_at_missing", "salary_missing"]
+    },
+    "score": {
+      "total": 0.775,
+      "components": { "skills": 0.58, "semantic": 0.70, "yoe": 1.0, "seniority": 1.0, "location": 1.0 }
+    }
+  },
+  "expected_verdict": "STRONG"
+}

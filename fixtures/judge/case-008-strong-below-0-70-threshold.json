@@ -1,0 +1,33 @@
+{
+  "_note": "STRONG but score < 0.70 — routes to RESULTS not COVER_LETTER; node+react stack with some gaps",
+  "input": {
+    "job": {
+      "title": "Senior Full Stack Developer (Node & React)",
+      "company": "iSpace Inc",
+      "employment_type": "full_time",
+      "seniority": "senior",
+      "domain": "healthcare",
+      "required_skills": [
+        { "name": "node.js",     "importance": "required",  "years_required": 4 },
+        { "name": "react",       "importance": "required",  "years_required": 3 },
+        { "name": "typescript",  "importance": "required",  "years_required": 2 },
+        { "name": "postgresql",  "importance": "required",  "years_required": null },
+        { "name": "aws",         "importance": "preferred", "years_required": 2 },
+        { "name": "docker",      "importance": "preferred", "years_required": null }
+      ],
+      "years_experience": { "min": 5, "max": null },
+      "education_required": { "minimum": "", "field": "" },
+      "visa_sponsorship": true,
+      "responsibilities": [
+        "Build Node.js microservices for health data platform",
+        "Develop React dashboards for clinical reporting"
+      ],
+      "flags": ["posted_at_missing", "education_unparsed"]
+    },
+    "score": {
+      "total": 0.635,
+      "components": { "skills": 0.47, "semantic": 0.63, "yoe": 1.0, "seniority": 1.0, "location": 1.0 }
+    }
+  },
+  "expected_verdict": "STRONG"
+}

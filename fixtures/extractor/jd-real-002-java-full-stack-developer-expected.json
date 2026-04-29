@@ -1,0 +1,183 @@
+{
+  "required_skills": [
+    {
+      "name": "java/jee",
+      "years_required": 7,
+      "importance": "required",
+      "category": "language",
+      "quote": "7 to 15 years of hands-on experience on Java/JEE."
+    },
+    {
+      "name": "object-oriented programming",
+      "years_required": null,
+      "importance": "required",
+      "category": "other",
+      "quote": "Strong Object-Oriented Programming and Design Pattern concepts with practical experience of leveraging the same during development."
+    },
+    {
+      "name": "design patterns",
+      "years_required": null,
+      "importance": "required",
+      "category": "other",
+      "quote": "Strong Object-Oriented Programming and Design Pattern concepts with practical experience of leveraging the same during development."
+    },
+    {
+      "name": "linux",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "Linux, Unix, Shell Scripting."
+    },
+    {
+      "name": "unix",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "Linux, Unix, Shell Scripting."
+    },
+    {
+      "name": "shell scripting",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": "Linux, Unix, Shell Scripting."
+    },
+    {
+      "name": "devops",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "DevOps knowledge packaging and deploying web applications using Jenkins, Teamcity etc."
+    },
+    {
+      "name": "jenkins",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "DevOps knowledge packaging and deploying web applications using Jenkins, Teamcity etc."
+    },
+    {
+      "name": "teamcity",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "DevOps knowledge packaging and deploying web applications using Jenkins, Teamcity etc."
+    },
+    {
+      "name": "unit testing",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "Write unit tests that exercise all major logic components of the code."
+    },
+    {
+      "name": "java 8+",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "language",
+      "quote": "JAVA 8+"
+    },
+    {
+      "name": "pl/sql",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "language",
+      "quote": "Strong Database skills including PL/SQL and query tuning."
+    },
+    {
+      "name": "query tuning",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "methodology",
+      "quote": "Strong Database skills including PL/SQL and query tuning."
+    },
+    {
+      "name": "spring",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "framework",
+      "quote": "Spring/Spring Boot/Hibernate."
+    },
+    {
+      "name": "spring boot",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "framework",
+      "quote": "Spring/Spring Boot/Hibernate."
+    },
+    {
+      "name": "hibernate",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "framework",
+      "quote": "Spring/Spring Boot/Hibernate."
+    },
+    {
+      "name": "layered architecture",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "methodology",
+      "quote": "Layered Architecture, Component based Architecture."
+    },
+    {
+      "name": "component based architecture",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "methodology",
+      "quote": "Layered Architecture, Component based Architecture."
+    },
+    {
+      "name": "python",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "language",
+      "quote": "Unix OS, Scripting, Python or Perl"
+    },
+    {
+      "name": "perl",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "language",
+      "quote": "Unix OS, Scripting, Python or Perl"
+    },
+    {
+      "name": "angular",
+      "years_required": null,
+      "importance": "nice_to_have",
+      "category": "framework",
+      "quote": "Angular"
+    },
+    {
+      "name": "react",
+      "years_required": null,
+      "importance": "nice_to_have",
+      "category": "framework",
+      "quote": "React"
+    }
+  ],
+  "years_experience": {
+    "min": 7,
+    "max": 15,
+    "quote": "7 to 15 years of hands-on experience on Java/JEE."
+  },
+  "education_required": {
+    "minimum": "",
+    "field": "",
+    "quote": null
+  },
+  "responsibilities": [
+    "transforming requirements into code",
+    "attending scrum meetings",
+    "reporting on project status",
+    "learning our in-house frameworks",
+    "learning Java best practices",
+    "deliver key initiatives",
+    "write optimized, efficient and clean code",
+    "leveraging design patterns during development",
+    "packaging and deploying web applications",
+    "write unit tests that exercise all major logic components"
+  ],
+  "visa_sponsorship": null,
+  "security_clearance": "none",
+  "domain": "finance"
+}

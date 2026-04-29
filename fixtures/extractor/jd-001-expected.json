@@ -1,0 +1,28 @@
+{
+    "required_skills": [
+      { "name": "java",         "years_required": 5,   "importance": "required",      "category": "language",     "quote": "5+ years of experience with Java and Spring Boot" },
+      { "name": "spring boot",  "years_required": 5,   "importance": "required",      "category": "framework",    "quote": "5+ years of experience with Java and Spring Boot" },
+      { "name": "microservices","years_required": null, "importance": "required",      "category": "methodology",  "quote": "Strong knowledge of microservices architecture and REST APIs" },
+      { "name": "rest apis",    "years_required": null, "importance": "required",      "category": "methodology",  "quote": "microservices architecture and REST APIs" },
+      { "name": "aws",          "years_required": null, "importance": "required",      "category": "cloud",        "quote": "Experience with AWS services including Lambda, SQS, and S3" },
+      { "name": "aws lambda",   "years_required": null, "importance": "required",      "category": "cloud",        "quote": "AWS services including Lambda, SQS, and S3" },
+      { "name": "aws sqs",      "years_required": null, "importance": "required",      "category": "cloud",        "quote": "AWS services including Lambda, SQS, and S3" },
+      { "name": "postgresql",   "years_required": null, "importance": "required",      "category": "tool",         "quote": "Proficiency in SQL databases, particularly PostgreSQL" },
+      { "name": "kafka",        "years_required": null, "importance": "required",      "category": "tool",         "quote": "Experience with Apache Kafka for event-driven architectures" },
+      { "name": "docker",       "years_required": null, "importance": "preferred",     "category": "tool",         "quote": "Experience with Docker and Kubernetes" },
+      { "name": "kubernetes",   "years_required": null, "importance": "preferred",     "category": "tool",         "quote": "Experience with Docker and Kubernetes" },
+      { "name": "redis",        "years_required": null, "importance": "preferred",     "category": "tool",         "quote": "Knowledge of Redis caching strategies" }
+    ],
+    "years_experience": { "min": 5, "max": null, "quote": "5+ years of experience with Java" },
+    "education_required": { "minimum": "bachelor", "field": "Computer Science", "quote": "Bachelor's degree in Computer Science or related field required" },
+    "responsibilities": [
+      "Design and implement high-throughput microservices for payment processing",
+      "Build and maintain REST APIs consumed by web and mobile clients",
+      "Optimize database queries and implement caching to reduce latency",
+      "Collaborate with product and infrastructure teams on system design",
+      "Write unit and integration tests with JUnit and Mockito"
+    ],
+    "visa_sponsorship": false,
+    "security_clearance": "none",
+    "domain": "fintech"
+  }

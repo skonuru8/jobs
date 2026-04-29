@@ -1,0 +1,73 @@
+{
+  "required_skills": [
+    {
+      "name": "java",
+      "years_required": 5,
+      "importance": "preferred",
+      "category": "language",
+      "quote": "5+ years of advanced Java Programming experience and relational databases"
+    },
+    {
+      "name": "relational databases",
+      "years_required": 5,
+      "importance": "preferred",
+      "category": "tool",
+      "quote": "5+ years of advanced Java Programming experience and relational databases"
+    },
+    {
+      "name": "guidewire",
+      "years_required": null,
+      "importance": "required",
+      "category": "other",
+      "quote": "IT Senior Software Engineer (Guidewire/Java)"
+    },
+    {
+      "name": "gosu",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": "GOSU"
+    },
+    {
+      "name": "agile",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "3 Agile Scrum teams"
+    },
+    {
+      "name": "scrum",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "3 Agile Scrum teams"
+    },
+    {
+      "name": "cloud computing",
+      "years_required": null,
+      "importance": "required",
+      "category": "cloud",
+      "quote": "transformational new cloud capabilities"
+    }
+  ],
+  "years_experience": {
+    "min": 5,
+    "max": null,
+    "quote": "5+ years of advanced Java Programming experience"
+  },
+  "education_required": {
+    "minimum": "",
+    "field": "",
+    "quote": null
+  },
+  "responsibilities": [
+    "Designs, develops, and maintains computer software.",
+    "Provides technical leadership on small, moderately complex projects.",
+    "Delivers moderately complex code/configuration changes in full-stack environment.",
+    "Serves as overarching technical lead for 3 Agile Scrum teams.",
+    "Delivers first time through projects or transformational new cloud capabilities."
+  ],
+  "visa_sponsorship": null,
+  "security_clearance": "none",
+  "domain": "insurance"
+}

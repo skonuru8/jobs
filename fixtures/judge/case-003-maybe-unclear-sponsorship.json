@@ -1,0 +1,32 @@
+{
+  "_note": "MAYBE — sponsorship unclear + unknown company, decent skills match but uncertain",
+  "input": {
+    "job": {
+      "title": "Java Full Stack Developer",
+      "company": "Nexgen IT Solutions",
+      "employment_type": "contract",
+      "seniority": "mid",
+      "domain": null,
+      "required_skills": [
+        { "name": "java",        "importance": "required",  "years_required": 4 },
+        { "name": "spring boot", "importance": "required",  "years_required": 3 },
+        { "name": "angular",     "importance": "required",  "years_required": 2 },
+        { "name": "sql",         "importance": "required",  "years_required": null },
+        { "name": "rest apis",   "importance": "required",  "years_required": null }
+      ],
+      "years_experience": { "min": 4, "max": 7 },
+      "education_required": { "minimum": "", "field": "" },
+      "visa_sponsorship": null,
+      "responsibilities": [
+        "Develop and maintain Java microservices",
+        "Build Angular UI components"
+      ],
+      "flags": ["posted_at_missing", "salary_missing", "sponsorship_unclear"]
+    },
+    "score": {
+      "total": 0.694,
+      "components": { "skills": 0.72, "semantic": 0.61, "yoe": 1.0, "seniority": 1.0, "location": 0.5 }
+    }
+  },
+  "expected_verdict": "MAYBE"
+}

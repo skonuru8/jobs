@@ -1,0 +1,26 @@
+{
+    "required_skills": [
+      { "name": "java",        "years_required": null, "importance": "required",      "category": "language",    "quote": "Java, Spring Boot for backend services" },
+      { "name": "spring boot", "years_required": null, "importance": "required",      "category": "framework",   "quote": "Java, Spring Boot for backend services" },
+      { "name": "angular",     "years_required": null, "importance": "required",      "category": "framework",   "quote": "Angular for frontend development" },
+      { "name": "sql server",  "years_required": null, "importance": "required",      "category": "tool",        "quote": "SQL Server or PostgreSQL database experience" },
+      { "name": "postgresql",  "years_required": null, "importance": "required",      "category": "tool",        "quote": "SQL Server or PostgreSQL database experience" },
+      { "name": "jenkins",     "years_required": null, "importance": "required",      "category": "tool",        "quote": "CI/CD pipelines (Jenkins or GitLab)" },
+      { "name": "gitlab ci/cd","years_required": null, "importance": "required",      "category": "tool",        "quote": "CI/CD pipelines (Jenkins or GitLab)" },
+      { "name": "camunda bpmn","years_required": null, "importance": "nice_to_have",  "category": "tool",        "quote": "Camunda BPMN workflow experience" },
+      { "name": "keycloak",    "years_required": null, "importance": "nice_to_have",  "category": "tool",        "quote": "Keycloak or similar SSO implementation" },
+      { "name": "docker",      "years_required": null, "importance": "nice_to_have",  "category": "tool",        "quote": "Docker containerization" }
+    ],
+    "years_experience": { "min": 3, "max": 7, "quote": "3-7 years of software engineering experience" },
+    "education_required": { "minimum": "", "field": "", "quote": null },
+    "responsibilities": [
+      "Build and maintain Java Spring Boot microservices for appeals processing",
+      "Develop Angular UI components for case management workflows",
+      "Write optimized SQL queries for reporting dashboards",
+      "Manage Jenkins CI/CD pipelines for deployment automation",
+      "Handle production incidents and provide on-call support"
+    ],
+    "visa_sponsorship": true,
+    "security_clearance": "required",
+    "domain": "healthcare"
+  }

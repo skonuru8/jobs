@@ -1,0 +1,14 @@
+{
+    "_note": "Sparse JD — extractor must return nulls not guesses. Extract don't infer.",
+    "required_skills": [],
+    "years_experience": { "min": null, "max": null, "quote": null },
+    "education_required": { "minimum": "", "field": "", "quote": null },
+    "responsibilities": [
+      "Write code and ship features",
+      "Participate in code reviews",
+      "Work with the team"
+    ],
+    "visa_sponsorship": null,
+    "security_clearance": "none",
+    "domain": null
+  }

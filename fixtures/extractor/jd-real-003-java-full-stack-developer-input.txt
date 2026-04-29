@@ -1,0 +1,65 @@
+Java Full Stack Developer - Blackstraw LLC - Remote | Dice.com
+Blackstraw LLC
+Java Full Stack Developer
+Remote • Posted 9 days ago • Updated 9 days ago Full Time
+No Travel Required
+Remote
+1,30,000 - 1,90,000/yr
+Blackstraw LLC
+Fitment Dice Job Match Score™
+👾 Reticulating splines...
+Job Details
+Skills
+Full Stack
+Angular
+Java
+Front-End Development
+Summary
+Company Profile
+Blackstraw.ai is an end-to-end technology services company specializing in Artificial Intelligence (AI) and Engineering solutions across Data Science, Data Engineering, LLM/GenAI and LLMOps. Founded in 2018, we help global enterprises across North America, Europe and Asia to build and operationalize AI systems that create measurable business impact. Our mission is to make AI adoption simpler, faster and scalable through a blend of deep domain expertise, reusable accelerators and proven engineering practices.
+With a 400+ strong team of engineers, data scientists and AI specialists, we partner with organizations to deliver real-world outcomes in areas such as predictive analytics, computer vision, natural language processing and Generative AI.
+At Blackstraw.ai, we&rsquo;re passionate about solving complex business challenges through intelligent automation, modern data architectures and next-gen AI applications enabling enterprises to move from AI experimentation to transformation.
+Headquartered in Florida (USA) with operations in Canada and India, Blackstraw.ai continues to empower global enterprises to unlock the true potential of AI.
+Location: USA
+Experience: 7 to 12 years
+Employment Type: Full-time
+About the Role: We are seeking an experienced Senior Java Full Stack Developer with strong Angular expertise to design, build, and optimize scalable enterprise applications. This role requires deep handson development experience, strong architectural thinking, and the ability to work across the full technology stack.
+Key Responsibilities
+Lead endtoend development of fullstack applications using Java, Spring Boot, and Angular.
+Design and implement scalable, secure, and highperformance solutions.
+Develop RESTful APIs, microservices, and reusable UI components.
+Collaborate with crossfunctional teams including product, QA, DevOps, and UX.
+Participate in code reviews, enforce engineering best practices, and mentor junior developers.
+Troubleshoot complex issues across the stack and drive continuous improvement.
+Contribute to architectural decisions and technical roadmaps.
+Required Skills & Experience
+7 to 12 years of handson experience in fullstack development.
+Strong proficiency in Java, Spring Boot, Microservices, and REST APIs.
+Advanced experience with Angular (Angular 8+ preferred), TypeScript, HTML5, CSS3.
+Solid understanding of SQL/NoSQL databases (MySQL, PostgreSQL, MongoDB, etc.).
+Experience with cloud platforms (AWS, Azure, or Google Cloud Platform).
+Familiarity with CI/CD pipelines, Git, Docker, and containerized deployments.
+Strong problemsolving skills and ability to work in fastpaced, agile environments.
+Preferred Skills:
+Experience with Kafka, Kubernetes, or eventdriven architectures.
+Exposure to performance tuning and distributed systems.
+Prior experience working with global teams or enterprisescale applications
+What We Offer
+Opportunity to work on highimpact, modern engineering projects.
+Collaborative, innovationdriven environment.
+Competitive compensation and growth opportunities.
+Blackstraw provides equal employment opportunities to applicants and employees without regard to race, color, religion, age, sex, sexual orientation, gender identity/expression, national origin, marital status, protected veteran status, disability status, or any other basis as protected by federal, state, or local law
+Employers have access to artificial intelligence language tools (“AI”) that help generate and enhance job descriptions and AI may have been used to create this description. The position description has been reviewed for accuracy and Dice believes it to correctly reflect the job opportunity. Dice Id: 91162909
+Position Id: 8940729
+Posted 9 days ago
+Company Info
+About Blackstraw LLC
+Blackstraw is a leading Digital Transformation provider that specializes in delivering innovative data and artificial intelligence solutions to clients across various industries. With a team of experts in data analytics, AI / ML, and proprietary solutions and platforms, Blackstraw helps its clients unlock the full potential of their data to drive actionable insights and achieve business goals.
+Go to company profile
+Create job alert
+Never miss an opportunity! Create an alert based on the job you applied for.
+Create alert
+Similar Jobs
+It looks like there aren&#x27;t any Similar Jobs for this job yet.
+Search all similar jobs
+Apply Now

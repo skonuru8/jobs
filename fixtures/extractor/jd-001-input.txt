@@ -1,0 +1,27 @@
+Senior Java Backend Engineer
+
+We are looking for a Senior Java Backend Engineer to join our fintech platform team. You will design and build microservices that process millions of financial transactions daily.
+
+Requirements:
+- 5+ years of experience with Java and Spring Boot
+- Strong knowledge of microservices architecture and REST APIs
+- Experience with AWS services including Lambda, SQS, and S3
+- Proficiency in SQL databases, particularly PostgreSQL
+- Experience with Apache Kafka for event-driven architectures
+- Bachelor's degree in Computer Science or related field required
+- Must be authorized to work in the US — no visa sponsorship available
+
+Preferred:
+- Experience with Docker and Kubernetes
+- Knowledge of Redis caching strategies
+- React or Angular for occasional frontend work
+
+Responsibilities:
+- Design and implement high-throughput microservices for payment processing
+- Build and maintain REST APIs consumed by web and mobile clients
+- Optimize database queries and implement caching to reduce latency
+- Collaborate with product and infrastructure teams on system design
+- Write unit and integration tests with JUnit and Mockito
+
+Compensation: $140,000 - $170,000 per year
+Location: Remote (US only)

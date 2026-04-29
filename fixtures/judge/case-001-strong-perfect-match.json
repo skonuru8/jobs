@@ -1,0 +1,33 @@
+{
+  "_note": "STRONG — Java+Spring Boot+Azure stack, sponsorship offered, remote, high score across all components",
+  "input": {
+    "job": {
+      "title": "Senior Java Full Stack Engineer",
+      "company": "Citi",
+      "employment_type": "full_time",
+      "seniority": "senior",
+      "domain": "fintech",
+      "required_skills": [
+        { "name": "java",        "importance": "required",  "years_required": 5 },
+        { "name": "spring boot", "importance": "required",  "years_required": 4 },
+        { "name": "azure",       "importance": "required",  "years_required": 3 },
+        { "name": "microservices","importance": "required", "years_required": null },
+        { "name": "angular",     "importance": "preferred", "years_required": 2 },
+        { "name": "kafka",       "importance": "preferred", "years_required": null }
+      ],
+      "years_experience": { "min": 5, "max": 8 },
+      "education_required": { "minimum": "bachelor", "field": "Computer Science" },
+      "visa_sponsorship": true,
+      "responsibilities": [
+        "Design and build microservices for payment processing",
+        "Own technical delivery across full stack"
+      ],
+      "flags": ["posted_at_missing"]
+    },
+    "score": {
+      "total": 0.832,
+      "components": { "skills": 0.85, "semantic": 0.72, "yoe": 1.0, "seniority": 1.0, "location": 1.0 }
+    }
+  },
+  "expected_verdict": "STRONG"
+}

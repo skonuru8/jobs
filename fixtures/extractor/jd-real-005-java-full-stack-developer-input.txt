@@ -1,0 +1,167 @@
+Java Full Stack Developer - Judge Group, Inc. - Bayonne, NJ, US | Dice.com
+Judge Group, Inc.
+Java Full Stack Developer
+Bayonne, NJ, US • Posted 60+ days ago • Updated 7 hours ago Full Time
+On-site
+USD $145,000.00 - 150,000.00 per year
+Judge Group, Inc.
+Fitment Dice Job Match Score™
+👾 Reticulating splines...
+Job Details
+Skills
+Recruiting
+Jersey
+GitHub
+GitLab
+JUnit
+Apache Hadoop
+Apache Spark
+Google App Engine
+Application Servers
+Cloud Computing
+Java
+Spring Framework
+RESTful
+JMS
+Hibernate
+JSON
+XML
+HTML5
+AngularJS
+JavaScript
+Database
+SQL
+Oracle
+MongoDB
+Messaging
+Streaming
+Apache Kafka
+DevOps
+Apache Maven
+Jenkins
+Git
+Continuous Integration
+Continuous Delivery
+Business Process Management
+Process Modeling
+Process Management
+Scrum
+Software Development
+Software Development Methodology
+Technical Drafting
+Microservices
+Flowchart
+Documentation
+Software Design
+Scalability
+Collaboration
+Agile
+Privacy
+Marketing
+Summary
+Location: Bayonne, NJ
+Salary: $145,000.00 USD Annually - $150,000.00 USD Annually
+Description:
+Job Description: Java Full Stack Developer
+Location: Jersey City, NJ (Onsite interview required)
+Employment: Fulltime
+Hiring Process:
+Round 1: Technical interview + Mandatory Coding Test
+Round 2: Face-to-face interview onsite (Jersey City, NJ)
+Mandatory Skills
+Candidates must have hands-on project experience with:
+Java (Core Java)
+Spring & Spring Boot
+Microservices architecture
+Kafka
+CI/CD pipelines (e.g., Jenkins, GitHub Actions, GitLab, Maven)
+JUnit
+JSON
+Additional mandatory requirement:
+Knowledge of Hadoop & Spark (required for coding test)
+Good-to-Have Skills
+Angular (preferred)
+Spark (already required, but advanced experience is a plus)
+App Engine
+Experience with application servers
+Exposure to cloud-native architecture (Cloud experience is not required , but useful)
+Technical Skill Summary
+Backend
+Java, Spring, Spring Boot
+REST Services
+Microservices
+JMS, Hibernate
+JSON, XML
+Frontend
+HTML5, Angular, JavaScript
+Database
+SQL, Oracle (Primary), MongoDB
+Messaging / Streaming
+Kafka (nice to have but preferred)
+DevOps / Tools
+Maven
+Jenkins
+Git
+CI/CD pipelines
+Other
+BPM tools such as Camunda
+Agile/Scrum experience
+Roles & Responsibilities
+Develop high-quality, efficient, and testable application code.
+Participate in the entire Software Development Life Cycle (SDLC) .
+Lead technical design, development, troubleshooting, and documentation for multi-platform systems.
+Build REST-based microservices and integrate with external/internal APIs.
+Create flowcharts, architectural diagrams, and documentation for solution design.
+Maintain existing applications, resolve technical issues, and reduce technical debt.
+Perform code reviews and ensure adherence to engineering best practices.
+Ensure performance, scalability, and reliability of applications.
+Collaborate closely with cross-functional teams in an Agile environment.
+By providing your phone number, you consent to: (1) receive automated text messages and calls from the Judge Group, Inc. and its affiliates (collectively "Judge") to such phone number regarding job opportunities, your job application, and for other related purposes. Message & data rates apply and message frequency may vary. Consistent with Judge's Privacy Policy, information obtained from your consent will not be shared with third parties for marketing/promotional purposes. Reply STOP to opt out of receiving telephone calls and text messages from Judge and HELP for help.
+Contact:
+This job and many more are available through The Judge Group. Please apply with us today!
+Employers have access to artificial intelligence language tools (“AI”) that help generate and enhance job descriptions and AI may have been used to create this description. The position description has been reviewed for accuracy and Dice believes it to correctly reflect the job opportunity. Dice Id: cxjudgpa
+Position Id: 1118658
+Posted 30+ days ago
+Company Info
+About Judge Group, Inc.
+The Judge Group, is a leading professional services firm specializing in talent, technology, and learning solutions. We consult, staff, train, and solve. Through our work we make people and organizations better.
+Our services are successfully delivered through a network of more than 30 offices across the United States, Canada, and India. The Judge Group is proud to partner with the best and brightest companies in business today, including over 60 of the Fortune 100. We serve organizations in financial services, healthcare, life sciences, insurance, government (including aerospace and defense), manufacturing, and technology and telecommunications.
+Go to company profile
+Create job alert
+Never miss an opportunity! Create an alert based on the job you applied for.
+Create alert
+Similar Jobs
+Judge Group, Inc.
+Senior Full Stack Java Engineer
+Jersey City, New Jersey
+•
+Today
+Location: Jersey City, NJ Salary: $140,000.00 USD Annually - $170,000.00 USD Annually Description: Work Model: Hybrid Work Type: Full-Time Client Location: Jersey City or Manhattan Interview Process Internal Screening: Technical panelKarat Test: Technical assessment platform.Client Interviews: Two rounds with client technical leads. Core Development Skills Java & React (Must-Have): Essential for backend integration and frontend development of the "Production Insight Toolkit."Python: Highly
+Contract
+USD 140,000.00 - 170,000.00 per year
+Judge Group, Inc.
+Rating Technical Lead
+Bayonne, New Jersey
+•
+Today
+Location: Bayonne, NJ Salary: $150,000.00 USD Annually - $160,000.00 USD Annually Description: Rating Technical Lead Jersey City NJ Fulltime Technical Lead, Java, Web, Springboot, Microservices, Angular, Azure, AKS, Drools, SBeL, NoSQL, MongoDB, JSON document collections Job Description Must Have Technical/Functional Skills Distributed systems & microservices architecture API design, integration, and orchestration Rules engine (Drools) + rules extraction/translation Reverse engineering legac
+Full-time
+USD 150,000.00 - 160,000.00 per year
+Judge Group, Inc.
+Senior Full Stack Developer (Java & React)
+Jersey City, New Jersey
+•
+Today
+Location: Jersey City, NJ Salary: $140,000.00 USD Annually - $150,000.00 USD Annually Description: Position: Sr. Java Full Stack Developer (Java & React) Location: Jersey City, NJ (Hybrid) Duration: Full-time Full-Time position- Only Independent consultants Required Qualifications 8+ years in full-stack software development. Strong expertise in Java backend and React front-end. Proven experience designing and scaling REST/JSON APIs. Hands-on with Kubernetes, Docker, CI/CD pipelines (Jenk
+Contract
+USD 140,000.00 - 150,000.00 per year
+Judge Group, Inc.
+Sr FullStack Developer
+Jersey City, New Jersey
+•
+Today
+Location: Jersey City, NJ Salary: $100,000.00 USD Annually - $200,000.00 USD Annually Description: Company: Large Bank Position: 3 slightly different openings (see below) Location: Jersey City or NYC (Manhattan) Duration: Direct hire/Permanent position. Position #1 Sr Fullstack Developer (Infrastructure Automation) 6+ years experience working in Kubernetes-based containerized environments including deployment, scaling, and operational management. 8+ years of experience in software developmen
+Contract
+USD 100,000.00 - 200,000.00 per year
+Search all similar jobs
+Apply Now

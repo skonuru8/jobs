@@ -1,0 +1,84 @@
+Java Full Stack Developer - Unikon IT - Remote | Dice.com
+Unikon IT
+Java Full Stack Developer
+Remote • Posted 7 days ago • Updated 1 hour ago Full Time
+No Travel Required
+Remote
+$80,000 - $90,000/yr
+Fitment Dice Job Match Score™
+🎯 Assessing qualifications...
+Job Details
+Skills
+core java
+Agile
+Database
+Programming Languages
+Java
+SQL
+TypeScript
+JavaScript
+REST APIs
+Summary
+Proven experience as a Full Stack Developer or Application Developer for a minimum of 8 years
+Strong experience in Core Java
+Hands-on experience with Spring Boot
+Familiarity with RDBMS databases and design/architectural patterns (e.g. Model-View-Controller (MVC))
+Experience in REST APIs / Microservices
+Good programming skills.
+Hands on developing Web applications using JavaScript or JavaScript MVC frameworks like AngularJS or ReactJS
+Proficient in JavaScript and TypeScript, HTML/CSS, jQuery.
+Work experience with NodeJS is a plus.
+Understanding of Agile methodologies.
+Knowledge of SQL/NoSQL databases
+Good knowledge in SQL language and able to write complex queries and fine tune them to improve performance.
+Good experience in one or more programming languages and able to learn new languages and frameworks.
+Good experience in unit testing.
+Any cloud experience.
+Knowledge of Git practices or other version control software.
+Working knowledge of Perl language is a plus.
+Good to have working knowledge in PDF document creation using XML or HTML.
+Strong communication skills.
+Employers have access to artificial intelligence language tools (“AI”) that help generate and enhance job descriptions and AI may have been used to create this description. The position description has been reviewed for accuracy and Dice believes it to correctly reflect the job opportunity. Dice Id: 90765065
+Position Id: 8943588
+Posted 7 days ago
+Create job alert
+Never miss an opportunity! Create an alert based on the job you applied for.
+Create alert
+Similar Jobs
+Blackstraw LLC
+Java Full Stack Developer
+Remote
+•
+9d ago
+Company Profile Blackstraw.ai is an end-to-end technology services company specializing in Artificial Intelligence (AI) and Engineering solutions across Data Science, Data Engineering, LLM/GenAI and LLMOps. Founded in 2018, we help global enterprises across North America, Europe and Asia to build and operationalize AI systems that create measurable business impact. Our mission is to make AI adoption simpler, faster and scalable through a blend of deep domain expertise, reusable accelerators and
+Easy Apply
+Full-time
+1,30,000 - 1,90,000
+Veterans EZ Info, Inc
+Full Stack Developer
+Remote
+•
+26d ago
+VetsEZ is seeking aMid-Level Full Stack Software Developerto support the modernization and sustainment of enterprise applications within the Department of Veterans Affairs (VA) environment. This role contributes to the design, development, and maintenance of secure, scalable, and cloud-hosted web applications supporting critical healthcare and operational systems. The ideal candidate is a strong hands-on developer with experience across the full stack who also demonstrates the ability to leverag
+Full-time
+120000 - 140000
+Accenture LLP
+Java Full Stack Application Support Engineer - 6213675
+Remote or Charlotte, North Carolina
+•
+Today
+Accenture Flex offers you the flexibility of local fixed-duration project-based work powered by Accenture, a leading global professional services company. Accenture is consistently recognized on FORTUNE&#x27;s 100 Best Companies to Work For and Diversity Inc&#x27;s Top 50 Companies For Diversity lists. As an Accenture Flex employee, you will apply your skills and experience to help drive business transformation for leading organizations and communities. In addition to delivering innovative solutions for
+Full-time
+USD 44.00 - 54.00 per hour
+Aivra Health LLC
+Full Stack Developer Intern
+Remote
+•
+8d ago
+Full Stack Developer InternUnited StatesInternship | Full-Time (40 hours/week)Pay Range: $25 $40 per hourVisa: H1B Sponsorship Available | STEM OPT, OPT & CPT Candidates Welcome Position OverviewWe are seeking a motivated and enthusiastic Full Stack Developer Intern to join our engineering team. This internship provides hands-on experience in developing scalable web applications, working on both frontend and backend systems, and deploying applications in cloud environments. This role is ideal f
+Easy Apply
+Full-time
+25,000 - 40,000
+Search all similar jobs
+✕
+Apply Now

@@ -1,0 +1,162 @@
+{
+  "required_skills": [
+    {
+      "name": "core java",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": "Strong experience in Core Java"
+    },
+    {
+      "name": "spring boot",
+      "years_required": null,
+      "importance": "required",
+      "category": "framework",
+      "quote": "Hands-on experience with Spring Boot"
+    },
+    {
+      "name": "rdbms",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "Familiarity with RDBMS databases and design/architectural patterns"
+    },
+    {
+      "name": "mvc",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "Familiarity with RDBMS databases and design/architectural patterns (e.g. Model-View-Controller (MVC))"
+    },
+    {
+      "name": "rest apis",
+      "years_required": null,
+      "importance": "required",
+      "category": "other",
+      "quote": "Experience in REST APIs / Microservices"
+    },
+    {
+      "name": "microservices",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "Experience in REST APIs / Microservices"
+    },
+    {
+      "name": "javascript",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": "Proficient in JavaScript and TypeScript, HTML/CSS, jQuery."
+    },
+    {
+      "name": "typescript",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": "Proficient in JavaScript and TypeScript, HTML/CSS, jQuery."
+    },
+    {
+      "name": "html/css",
+      "years_required": null,
+      "importance": "required",
+      "category": "other",
+      "quote": "Proficient in JavaScript and TypeScript, HTML/CSS, jQuery."
+    },
+    {
+      "name": "jquery",
+      "years_required": null,
+      "importance": "required",
+      "category": "framework",
+      "quote": "Proficient in JavaScript and TypeScript, HTML/CSS, jQuery."
+    },
+    {
+      "name": "agile methodologies",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "Understanding of Agile methodologies."
+    },
+    {
+      "name": "sql",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": "Knowledge of SQL/NoSQL databases"
+    },
+    {
+      "name": "nosql",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "Knowledge of SQL/NoSQL databases"
+    },
+    {
+      "name": "unit testing",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "Good experience in unit testing."
+    },
+    {
+      "name": "git",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "Knowledge of Git practices or other version control software."
+    },
+    {
+      "name": "java",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": "Programming Languages\nJava"
+    },
+    {
+      "name": "nodejs",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "language",
+      "quote": "Work experience with NodeJS is a plus."
+    },
+    {
+      "name": "perl",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "language",
+      "quote": "Working knowledge of Perl language is a plus."
+    },
+    {
+      "name": "pdf document creation",
+      "years_required": null,
+      "importance": "nice_to_have",
+      "category": "other",
+      "quote": "Good to have working knowledge in PDF document creation using XML or HTML."
+    }
+  ],
+  "years_experience": {
+    "min": 8,
+    "max": null,
+    "quote": "Proven experience as a Full Stack Developer or Application Developer for a minimum of 8 years"
+  },
+  "education_required": {
+    "minimum": "",
+    "field": "",
+    "quote": null
+  },
+  "responsibilities": [
+    "Develop and maintain web applications using JavaScript or JavaScript MVC frameworks",
+    "Write complex SQL queries and optimize them for performance",
+    "Understand and apply Agile methodologies in development processes",
+    "Utilize Core Java and Spring Boot for backend development",
+    "Design and implement REST APIs and microservices",
+    "Perform unit testing to ensure code quality",
+    "Work with RDBMS databases and understand design patterns",
+    "Use version control software like Git for code management",
+    "Gain experience in cloud platforms",
+    "Create PDF documents using XML or HTML"
+  ],
+  "visa_sponsorship": null,
+  "security_clearance": "none",
+  "domain": null
+}

@@ -1,0 +1,159 @@
+{
+  "required_skills": [
+    {
+      "name": "java",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": "Strong proficiency in Java, Spring Boot, Microservices, and REST APIs."
+    },
+    {
+      "name": "spring boot",
+      "years_required": null,
+      "importance": "required",
+      "category": "framework",
+      "quote": "Strong proficiency in Java, Spring Boot, Microservices, and REST APIs."
+    },
+    {
+      "name": "microservices",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "Strong proficiency in Java, Spring Boot, Microservices, and REST APIs."
+    },
+    {
+      "name": "rest apis",
+      "years_required": null,
+      "importance": "required",
+      "category": "other",
+      "quote": "Strong proficiency in Java, Spring Boot, Microservices, and REST APIs."
+    },
+    {
+      "name": "angular",
+      "years_required": null,
+      "importance": "required",
+      "category": "framework",
+      "quote": "Advanced experience with Angular (Angular 8+ preferred), TypeScript, HTML5, CSS3."
+    },
+    {
+      "name": "typescript",
+      "years_required": null,
+      "importance": "required",
+      "category": "language",
+      "quote": "Advanced experience with Angular (Angular 8+ preferred), TypeScript, HTML5, CSS3."
+    },
+    {
+      "name": "html5",
+      "years_required": null,
+      "importance": "required",
+      "category": "other",
+      "quote": "Advanced experience with Angular (Angular 8+ preferred), TypeScript, HTML5, CSS3."
+    },
+    {
+      "name": "css3",
+      "years_required": null,
+      "importance": "required",
+      "category": "other",
+      "quote": "Advanced experience with Angular (Angular 8+ preferred), TypeScript, HTML5, CSS3."
+    },
+    {
+      "name": "sql",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "Solid understanding of SQL/NoSQL databases (MySQL, PostgreSQL, MongoDB, etc.)."
+    },
+    {
+      "name": "nosql",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "Solid understanding of SQL/NoSQL databases (MySQL, PostgreSQL, MongoDB, etc.)."
+    },
+    {
+      "name": "aws",
+      "years_required": null,
+      "importance": "required",
+      "category": "cloud",
+      "quote": "Experience with cloud platforms (AWS, Azure, or Google Cloud Platform)."
+    },
+    {
+      "name": "azure",
+      "years_required": null,
+      "importance": "required",
+      "category": "cloud",
+      "quote": "Experience with cloud platforms (AWS, Azure, or Google Cloud Platform)."
+    },
+    {
+      "name": "google cloud platform",
+      "years_required": null,
+      "importance": "required",
+      "category": "cloud",
+      "quote": "Experience with cloud platforms (AWS, Azure, or Google Cloud Platform)."
+    },
+    {
+      "name": "ci/cd",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "Familiarity with CI/CD pipelines, Git, Docker, and containerized deployments."
+    },
+    {
+      "name": "git",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "Familiarity with CI/CD pipelines, Git, Docker, and containerized deployments."
+    },
+    {
+      "name": "docker",
+      "years_required": null,
+      "importance": "required",
+      "category": "tool",
+      "quote": "Familiarity with CI/CD pipelines, Git, Docker, and containerized deployments."
+    },
+    {
+      "name": "agile",
+      "years_required": null,
+      "importance": "required",
+      "category": "methodology",
+      "quote": "Strong problemsolving skills and ability to work in fastpaced, agile environments."
+    },
+    {
+      "name": "kafka",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "tool",
+      "quote": "Experience with Kafka, Kubernetes, or eventdriven architectures."
+    },
+    {
+      "name": "kubernetes",
+      "years_required": null,
+      "importance": "preferred",
+      "category": "tool",
+      "quote": "Experience with Kafka, Kubernetes, or eventdriven architectures."
+    }
+  ],
+  "years_experience": {
+    "min": 7,
+    "max": 12,
+    "quote": "7 to 12 years of handson experience in fullstack development."
+  },
+  "education_required": {
+    "minimum": "",
+    "field": "",
+    "quote": null
+  },
+  "responsibilities": [
+    "Lead endtoend development of fullstack applications using Java, Spring Boot, and Angular.",
+    "Design and implement scalable, secure, and highperformance solutions.",
+    "Develop RESTful APIs, microservices, and reusable UI components.",
+    "Collaborate with crossfunctional teams including product, QA, DevOps, and UX.",
+    "Participate in code reviews, enforce engineering best practices, and mentor junior developers.",
+    "Troubleshoot complex issues across the stack and drive continuous improvement.",
+    "Contribute to architectural decisions and technical roadmaps."
+  ],
+  "visa_sponsorship": null,
+  "security_clearance": "none",
+  "domain": "Artificial Intelligence (AI)"
+}

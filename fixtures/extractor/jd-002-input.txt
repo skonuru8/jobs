@@ -1,0 +1,27 @@
+Full Stack Engineer — Healthcare Platform
+
+PHIA Group is hiring a Full Stack Engineer to work on our healthcare appeals automation platform. This role owns end-to-end delivery across backend and frontend.
+
+What you'll need:
+- 3-7 years of software engineering experience
+- Java, Spring Boot for backend services
+- Angular for frontend development
+- SQL Server or PostgreSQL database experience
+- Experience with CI/CD pipelines (Jenkins or GitLab)
+- Must have active US security clearance or ability to obtain one
+
+Nice to have:
+- Camunda BPMN workflow experience
+- Keycloak or similar SSO implementation
+- Docker containerization
+
+What you'll do:
+- Build and maintain Java Spring Boot microservices for appeals processing
+- Develop Angular UI components for case management workflows
+- Write optimized SQL queries for reporting dashboards
+- Manage Jenkins CI/CD pipelines for deployment automation
+- Handle production incidents and provide on-call support
+
+OPT/CPT candidates welcome — we sponsor H1B visas
+Location: Hybrid in Boston, Massachusetts
+Salary: $120,000 - $145,000 annually

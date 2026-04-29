@@ -1,0 +1,34 @@
+{
+  "_note": "WEAK — semantic inflated score; actual stack is .NET/C# which candidate doesn't have",
+  "input": {
+    "job": {
+      "title": "Senior Full Stack Developer",
+      "company": "Infosys BPM",
+      "employment_type": "full_time",
+      "seniority": "senior",
+      "domain": "enterprise saas",
+      "required_skills": [
+        { "name": "c#",          "importance": "required",  "years_required": 5 },
+        { "name": ".net",        "importance": "required",  "years_required": 5 },
+        { "name": "asp.net mvc", "importance": "required",  "years_required": 3 },
+        { "name": "blazor",      "importance": "required",  "years_required": 2 },
+        { "name": "entity framework","importance": "required", "years_required": 3 },
+        { "name": "sql server",  "importance": "required",  "years_required": 3 },
+        { "name": "azure devops","importance": "preferred", "years_required": null }
+      ],
+      "years_experience": { "min": 5, "max": 10 },
+      "education_required": { "minimum": "bachelor", "field": "" },
+      "visa_sponsorship": null,
+      "responsibilities": [
+        "Build enterprise .NET applications",
+        "Maintain C# backend services and Blazor frontend"
+      ],
+      "flags": ["posted_at_missing", "salary_missing"]
+    },
+    "score": {
+      "total": 0.572,
+      "components": { "skills": 0.18, "semantic": 0.64, "yoe": 1.0, "seniority": 1.0, "location": 1.0 }
+    }
+  },
+  "expected_verdict": "WEAK"
+}
