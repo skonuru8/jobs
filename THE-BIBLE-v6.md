@@ -95,7 +95,7 @@ The pipeline is a 19-stage flow inside one `main()` function in `scripts/run-pip
 | 11 | Skill normalization through alias map | — |
 | 12 | Score (5 components: skills 0.35, semantic 0.25, yoe 0.15, seniority 0.15, location 0.10) | scoring disabled |
 | 12.5 | **Cross-site semantic dedup (pgvector)** — only on GATE_PASS jobs with embedding | `SKIP_DEDUP=1` or DB down |
-| 13 | Threshold gate: score ≥ 0.55 → GATE_PASS, else ARCHIVE | scoring disabled |
+| 13 | Threshold gate: score ≥ 0.50 → GATE_PASS, else ARCHIVE | scoring disabled |
 | 14 | LLM judge — STRONG / MAYBE / WEAK + reasoning + concerns | judge disabled |
 | 15 | Bucket routing: STRONG+score≥0.70→COVER_LETTER, STRONG+score<0.70→RESULTS, MAYBE→REVIEW_QUEUE, WEAK→ARCHIVE | — |
 | 16 | Cover letter (COVER_LETTER bucket always; REVIEW_QUEUE if score ≥ review_queue_threshold) → write `.md` to `output/cover-letters/{run_id}/{bucket}/` | cover disabled |
@@ -153,7 +153,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 
 ### TypeScript types
 
-`storage/src/types.ts` defines `RunRecord`, `RunStats`, `JobRecord`. `RunStats` gains two new fields since v5: `extractions_attempted` and `extractions_succeeded`. The type change is intentionally compile-breaking on callers that don't pass the new fields, forcing the one call site (`run-pipeline.ts`) to be updated.
+`src/storage/types.ts` defines `RunRecord`, `RunStats`, `JobRecord`. `RunStats` gains two new fields since v5: `extractions_attempted` and `extractions_succeeded`. The type change is intentionally compile-breaking on callers that don't pass the new fields, forcing the one call site (`run-pipeline.ts`) to be updated.
 
 ---
 
@@ -184,7 +184,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 | Storage v4.1 hardening | ✅ Applied | saveJob crash fixed, formatErr, markStorageDisabled |
 | Storage v5.1 (orchestrator columns) | ✅ Applied | 002_orchestrator.sql, RunStats updated, persist.ts updated |
 | POSTED_WITHIN recency filter | ✅ Wired | env var → cli.py → dice.py |
-| Optional integrity check | ✅ Built | `storage/src/integrity.ts`, gated on `VERIFY=1` |
+| Optional integrity check | ✅ Built | `src/storage/integrity.ts`, gated on `VERIFY=1` |
 | **Orchestrator** | ✅ **Built** | **16 tests — lock (8) + runner (5) + reaper (3)** |
 | Sarath's profile | ✅ Validated | min comp $110k confirmed |
 | Docker Compose (Postgres + Redis) | ✅ Built | `docker compose up -d` |
@@ -211,7 +211,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 
 - `profile.json` — Sarath's structured profile (v2). 53 skills, 7 target titles. **Authoritative.** Min comp confirmed at $110k.
 - `skills.json` — 370 skill alias entries. `buildAliasMap()` flattens to lookup map.
-- `config.json` — locked models (`qwen/qwen3.5-flash-02-23` for extract/judge, `deepseek/deepseek-v4-flash` for cover letters), throttle_ms=600, scoring weights (0.35/0.25/0.15/0.15/0.10), gate threshold 0.55, review_queue_threshold 0.70.
+- `config.json` — locked models (`qwen/qwen3.5-flash-02-23` for extract/judge, `deepseek/deepseek-v4-flash` for cover letters), throttle_ms=100 (extractor + judge), scoring weights (0.35/0.25/0.15/0.15/0.10), gate threshold 0.50 (`scoring.gate_threshold`), review_queue_threshold 0.60 (`llm.cover_letter.review_queue_threshold`). Note: `config.json` also contains a `pipeline.schedule` block (`pipeline.sources`, etc.) — this is **legacy/unused**; the actual cron schedules are hardcoded in `src/orchestrator/scheduler.ts`, which is the single source of truth for when and how the pipeline runs.
 - `cookies/` — gitignored. Dice + Jobright browser cookies. Dice is now public-only since the search page needs no auth, but Jobright still requires cookies.
 
 ### `job-filter/` — BUILT
@@ -231,21 +231,21 @@ Three adapters under `scraper/`. CLI in `cli.py` dispatches by `--source`.
 
 ### `fetcher/` — BUILT
 
-Single file `src/fetch.ts`. `fetchJobPage` is non-throwing, uses per-domain 2s polite delay, robots.txt cache, 15s timeout. `extractText` strips script/style/nav/header/footer.
+Single file `src/fetcher/fetch.ts`. `fetchJobPage` is non-throwing, uses per-domain 2s polite delay, robots.txt cache, 15s timeout. `extractText` strips script/style/nav/header/footer.
 
 ### `extractor/` — BUILT
 
 OpenRouter client (no SDK dependency, raw fetch).
 
-- `src/client.ts` — OpenRouter API call. Currently uses `response_format: { type: "json_object" }` — the json_schema strict-mode upgrade is drafted but not applied.
-- `src/prompt.ts` — `PROMPT_VERSION = "v1"`. Extract-don't-infer. Exact substring quotes 5–15 words.
-- `src/validate.ts` — Zod schema. Strips markdown fences if model ignored JSON mode.
-- `src/extract.ts` — Never throws. Retries once on Zod failure (1s backoff). `verifyCitations` nulls bad quotes; partial extraction kept rather than rejected. `_callWithRetry` handles HTTP-level errors. `DEBUG_EXTRACT=1` env var triggers raw-response preview on validation failure.
+- `src/extractor/client.ts` — OpenRouter API call. Currently uses strict `json_schema` response_format (with a JSON Schema mirror of the Zod schema), with fallback to `json_object` via `EXTRACTOR_FORCE_JSON_OBJECT=1` for models that reject strict mode.
+- `src/extractor/prompt.ts` — `PROMPT_VERSION = "v1"`. Extract-don't-infer. Exact substring quotes 5–15 words.
+- `src/extractor/validate.ts` — Zod schema. Strips markdown fences if model ignored JSON mode.
+- `src/extractor/extract.ts` — Never throws. Retries once on Zod failure (1s backoff). `verifyCitations` nulls bad quotes; partial extraction kept rather than rejected. `_callWithRetry` handles HTTP-level errors. `DEBUG_EXTRACT=1` env var triggers raw-response preview on validation failure.
 - 3 synthetic fixtures (`jd-001`, `jd-002`, `jd-003`) plus 1 real-data fixture (`jd-real-002-java-full-stack-developer`). Pipeline supports `SAVE_FIXTURES=1` to capture more.
 
 ### `scorer/` — BUILT
 
-5 pure scoring functions in `src/components.ts`, weighted-summed in `src/score.ts`. `embed.ts` lazy-loads `bge-small-en-v1.5` (q8) via `@huggingface/transformers`. LRU cache 500 entries by SHA256. Returns `Float32Array(384)`. Zero vector on failure.
+5 pure scoring functions in `src/scorer/components.ts`, weighted-summed in `src/scorer/score.ts`. `src/scorer/embed.ts` lazy-loads `bge-small-en-v1.5` (q8) via `@huggingface/transformers`. LRU cache 500 entries by SHA256. Returns `Float32Array(384)`. Zero vector on failure.
 
 Real-data validation confirmed (2026-04-25): scores 0.777–0.790 across 4 Dice jobs. Components behave as designed — `seniority=1.00` and `location=1.00` for senior roles in Sarath's market, `semantic=0.57–0.66` reflecting embedding quality.
 
@@ -265,9 +265,9 @@ Real-data validation confirmed (2026-04-25): 4 cover letters generated, 206–24
 
 Two complementary mechanisms.
 
-**Cross-run exact dedup (`src/redis.ts`)**: Redis SET with per-key TTL. Key shape `seen:{source}:{job_id}`, value `"1"`, TTL 7 days. `isSeen()`, `markSeen()`, `markSeenBulk()` — all non-throwing, gracefully no-op when Redis is down. `_connectionFailed` flag prevents repeated reconnect attempts.
+**Cross-run exact dedup (`src/dedup/redis.ts`)**: Redis SET with per-key TTL. Key shape `seen:{source}:{job_id}`, value `"1"`, TTL 7 days. `isSeen()`, `markSeen()`, `markSeenBulk()` — all non-throwing, gracefully no-op when Redis is down. `_connectionFailed` flag prevents repeated reconnect attempts.
 
-**Cross-site semantic dedup (`src/pgvector.ts`)**: pgvector cosine similarity on the `jobs.embedding` column (HNSW index). Default threshold 0.88, lookback 7 days. Non-throwing — returns null on any DB error.
+**Cross-site semantic dedup (`src/dedup/pgvector.ts`)**: pgvector cosine similarity on the `jobs.embedding` column (HNSW index). Default threshold 0.88, lookback 7 days. Non-throwing — returns null on any DB error.
 
 Real-data validation confirmed (2026-04-25): second run against same 10 Dice jobs produced 9/9 DEDUP correctly. All jobs from first run were marked seen in Redis; second run correctly skipped all of them without re-processing.
 
@@ -275,11 +275,11 @@ Real-data validation confirmed (2026-04-25): second run against same 10 Dice job
 
 Postgres + pgvector persistence.
 
-- `src/db.ts` — `pg.Pool` singleton with `describeErr` formatting on the error listener.
-- `src/persist.ts` — `saveRun`, `finishRun`, `saveJob`, `isSeenInDB`. All non-throwing. v4.1: `pool.connect()` inside try block, `markStorageDisabled`, `formatErr`. v5.1 additions: `updateHeartbeat` (called every 60s by orchestrator runner), `markRunExitCode` (called by runner on child exit and by ghost reaper for dead runs), `getUnfinishedRuns` (ghost reaper query — hits partial index), `getRunStats` (monitor post-run check).
-- `src/migrate.ts` — runs SQL files in `migrations/` in alphabetical order.
-- `src/integrity.ts` — `verifyIntegrity`. Gated on `VERIFY=1`.
-- `src/types.ts` — `RunRecord`, `RunStats` (gains `extractions_attempted`, `extractions_succeeded` in v5.1), `JobRecord`.
+- `src/storage/db.ts` — `pg.Pool` singleton with `describeErr` formatting on the error listener.
+- `src/storage/persist.ts` — `saveRun`, `finishRun`, `saveJob`, `isSeenInDB`. All non-throwing. v4.1: `pool.connect()` inside try block, `markStorageDisabled`, `formatErr`. v5.1 additions: `updateHeartbeat` (Postgres helper — available for callers; the orchestrator runner writes heartbeats via its own inline SQL rather than calling this function), `markRunExitCode` (same — available but runner writes exit code via its own SQL; ghost reaper calls this directly), `getUnfinishedRuns` (ghost reaper query — hits partial index), `getRunStats` (monitor post-run check).
+- `src/storage/migrate.ts` — runs SQL files in `migrations/` in alphabetical order.
+- `src/storage/integrity.ts` — `verifyIntegrity`. Gated on `VERIFY=1`.
+- `src/storage/types.ts` — `RunRecord`, `RunStats` (gains `extractions_attempted`, `extractions_succeeded` in v5.1), `JobRecord`.
 - `migrations/001_initial.sql` — full schema (unchanged from v5).
 - `migrations/002_orchestrator.sql` — new in v5.1: 4 columns + partial index on `runs`.
 - `test/persist.test.ts` — 14 tests. All pass against updated `finishRun` — disabled-state tests don't touch SQL, compile-time enforcement handles the new fields at the call site.
@@ -290,11 +290,11 @@ Run-level orchestration. Schedules `run-pipeline.ts` via node-cron, prevents ove
 
 **Files:**
 
-- `src/index.ts` — entry point. Boots cron schedules, handles SIGTERM/SIGINT (stops new ticks, allows in-flight runs to finish via runner's own SIGTERM forwarding). Unhandled rejection safety net logs and continues rather than crashing the scheduler.
-- `src/scheduler.ts` — cron definitions per source + ghost reaper tick. Uses a per-schedule `running` flag to guard against slow ticks overlapping with the next fire of the same expression.
-- `src/runner.ts` — acquires lock, spawns `run-pipeline.ts` as a child process, pipes stdout/stderr to both the terminal and `output/logs/runs/{run_id}.log`, sends heartbeat `UPDATE` to Postgres every 60s, writes `exit_code` on child exit, calls monitor, releases lock. SIGTERM forwarding: sends SIGTERM to child, waits 30s for clean exit, SIGKILLs if still running. `pLimit(5)` in the pipeline means in-flight jobs complete and `finishRun` runs cleanly before the process exits.
-- `src/lock.ts` — Redis `SET NX EX` wrapper. `acquireLock` returns `run_id` on success, `null` if held or Redis down. `releaseLock` uses `DEL` — idempotent, safe to call on missing or expired key. `REDIS_URL` read inside `getClient()` on each new client creation (not at module load), so tests can override the env var.
-- `src/monitor.ts` — post-run stats check. Three warning conditions: (1) `jobs_total === 0` — scraper produced nothing (broken selectors, auth expired, IP blocked); (2) `extractRate < 0.5 && attempted > 5` — extraction degraded (OpenRouter credits, rate limit); (3) `jobs_passed > 10 && jobs_covered === 0` — pipeline degraded end-to-end. Writes success line on clean runs. All output goes to `output/logs/orchestrator.log`. The `> 5` guard on condition 2 correctly suppresses the warning when all jobs were deduped before extraction ran (`attempted = 0`).
+- `src/orchestrator/index.ts` — entry point. Boots cron schedules, handles SIGTERM/SIGINT (stops new ticks, allows in-flight runs to finish via runner's own SIGTERM forwarding). Unhandled rejection safety net logs and continues rather than crashing the scheduler.
+- `src/orchestrator/scheduler.ts` — cron definitions per source + ghost reaper tick. Uses a per-schedule `running` flag to guard against slow ticks overlapping with the next fire of the same expression.
+- `src/orchestrator/runner.ts` — acquires lock, spawns `run-pipeline.ts` as a child process, pipes stdout/stderr to both the terminal and `output/logs/runs/{run_id}.log`, sends heartbeat `UPDATE` to Postgres every 60s via its own inline SQL (not via `src/storage/persist.ts`), writes `exit_code` on child exit via its own inline SQL, calls monitor, releases lock. SIGTERM forwarding: sends SIGTERM to child, waits 30s for clean exit, SIGKILLs if still running. `pLimit(5)` in the pipeline means in-flight jobs complete and `finishRun` runs cleanly before the process exits.
+- `src/orchestrator/lock.ts` — Redis `SET NX EX` wrapper. `acquireLock` returns `run_id` on success, `null` if held or Redis down. `releaseLock` uses `DEL` — idempotent, safe to call on missing or expired key. `REDIS_URL` read inside `getClient()` on each new client creation (not at module load), so tests can override the env var.
+- `src/orchestrator/monitor.ts` — post-run stats check. Three warning conditions: (1) `jobs_total === 0` — scraper produced nothing (broken selectors, auth expired, IP blocked); (2) `extractRate < 0.5 && attempted > 5` — extraction degraded (OpenRouter credits, rate limit); (3) `jobs_passed > 10 && jobs_covered === 0` — pipeline degraded end-to-end. Writes success line on clean runs. All output goes to `output/logs/orchestrator.log`. The `> 5` guard on condition 2 correctly suppresses the warning when all jobs were deduped before extraction ran (`attempted = 0`).
 
 **Cron schedule:**
 
@@ -303,18 +303,19 @@ Run-level orchestration. Schedules `run-pipeline.ts` via node-cron, prevents ove
 | Dice daily (Mon–Sat) | `0 9,13,17,21 * * 1-6` | ONE | 50 | 4h |
 | Dice backfill (Sun 9am) | `0 9 * * 0` | SEVEN | 100 | 6h |
 | Dice Sun afternoons | `0 13,17,21 * * 0` | ONE | 50 | 4h |
-| Jobright (daily) | `0 10 * * *` | ONE | 50 | 4h |
+| Jobright API (Mon–Sat) | `0 9,13,17,21 * * 1-6` | — | 40 | 4h |
+| Jobright API (Sun afternoons) | `0 13,17,21 * * 0` | — | 40 | 4h |
 | LinkedIn (daily) | `0 14 * * *` | — | 30 | 4h |
 | Ghost reaper | `*/10 * * * *` | — | — | — |
 
-Jobright and LinkedIn are offset from Dice by 1h to avoid hitting OpenRouter simultaneously. Sunday 9am uses the backfill config only — the `1-6` constraint on the daily schedule prevents a conflict. Sunday afternoons get their own schedule so they're not dark after the backfill.
+LinkedIn is offset from Dice by 1h to avoid hitting OpenRouter simultaneously from multiple sources. Jobright runs via the **Jobright API** on the same cadence as Dice (MAX=40 to stay under Jobright rate limits). Sunday 9am uses the backfill config only — the `1-6` constraint on the daily schedule prevents a conflict. Sunday afternoons get their own schedule so they're not dark after the backfill.
 
 **Ghost reaper:** Runs every 10 minutes. Finds `runs` rows where `finished_at IS NULL AND last_heartbeat IS NOT NULL AND last_heartbeat < NOW() - '5 minutes'::INTERVAL` (these are processes that died without calling `finishRun` — OOM, SIGKILL, hard crash). For each ghost: releases the Redis lock unconditionally, sets `exit_code = -1`, sets `finished_at = NOW()`. Writes to `output/logs/reaper.log`. Note: the `last_heartbeat IS NOT NULL` guard means pre-migration rows and runs shorter than 60s (never got a heartbeat) are correctly ignored.
 
 **Tests (`test/`):**
-- `lock.test.ts` — 8 tests: Redis-down contract (3, no infra needed) + real Redis (5, `RUN_INFRA_TESTS=1`). Tests: acquire when free, acquire when held, release allows re-acquire, release idempotent, isLockHeld before/after.
+- `lock.test.ts` — 8 tests: Redis-down contract (3, no infra needed) + real Redis (5, run via `npm run test:infra`). Tests: acquire when free, acquire when held, release allows re-acquire, release idempotent, isLockHeld before/after.
 - `runner.test.ts` — 5 tests: lock and monitor are stubbed. Tests: acquireLock called with correct args, returns -1 when lock not acquired, releaseLock not called when lock skipped, monitor not called when lock skipped, mock infrastructure wired correctly.
-- `reaper.test.ts` — 3 tests (`RUN_INFRA_TESTS=1`): ghost row gets `exit_code=-1` and `finished_at` set, healthy row untouched, pre-migration row (null heartbeat) ignored.
+- `reaper.test.ts` — 3 tests (run via `npm run test:infra`): ghost row gets `exit_code=-1` and `finished_at` set, healthy row untouched, pre-migration row (null heartbeat) ignored.
 
 **Entry point:** `npm start`
 
@@ -348,7 +349,7 @@ All previous deviations (10.1–10.11) carried forward unchanged from v5.
 
 **Built:** node-cron scheduler + Redis `SET NX EX` lock + `child_process.spawn` of `run-pipeline.ts`. No BullMQ. No per-stage queues. No worker processes. The pipeline runs as a single child process exactly as it did when invoked manually.
 
-**Why:** Four concrete reasons. First, **inter-stage data passing cost**: BullMQ requires all job data to be serialized into Redis between stages. `Float32Array(384)` embeddings, `description_raw` text (up to 12KB per JD), and full extracted JSON must round-trip through Redis 7 times per job. This is pure overhead for data that currently lives in memory for 20–40 minutes. Second, **`run_id` model breakage**: the entire Postgres schema (`runs`, `jobs`, `filter_results`, `scores`, `judge_verdicts`, `cover_letters`, `seen_jobs`), the output directory structure (`output/cover-letters/{run_id}/`), and `saveRun`/`finishRun` are all built around a run as one atomic execution. With per-stage queues, "a run" stops being a coherent unit — jobs from run A would be in the extract queue when run B starts. Third, **solved problem**: `pLimit(5)` handles per-job concurrency, `throttle_ms=600` handles LLM rate limiting — the two things BullMQ would provide are already built. Fourth, **testing cost**: moving each stage into a BullMQ worker would require rewriting the wiring code that connects all modules, without adding capability. 232 tests would need re-verification.
+**Why:** Four concrete reasons. First, **inter-stage data passing cost**: BullMQ requires all job data to be serialized into Redis between stages. `Float32Array(384)` embeddings, `description_raw` text (up to 12KB per JD), and full extracted JSON must round-trip through Redis 7 times per job. This is pure overhead for data that currently lives in memory for 20–40 minutes. Second, **`run_id` model breakage**: the entire Postgres schema (`runs`, `jobs`, `filter_results`, `scores`, `judge_verdicts`, `cover_letters`, `seen_jobs`), the output directory structure (`output/cover-letters/{run_id}/`), and `saveRun`/`finishRun` are all built around a run as one atomic execution. With per-stage queues, "a run" stops being a coherent unit — jobs from run A would be in the extract queue when run B starts. Third, **solved problem**: `pLimit(5)` handles per-job concurrency, `throttle_ms=100` handles LLM rate limiting — the two things BullMQ would provide are already built. Fourth, **testing cost**: moving each stage into a BullMQ worker would require rewriting the wiring code that connects all modules, without adding capability. 232 tests would need re-verification.
 
 The run-level approach adds the actual missing pieces: overlap prevention (Redis lock), failure visibility (exit code in DB, per-run log), hard crash detection (heartbeat + reaper), and degraded-pipeline warnings (monitor). These satisfy the M8 exit criterion without touching the working pipeline.
 
@@ -374,7 +375,7 @@ All previous improvements (1–10) carried forward from v5.
 
 16. **Global `SAVE_FIXTURES` cap.** The fixture capture counter now seeds from existing `jd-real-###-*` fixtures on disk, making the “max 5” cap global across runs instead of per-run (prevents unattended mode from writing 5 new fixtures every tick forever).
 
-17. **Labeling CLI + labels table for M9 calibration.** A `labels(job_id, run_id, label, notes, labeled_at)` table and `storage/src/label-cli.ts` CLI allow fast manual ground-truth labeling of judged jobs (y/m/n/skip/quit), enabling future scoring weight calibration against real data.
+17. **Labeling CLI + labels table for M9 calibration.** A `labels(job_id, run_id, label, notes, labeled_at)` table and `src/storage/label-cli.ts` CLI allow fast manual ground-truth labeling of judged jobs (y/m/n/skip/quit), enabling future scoring weight calibration against real data.
 
 ---
 
@@ -388,15 +389,15 @@ All previous improvements (1–10) carried forward from v5.
 
 ### Open — calibration
 
-2. **Scoring not calibrated on real data.** Weights (0.35/0.25/0.15/0.15/0.10) and threshold (0.55) are designed values. M8 is now done — real run history is accumulating. After ~50 labeled jobs from unattended runs, manually rank "would apply / maybe / no" and tune against ground truth. This is now unblocked.
+2. **Scoring not calibrated on real data.** Weights (0.35/0.25/0.15/0.15/0.10) and threshold (0.50) are designed values. M8 is now done — real run history is accumulating. After ~50 labeled jobs from unattended runs, manually rank "would apply / maybe / no" and tune against ground truth. This is now unblocked.
 
 ### Open — operational reminders
 
-5. **Cookie rotation.** Jobright still requires cookies (Dice is now public). If Jobright scraper fails with auth error, rotate via browser extension → `config/cookies/jobright.json` (never commit).
+5. **Cookie rotation (Jobright).** Jobright runs via the API path (`jobright_api`) but still relies on an authenticated session. If Jobright starts returning auth errors / empty results, rotate cookies via browser extension → `config/cookies/jobright.json` (never commit).
 
 6. **OpenRouter credit.** Confirmed failure mode from testing: a 401 `User not found` error causes every extraction in a run to fail silently from the pipeline's perspective (jobs archive with `extraction_failed` flag). The monitor now catches this (condition 2: `extractRate < 0.5 && attempted > 5`) and emits a warning. Top up before credits run out. At projected volume (~$0.50–1.00/day) a $10 deposit lasts 2–3 weeks.
 
-7. **Jobright selectors are fragile.** CSS-module hashed class names break on any frontend rebuild. Selector constants centralized at top of `jobright.py` for fast updates, but still needs manual intervention.
+7. **Jobright HTML scraper selectors are fragile (fallback only).** The Playwright HTML scraper (`jobright.py`) uses CSS-module hashed class names that can break on frontend rebuilds. It’s kept as a fallback; the primary path is `jobright_api.py`.
 
 8. **Ghost reaper does not clean up runs shorter than 60s with a hard crash.** If a run crashes before its first heartbeat fires (first 60s), `last_heartbeat IS NULL` and the reaper's `IS NOT NULL` guard skips it. The `runs` row will have `finished_at IS NULL` forever unless manually cleaned. This is an accepted limitation: runs shorter than 60s that crash hard are rare (scraper and embedding load time alone takes 10–20s), and the `finished_at IS NULL` rows are queryable. The alternative — tracking a "started" heartbeat separately from the "alive" heartbeat — adds complexity for a very rare edge case.
 
@@ -424,7 +425,7 @@ Steps:
 2. Pull 30–50 jobs from Postgres that have judge verdicts.
 3. Manually label each: "would apply" / "maybe" / "no" (use `cd storage && npm run label`).
 4. Compare labels against `(score.total, judge.verdict)` pairs.
-5. Tune the five scoring weights (0.35/0.25/0.15/0.15/0.10) and the gate threshold (0.55) against ground truth.
+5. Tune the five scoring weights (0.35/0.25/0.15/0.15/0.10) and the gate threshold (0.50) against ground truth.
 6. Capture more real-data extraction fixtures during this pass (target: 5 total).
 
 Exit criterion: scoring weights produce a ranked list where the top 10 jobs by score match the "would apply" labels at a rate ≥ 80%.
@@ -459,7 +460,7 @@ npm install
 npm test
 
 # 3. Python scraper
-cd ../scraper
+cd scraper
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -529,7 +530,7 @@ VERIFY=1 EXTRACT=1 SOURCE=dice MAX=20 npx tsx scripts/run-pipeline.ts
 ### Infra tests (real Redis + Postgres required)
 
 ```bash
-RUN_INFRA_TESTS=1 npm test
+npm run test:infra
 # lock — real Redis (5 tests)
 # reaper — real Postgres + Redis (3 tests)
 ```
@@ -582,7 +583,7 @@ redis-cli --scan --pattern 'orchestrator:lock:*'
 5. Update this file when module status changes.
 6. When in doubt about Sarath's preferences, `config/profile.json` is authoritative.
 7. New env vars get documented in §14 and in the relevant module's header comment.
-8. Orchestrator schedules live in `orchestrator/src/scheduler.ts` — that is the single source of truth for when the pipeline runs.
+8. Orchestrator schedules live in `src/orchestrator/scheduler.ts` — that is the single source of truth for when the pipeline runs.
 
 ---
 
@@ -591,7 +592,7 @@ redis-cli --scan --pattern 'orchestrator:lock:*'
 - **Hard filter** — deterministic rule-based stage. Rejects using listing metadata only.
 - **JD** — job description (full body text, fetched separately from listing).
 - **PASS / REJECT / DEDUP** — hard filter + Redis dedup outcomes.
-- **GATE_PASS / ARCHIVE** — scoring gate outcomes (score above/below 0.55 threshold).
+- **GATE_PASS / ARCHIVE** — scoring gate outcomes (score above/below 0.50 threshold).
 - **Flag** — soft signal on a job. Doesn't reject; LLM judge sees it.
 - **Fixture** — JSON test case with inputs + expected outputs.
 - **Run** — one pipeline execution. Produces a unique `run_id`.
@@ -603,12 +604,12 @@ redis-cli --scan --pattern 'orchestrator:lock:*'
 - **POSTED_WITHIN** — Dice server-side recency filter. Values: ONE (24h), THREE (3 days), SEVEN (7 days).
 - **VERIFY** — env var that enables the post-run integrity check (Redis ↔ Postgres consistency).
 - **AggregateError** — Node's wrapper class when multiple parallel attempts fail (typically pg's IPv4+IPv6 dual-stack connect attempts). Default message is empty; `formatErr` unwraps `.errors[]`.
-- **markStorageDisabled** — module-level boolean in `storage/src/persist.ts`. Set after a startup failure so subsequent persist calls become silent no-ops.
+- **markStorageDisabled** — module-level boolean in `src/storage/persist.ts`. Set after a startup failure so subsequent persist calls become silent no-ops.
 - **Ghost run** — a `runs` row where `finished_at IS NULL` and `last_heartbeat` has gone stale (> 5 minutes). Indicates the child process died hard without calling `finishRun`. Cleaned up by the ghost reaper with `exit_code = -1`.
-- **Ghost reaper** — cron task in `orchestrator/src/scheduler.ts` that runs every 10 minutes. Detects ghost runs, marks them terminal, releases their Redis locks.
+- **Ghost reaper** — cron task in `src/orchestrator/scheduler.ts` that runs every 10 minutes. Detects ghost runs, marks them terminal, releases their Redis locks.
 - **Heartbeat** — `UPDATE runs SET last_heartbeat = NOW()` sent every 60s by the orchestrator runner while a child process is alive. Enables ghost detection.
 - **Lock** — Redis key `orchestrator:lock:{source}` with `SET NX EX`. Prevents two pipeline runs for the same source from overlapping. TTL is the safety net; the runner also releases it explicitly on clean exit.
-- **Monitor** — post-run function in `orchestrator/src/monitor.ts`. Checks three warning conditions after each run and writes to `output/logs/orchestrator.log`.
+- **Monitor** — post-run function in `src/orchestrator/monitor.ts`. Checks three warning conditions after each run and writes to `output/logs/orchestrator.log`.
 - **Run-level orchestration** — the architectural pattern where the orchestrator schedules and supervises full pipeline runs as atomic units, rather than managing individual pipeline stages as separate queue workers.
 
 ---
@@ -623,9 +624,9 @@ redis-cli --scan --pattern 'orchestrator:lock:*'
 - `THE-BIBLE-v6.md` — v6 (2026-04-25) — **this document** — milestone 8 shipped, orchestrator + storage v5.1 + end-to-end validation
 - `design-v4.md` — design doc covering scoring/judge contracts
 - `STORAGE-CHANGES.md` — v4.1 changeset detail (saveJob fix, formatErr, markStorageDisabled)
-- `extractor/fixtures/` — synthetic + real extraction test cases
-- `judge/fixtures/` — 10 judge test cases
-- `storage/migrations/001_initial.sql` — full schema
-- `storage/migrations/002_orchestrator.sql` — orchestrator columns + partial index
-- `storage/migrations/003_labels.sql` — manual labeling table for scoring calibration (M9)
+- `fixtures/extractor/` — synthetic + real extraction test cases
+- `fixtures/judge/` — judge test cases
+- `migrations/001_initial.sql` — full schema
+- `migrations/002_orchestrator.sql` — orchestrator columns + partial index
+- `migrations/003_labels.sql` — manual labeling table for scoring calibration (M9)
 - `docker-compose.yml` — local services

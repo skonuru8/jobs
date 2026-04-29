@@ -110,7 +110,10 @@ const SKIP_PERSIST   = Boolean(process.env.SKIP_PERSIST);  // bypass Postgres pe
 const QUERY          = process.env.QUERY ?? "java developer";
 const POSTED_WITHIN  = process.env.POSTED_WITHIN ?? "";   // "" = no filter
 
-const FIXTURES_DIR   = path.join(REPO_ROOT, "extractor", "fixtures");
+// Real-data extraction fixtures live alongside the existing extractor fixtures.
+// This keeps tests + captured samples in one place and avoids a separate
+// top-level `extractor/fixtures/` directory.
+const FIXTURES_DIR   = path.join(REPO_ROOT, "fixtures", "extractor");
 const CONFIG_DIR     = path.join(REPO_ROOT, "config");
 const RUN_ID = process.env.RUN_ID ?? randomUUID();
 // Each run gets its own subdirectory — old runs are never touched.
