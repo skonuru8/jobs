@@ -63,3 +63,10 @@ Thumbs.db
 /not_needed/
 not_needed/
 
+# Added by code-review-graph
+.code-review-graph/
+AGENTS.md
+
+.claude/
+.cursor
+.cursorrules
