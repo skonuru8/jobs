@@ -46,9 +46,7 @@ export function ApplyQueue({ onStatsUpdate }: Props) {
     if (sourceFilter !== 'all' && row.source !== sourceFilter) return false;
     switch (statusFilter) {
       case 'pending':
-        // apply_later stays visible in Pending
-        return row.application_status !== 'applied' && row.application_status !== 'skipped'
-          && row.label !== 'no';
+        return row.application_status == null && row.label !== 'no';
       case 'apply_later':
         return row.application_status === 'apply_later';
       case 'applied':

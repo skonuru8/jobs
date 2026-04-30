@@ -1,7 +1,7 @@
 /**
  * ui-server.ts — Express API server for the Job Hunter Review UI.
  * Start: npx tsx scripts/ui-server.ts
- * Port:  3000
+ * Port:  3001
  */
 
 import express from 'express';
@@ -67,7 +67,13 @@ async function main() {
         LEFT JOIN cover_letters cl ON cl.job_id = j.job_id AND cl.run_id = j.run_id
         LEFT JOIN labels        l  ON l.job_id  = j.job_id AND l.run_id  = j.run_id
         WHERE jv.bucket IN ('COVER_LETTER', 'REVIEW_QUEUE', 'RESULTS')
-        ORDER BY s.total DESC
+        ORDER BY
+          CASE
+            WHEN j.scraped_at >= NOW() - INTERVAL '24 hours' THEN 1
+            WHEN j.scraped_at >= NOW() - INTERVAL '72 hours' THEN 2
+            ELSE 3
+          END ASC,
+          s.total DESC
         LIMIT 200
       `);
       const rows = result.rows.map(row => {
