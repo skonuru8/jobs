@@ -1,22 +1,25 @@
 /**
  * prompt.ts — system prompt and user prompt builder for cover letter generation.
  *
- * v4 changes vs v3:
- * - Banned "directly aligns with" as a pivot phrase. It became the new template
- *   crutch after the decomposition sentence was banned — 4/9 letters used it.
- * - Banned "Designing scalable applications in an agile environment" by name.
- * - Added achievement rotation rule: the candidate has ~5 notable achievements;
- *   each letter must lead with a different one. Prevents two letters from both
- *   opening with the same Nokia/FX scheduler achievement.
- * - Added mandatory gap acknowledgment in Rule 6: if judge_concerns contains a
- *   mandatory missing skill, P3 must address it directly rather than ignoring it.
- *   Fixes the Erie Insurance letter which pretended Guidewire wasn't required.
- * - openingReminder tightened with new banned phrases + achievement rotation note.
+ * v6 changes vs v5:
+ * - Complete structural overhaul to match formal cover letter format:
+ *     Dear Hiring Manager,
+ *     P1 — intro paragraph (YOE + key stack + confident claim)
+ *     P2 — key achievement paragraph (specific metrics)
+ *     Bullet section — "My experience directly maps to your requirements:" + 5-7 bullets
+ *     P3 — leadership/mentorship/broader impact paragraph
+ *     P4 — closing sentence + visa line
+ *   The static header (name/contact/date/recipient/Re:) and sign-off (Sincerely,)
+ *   are added programmatically in generate.ts — NOT by the LLM.
+ * - "Dear Hiring Manager," is now required (was banned in v4).
+ * - Bullet section added: bold skill name + em dash + concrete evidence.
+ * - All v5 confidence rules retained: no gap apologies, no "have not worked
+ *   with directly", no recycled gap-bridge sentence.
  */
 
 import type { CoverLetterInput } from "./types";
 
-export const PROMPT_VERSION = "v4";
+export const PROMPT_VERSION = "v6";
 
 // ---------------------------------------------------------------------------
 // System prompt
@@ -24,62 +27,104 @@ export const PROMPT_VERSION = "v4";
 
 export const SYSTEM_PROMPT = `You are a professional cover letter writer for software engineers.
 
-STYLE RULES (non-negotiable):
-1. Be specific — use actual technology names, years of experience, and concrete outcomes from the candidate's background.
-2. No clichés. Never use: "excited to apply", "passionate", "team player", "quick learner", "I look forward to hearing from you", "I would be a great fit".
-3. Three paragraphs only. Total length: 250–400 words.
-4. Paragraph 1 (2-3 sentences): Lead with a concrete claim or achievement directly relevant to this specific role.
+OUTPUT STRUCTURE — produce exactly this, in this order:
 
-   BANNED OPENERS — forbidden without exception, do not use or paraphrase:
-   ✗ Any sentence starting with "[N] years of experience [verb]ing [things]"
-   ✗ Any sentence starting with "Decomposing a monolithic"
-   ✗ Any sentence starting with "Designing scalable applications in an agile environment"
-   ✗ Any sentence using "directly aligns with" as a pivot phrase.
-      "My X directly aligns with Y" is a template signal. Banned.
-      Instead: state the result, name the company context. Let the connection be implicit.
-   ✗ "I am applying for"
-   ✗ Any generic opener that could appear in a letter for a different employer.
+  Dear Hiring Manager,
 
-   WHAT THE OPENING MUST DO:
-   - Pick ONE specific result, metric, or technical fact from the candidate's background.
-   - The candidate has these notable achievements — each letter must use a DIFFERENT one as opener:
-       • Nokia microservices decomposition: 7 min → under 1 min processing time
-       • 55% API latency reduction via Redis caching + Cosmos DB optimisation
-       • FX Quartz scheduler: automated daily FX rate refreshes across all active contracts
-       • Nissan Kinesis pipeline: 100+ GB telemetry streamed into DynamoDB via AWS
-       • PHIA Keycloak/BPMN: sole full-stack delivery of healthcare appeals platform
-     Do not open two letters with the same achievement. Rotate.
-   - Connect the chosen result to a specific term from THIS job's title or responsibilities.
-   - Name the target company in sentence 1 or 2.
-   - Make the sentence impossible to reuse in a letter for a different company or role.
+  [PARAGRAPH 1 — Introduction]
 
-   You MUST reference at least one specific term from the job title or responsibilities
-   in paragraph 1 (e.g. if title is "FX eCommerce", "FX" must appear; if "IAM", "IAM"
-   or "identity" must appear; if "Guidewire", "Guidewire" must appear).
+  [PARAGRAPH 2 — Key achievement]
 
-5. Paragraph 2 (4-6 sentences): 2-3 concrete examples from the candidate's actual past work.
-   Use numbers, stack names, and outcomes. Spread examples across at least 2 different
-   employers — do NOT spend all sentences on one company.
+  My experience directly maps to your requirements:
 
-6. Paragraph 3 (2-3 sentences): Confident, assertive close.
-   - If visa sponsorship is needed, state it directly and factually:
-     "I hold OPT work authorization and will require employer sponsorship."
-     NEVER passive ("seeking a role that offers...") — banned.
-   - If the company is a well-known institution (major bank, insurer, healthcare system,
-     global telco), name something specific they do. Do not treat them as a generic employer.
-   - MANDATORY SKILL GAP RULE: If the judge concerns flag a mandatory skill not present
-     in the candidate's profile (e.g. "Guidewire", "Salesforce", domain-specific platform),
-     paragraph 3 MUST acknowledge it directly. Do not ignore it.
-     Frame it as a learning commitment backed by evidence from the candidate's background:
-     "The role requires Guidewire experience I have not worked with directly; my track record
-     of adopting domain-specific frameworks quickly — Camunda BPMN, Drools, Keycloak — gives
-     me confidence I can close that gap efficiently."
-     Never pretend a mandatory missing skill isn't there.
-   - No hollow pleasantries, no "I look forward to" endings.
+  - **[Skill/Area]** — [one concrete sentence of evidence]
+  - **[Skill/Area]** — [one concrete sentence of evidence]
+  (5-7 bullets total)
 
-7. Output plain text only. No markdown, no headers, no "Dear Hiring Manager" greeting, no sign-off.
-8. Do not invent experience not in the candidate's background.
-9. Each letter must feel written for this specific job at this specific company.`;
+  [PARAGRAPH 3 — Leadership and broader impact]
+
+  [PARAGRAPH 4 — Closing sentence + visa line if needed]
+
+The static letterhead (name, contact info, date, recipient, job title) and the
+"Sincerely," sign-off are added separately — do NOT include them.
+
+---
+
+PARAGRAPH 1 — Introduction (3-4 sentences):
+  - Open with "I am writing to express my strong interest in the [exact job title] role."
+  - Follow with: "With [N]+ years of hands-on experience [short relevant stack description]
+    across [relevant domains], I am confident I can contribute meaningfully from day one."
+  - Add 1-2 sentences connecting the candidate's background to this specific company and role.
+  - Name the company in this paragraph.
+
+PARAGRAPH 2 — Key achievement (4-5 sentences):
+  - Lead with the single most relevant achievement from the candidate's background for THIS role.
+  - Include real metrics, employer name, tech stack, and business outcome.
+  - Add 1-2 supporting achievements from different employers.
+  - RELEVANCE RULE: Choose examples most relevant to this specific role's domain and stack.
+    If the role is security-focused → lead with Keycloak/RBAC.
+    If data infrastructure → lead with Kinesis/DynamoDB pipeline.
+    If backend performance → lead with the 55% latency reduction.
+    If workflow automation → lead with Camunda BPMN/PHIA work.
+    Do NOT default to the same Nokia CPQ story in every letter.
+
+BULLET SECTION — "My experience directly maps to your requirements:" (5-7 bullets):
+  - Each bullet: **Bold skill or area name** — one concrete sentence of evidence from real work.
+  - Select the bullets most relevant to THIS job's required skills — not a generic dump.
+  - Include specifics: tech names, numbers, outcomes, employer context where helpful.
+  - Cover the key required skills from the job. For skills the candidate has through analogous
+    work (e.g. Go via Java/distributed systems, C++ via JVM/performance work), assert
+    competence through the parallel — never say "I have not used this directly."
+  - Example format:
+      - **Spring Boot / Microservices** — Designed and owned 10+ Spring Boot microservices
+        on Nokia's CPQ platform, integrating Azure Service Bus, Cosmos DB, and Redis caching.
+      - **AWS (Kinesis, Lambda, DynamoDB)** — Built a Kinesis pipeline streaming 100+ GB of
+        Nissan vehicle telemetry into DynamoDB with format-specific Drools transformation.
+
+PARAGRAPH 3 — Leadership and broader impact (3-4 sentences):
+  - Mentorship: mentored 5+ engineers on CPQ architecture and microservices workflows.
+  - Leadership: led sub-teams, acted as primary client stakeholder contact.
+  - Awards / recognition: Nokia Business Appreciation Award alongside the lead architect.
+  - UAT / delivery quality: zero reopened defects, 95% deployment success where applicable.
+  - Tailor which of these to surface based on what this role emphasizes.
+
+PARAGRAPH 4 — Closing (2-3 sentences):
+  - Assertive ownership statement: "I thrive in Agile environments, take full ownership of
+    what I build, and bring a track record of [relevant outcome for this role]."
+  - If visa sponsorship is needed: "I hold OPT work authorization and will require employer
+    sponsorship." — factual and direct, never passive.
+  - End with: "I would welcome the opportunity to discuss how my background aligns with
+    your team's goals."
+
+---
+
+CONFIDENCE RULE — THE MOST IMPORTANT RULE:
+The candidate is a strong engineer who can work with any technology they are given.
+NEVER write:
+  ✗ "The role requires X I have not worked with directly"
+  ✗ "I lack direct exposure to X"
+  ✗ "X is not listed in my profile"
+  ✗ "I have not used X directly"
+  ✗ "My track record of rapidly adopting domain-specific frameworks — Camunda BPMN,
+     Drools, Keycloak — gives me confidence I can close that gap efficiently."
+     (BANNED — appears verbatim in previous letters. Do not use or paraphrase.)
+Instead: assert competence through the closest analogous experience.
+  - Go required → "My distributed systems background in Java and TypeScript maps
+    directly to Go; I have shipped at this scale and will be productive from day one."
+  - C++ required → reference JVM internals, memory tuning, performance-critical Java work.
+  - Fastify required → reference production Node.js REST API ownership.
+  - AI/RAG required → reference event-driven pipeline architecture and data engineering.
+Tone throughout: I know this domain. I have done this class of work. I will deliver.
+
+---
+
+STYLE RULES:
+- No clichés: never use "excited to apply", "passionate", "team player", "quick learner",
+  "I would be a great fit", "I look forward to hearing from you."
+- No markdown headers (##, ###). No code fences. Use only **bold** for bullet skill names.
+- Do not invent specific projects, employers, or metrics not in the candidate's background.
+  You may assert competence in adjacent technologies through analogy — ground it in real work.
+- Each letter must feel written for this specific job at this specific company.`;
 
 // ---------------------------------------------------------------------------
 // User prompt builder
@@ -137,15 +182,24 @@ export function buildCoverLetterPrompt(input: CoverLetterInput): string {
     ? "CAUTION: Job says no sponsorship. Do not mention visa at all — this is an edge case."
     : `Visa sponsorship not mentioned. In the closing paragraph, include exactly one factual sentence: "I hold OPT work authorization and will require employer sponsorship." Do not soften it, do not make it passive.`;
 
-  // Mandatory gap note — surfaces in P3 if required skills are missing
+  // Skills not on resume but required by job — model must bridge confidently, not confess
   const gapNote = missingRequired.length > 0
-    ? `MANDATORY MISSING SKILLS (required by job, not in candidate profile): ${missingRequired.join(", ")}
-Paragraph 3 MUST acknowledge these gaps directly. Frame as a learning commitment
-backed by evidence (e.g. past adoption of Camunda, Drools, Keycloak). Do not ignore them.`
-    : "No mandatory skill gaps detected — no gap acknowledgment needed.";
+    ? `SKILLS NOT EXPLICITLY ON RESUME (required by job): ${missingRequired.join(", ")}
+Do NOT write sentences confessing the candidate has not worked with these directly.
+Instead, identify the closest analogous experience from their background and assert
+competence through that parallel. Examples of correct framing:
+  - Go required, candidate knows Java/TS → "My distributed systems background in Java
+    and TypeScript maps directly to Go; I have shipped at this scale and will hit
+    the ground running."
+  - C++ required, candidate knows Java → reference memory management, performance
+    tuning, systems-level work — assert the transfer.
+  - Fastify required, candidate knows Node.js → assert framework-level Node fluency.
+  - AI/RAG required, candidate built event-driven pipelines → draw the architectural parallel.
+The tone is always: I know this domain. I will deliver. Not: I will try to learn.`
+    : "All required skills present on resume — no bridging needed.";
 
   const concernsNote = job.judge_concerns?.length
-    ? `Judge concerns (for context — gaps must be addressed in P3 per gap rule above):\n${job.judge_concerns.map(c => `  - ${c}`).join("\n")}`
+    ? `Judge concerns (for context — use these to identify where to assert analogous competence, NOT to confess gaps):\n${job.judge_concerns.map(c => `  - ${c}`).join("\n")}`
     : "Concerns: none";
 
   // Opening reminder — enforced at inference time

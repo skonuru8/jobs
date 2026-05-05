@@ -81,6 +81,15 @@ export function baseProfile(): Profile {
       currency: "USD",
       interval: "annual",
     },
+    contact: {
+      name: "Test User",
+      email: "test@example.com",
+      phone: "555-0100",
+      linkedin: "linkedin.com/in/testuser",
+      github: "github.com/testuser",
+      city: "Testville",
+      state: "NY",
+    },
     skills: [
       { name: "typescript", years: 5, confidence: "expert", category: "language" },
     ],

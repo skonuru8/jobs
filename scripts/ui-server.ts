@@ -56,6 +56,7 @@ async function main() {
         SELECT
           j.job_id, j.run_id, j.title, j.company, j.source_url, j.source,
           j.scraped_at,
+          CASE WHEN j.source = 'jobright_api' THEN j.meta->>'job_id' ELSE NULL END AS jobright_id,
           s.total AS score_total, s.skills, s.semantic, s.yoe, s.seniority, s.location,
           jv.verdict AS judge_verdict, jv.bucket, jv.reasoning, jv.concerns,
           cl.content AS cover_letter, cl.file_path AS cover_letter_path,
@@ -99,6 +100,7 @@ async function main() {
         SELECT
           j.job_id, j.run_id, j.title, j.company, j.source_url, j.source,
           j.scraped_at,
+          CASE WHEN j.source = 'jobright_api' THEN j.meta->>'job_id' ELSE NULL END AS jobright_id,
           fr.reason, fr.flags,
           l.label, l.notes AS label_notes
         FROM jobs j
@@ -124,6 +126,7 @@ async function main() {
         SELECT
           j.job_id, j.run_id, j.title, j.company, j.source_url, j.source,
           j.scraped_at,
+          CASE WHEN j.source = 'jobright_api' THEN j.meta->>'job_id' ELSE NULL END AS jobright_id,
           s.total AS score_total, s.skills, s.semantic, s.yoe, s.seniority, s.location,
           jv.verdict AS judge_verdict, jv.bucket, jv.reasoning, jv.concerns,
           l.label, l.notes AS label_notes

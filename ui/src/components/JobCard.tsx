@@ -10,6 +10,7 @@ interface JobCardProps {
   mode: Mode;
   row: ApplyQueueRow | HardRejectionRow | SoftRejectionRow;
   onStatsUpdate: (stats: Stats) => void;
+  onRemove?: (jobId: string, runId: string) => void;
 }
 
 // Change 4: relative time
@@ -77,7 +78,7 @@ const NOTE_CHIPS = [
   'Too senior / too junior',
 ];
 
-export function JobCard({ mode, row, onStatsUpdate }: JobCardProps) {
+export function JobCard({ mode, row, onStatsUpdate, onRemove }: JobCardProps) {
   const [label, setLabel] = useState<Label | null>(row.label ?? null);
   const [appStatus, setAppStatus] = useState<AppStatus>(
     mode === 'apply' ? ((row as ApplyQueueRow).application_status ?? null) : null
@@ -126,6 +127,8 @@ export function JobCard({ mode, row, onStatsUpdate }: JobCardProps) {
   async function handleAppStatus(s: 'applied' | 'skipped' | 'apply_later') {
     if (!label) return;
     setAppStatus(s);
+    // Remove card from view immediately — don't wait for POST
+    onRemove?.(row.job_id, row.run_id);
     await doPost(label, s);
   }
 
@@ -142,6 +145,7 @@ export function JobCard({ mode, row, onStatsUpdate }: JobCardProps) {
       // immediate POST + mark as not-applied (skipped)
       setLabel('no');
       setAppStatus('skipped');
+      onRemove?.(row.job_id, row.run_id);
       await doPost('no', 'skipped', chipText);
     } else {
       // just fill textarea; user still picks action
@@ -266,14 +270,26 @@ export function JobCard({ mode, row, onStatsUpdate }: JobCardProps) {
       )}
 
       <div className="card-actions">
-        <a
-          href={row.source_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="open-btn"
-        >
-          Open Job ↗
-        </a>
+        <div className="action-links">
+          <a
+            href={row.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="open-btn"
+          >
+            Open Job ↗
+          </a>
+          {row.jobright_id && (
+            <a
+              href={`https://jobright.ai/jobs/info/${row.jobright_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="open-btn jobright-btn"
+            >
+              View on Jobright ↗
+            </a>
+          )}
+        </div>
 
         <div className="label-btns">
           {labelBtns.map(btn => (

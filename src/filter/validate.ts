@@ -69,6 +69,25 @@ export function validateProfile(profile: Profile): void {
     throw new Error(`Profile currency not in FX map: ${currency}`)
   }
 
+  const contact = profile.contact
+  if (!contact) {
+    throw new Error("profile.contact is required")
+  }
+  for (const key of [
+    "name",
+    "email",
+    "phone",
+    "linkedin",
+    "github",
+    "city",
+    "state",
+  ] as const) {
+    const v = contact[key]
+    if (typeof v !== "string" || !v.trim()) {
+      throw new Error(`profile.contact.${key} must be a non-empty string`)
+    }
+  }
+
   if (
     typeof profile.years_experience !== "number" ||
     isNaN(profile.years_experience) ||

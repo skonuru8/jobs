@@ -50,6 +50,15 @@ const BASE_JOB: CoverLetterInput["job"] = {
 };
 
 const BASE_PROFILE: CoverLetterInput["profile"] = {
+  contact: {
+    name:     "ghijkl",
+    email:    "abcdef@gmail.com",
+    phone:    "1",
+    linkedin: "linkedin.com/in/def",
+    github:   "github.com/abc",
+    city:     "NY City",
+    state:    "NY",
+  },
   skills: [
     { name: "Java",        years: 6, confidence: "expert", category: "language"   },
     { name: "Spring Boot", years: 5, confidence: "expert", category: "framework"  },

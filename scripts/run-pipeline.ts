@@ -772,6 +772,7 @@ async function processJobs(
           years_experience:  (profile as any).years_experience ?? 0,
           education:         (profile as any).education ?? { degree: "bachelor", field: "" },
           preferred_domains: (profile as any).preferred_domains ?? [],
+          contact:           (profile as any).contact,
         },
         resume: resumeText,
       };

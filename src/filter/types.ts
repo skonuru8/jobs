@@ -55,6 +55,17 @@ export interface ProfileCompensation {
   interval: string
 }
 
+/** Cover letters and correspondence — structured contact block on profile.json */
+export interface ProfileContact {
+  name: string
+  email: string
+  phone: string
+  linkedin: string
+  github: string
+  city: string
+  state: string
+}
+
 export interface Profile {
   meta: {
     profile_id: string
@@ -75,6 +86,7 @@ export interface Profile {
     willing_to_relocate: boolean
   }
   compensation: ProfileCompensation
+  contact: ProfileContact
   skills: Array<{
     name: string
     years: number

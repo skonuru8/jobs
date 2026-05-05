@@ -2,17 +2,18 @@
  * generate.ts — cover letter generation and file saving.
  * Bible §12 Milestone 6.
  *
- * Only runs for jobs in the COVER_LETTER bucket.
- * Output: output/cover-letters/{slug}_{job_id}.md
+ * Output: output/cover-letters/{run_id}/{bucket}/{slug}_{job_id}.md
  *
- * File format: YAML frontmatter + plain text body.
- * The cover letter body has no greeting/sign-off — the user adds those.
+ * File format: YAML frontmatter + full formal cover letter.
+ * The LLM generates the letter body (Dear Hiring Manager → closing paragraph).
+ * saveCoverLetter wraps it with the static header (name/contact/date/recipient/Re:)
+ * and sign-off (Sincerely, + name).
  */
 
 import * as fs   from "fs";
 import * as path from "path";
 
-import { complete }                                from "./client";
+import { complete }                                          from "./client";
 import { SYSTEM_PROMPT, buildCoverLetterPrompt, PROMPT_VERSION } from "./prompt";
 import type { CoverLetterInput, CoverLetterResult, CoverLetterConfig } from "./types";
 
@@ -103,7 +104,42 @@ export function saveCoverLetter(
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // YAML frontmatter + cover letter body
+  // Format date as "April 30, 2026"
+  const formattedDate = new Date().toLocaleDateString("en-US", {
+    year: "numeric", month: "long", day: "numeric",
+  });
+
+  const { contact } = input.profile;
+  const candidateName = contact.name;
+  const candidateContact = [
+    `${contact.city}, ${contact.state}  |  ${contact.email}  |  ${contact.phone}`,
+    `${contact.linkedin}  |  ${contact.github}`,
+  ].join("\n");
+
+  // Build the full formal letter body that wraps the LLM-generated content
+  const letterHeader = [
+    candidateName,
+    candidateContact,
+    "",
+    formattedDate,
+    "",
+    "Hiring Manager",
+    job.company,
+    "",
+    `Re: ${job.title} Position`,
+    "",
+  ].join("\n");
+
+  const letterSignoff = [
+    "",
+    "Sincerely,",
+    "",
+    candidateName,
+  ].join("\n");
+
+  const fullLetter = letterHeader + result.text + letterSignoff;
+
+  // YAML frontmatter + full formal cover letter
   const fileContent = [
     "---",
     `title: "${job.title}"`,
@@ -121,7 +157,7 @@ export function saveCoverLetter(
     "",
     "---",
     "",
-    result.text,
+    fullLetter,
     "",
     "---",
     "",
@@ -162,15 +198,15 @@ async function _withHttpRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Strip common markdown artifacts a model might output despite "plain text" instruction.
- * Removes: ``` fences, leading #/## headers, leading bold **text**, excessive blank lines.
+ * Strip markdown artifacts the model might add despite instructions.
+ * Preserves: **bold** (used for bullet skill names), bullet lines (- item), blank lines.
+ * Removes: ``` code fences, standalone #/## header lines, excessive blank lines.
  */
 function stripMarkdown(text: string): string {
   return text
-    .replace(/^```[\w]*\n?/gm, "")
-    .replace(/^```\s*$/gm, "")
-    .replace(/^#{1,3}\s+.+\n?/gm, "")       // remove header lines
-    .replace(/\*\*(Dear .+?)\*\*/g, "$1")    // remove bold from greetings if present
+    .replace(/^```[\w]*\n?/gm, "")           // remove opening code fences
+    .replace(/^```\s*$/gm, "")               // remove closing code fences
+    .replace(/^#{1,3}\s+.+\n?/gm, "")       // remove standalone markdown headers
     .replace(/\n{3,}/g, "\n\n")              // collapse 3+ blank lines to 2
     .trim();
 }

@@ -19,6 +19,8 @@
   - [2.5 Python scraper commands](#25-python-scraper-commands)
   - [2.6 Database commands](#26-database-commands)
   - [2.7 Stopping and restarting](#27-stopping-and-restarting)
+  - [2.8 Manual pipeline run modes](#28-manual-pipeline-run-modes-bypassing-the-orchestrator)
+  - [2.9 Inspecting results after a run](#29-inspecting-results-after-a-run)
 - [3. Architecture and Flow](#3-architecture-and-flow)
   - [3.1 High-level architecture diagram (ASCII)](#31-high-level-architecture-diagram-ascii)
   - [3.2 Pipeline flow — high level](#32-pipeline-flow--high-level)
@@ -399,6 +401,126 @@ Restart after code change:
 ```bash
 # stop with Ctrl+C, then:
 npm start
+```
+
+---
+
+### 2.8 Manual pipeline run modes (bypassing the orchestrator)
+
+Run `scripts/run-pipeline.ts` directly with env vars to control exactly what happens. All commands below are run from the repo root.
+
+**Standard fresh run — Dice, last 1 day:**
+```bash
+SOURCE=dice MAX=20 POSTED_WITHIN=ONE EXTRACT=1 \
+  npx tsx scripts/run-pipeline.ts
+```
+
+**Backfill — last 7 days, higher cap:**
+```bash
+SOURCE=dice MAX=100 POSTED_WITHIN=SEVEN EXTRACT=1 \
+  npx tsx scripts/run-pipeline.ts
+```
+
+**Jobright API:**
+```bash
+SOURCE=jobright_api MAX=40 EXTRACT=1 \
+  npx tsx scripts/run-pipeline.ts
+```
+
+**LinkedIn:**
+```bash
+SOURCE=linkedin MAX=30 EXTRACT=1 \
+  npx tsx scripts/run-pipeline.ts
+```
+
+**Skip dedup — force re-process jobs already seen (useful for testing):**
+```bash
+SOURCE=dice MAX=5 EXTRACT=1 SKIP_DEDUP=1 \
+  npx tsx scripts/run-pipeline.ts
+```
+
+**Skip persistence — dry run with no DB writes:**
+```bash
+SOURCE=dice MAX=5 EXTRACT=1 SKIP_PERSIST=1 \
+  npx tsx scripts/run-pipeline.ts
+```
+
+**Replay an existing JSONL — no scrape, no Python, no API cost:**
+```bash
+JSONL=scraper/output/dice_<run_id>.jsonl EXTRACT=1 \
+  npx tsx scripts/run-pipeline.ts
+```
+Use this to re-run the full pipeline on a previous scrape output after changing the scorer, judge prompt, or cover letter prompt.
+
+**Filter-only run — no LLM calls at all:**
+```bash
+SOURCE=dice MAX=20 \
+  npx tsx scripts/run-pipeline.ts
+# EXTRACT defaults to 0 when not set — only scrape + filter runs
+```
+
+**Save extraction fixtures (caps at 5 total across all runs):**
+```bash
+SOURCE=dice MAX=20 EXTRACT=1 SAVE_FIXTURES=1 \
+  npx tsx scripts/run-pipeline.ts
+```
+
+**Run Redis ↔ Postgres integrity check at end:**
+```bash
+SOURCE=dice MAX=20 EXTRACT=1 VERIFY=1 \
+  npx tsx scripts/run-pipeline.ts
+```
+
+**Debug extraction failures — print raw model response on validation error:**
+```bash
+SOURCE=dice MAX=5 EXTRACT=1 DEBUG_EXTRACT=1 \
+  npx tsx scripts/run-pipeline.ts
+```
+
+**Headed scraper — show the Playwright browser window (Jobright):**
+```bash
+SOURCE=jobright_api MAX=10 EXTRACT=1 HEADED=1 \
+  npx tsx scripts/run-pipeline.ts
+```
+
+---
+
+### 2.9 Inspecting results after a run
+
+```bash
+# Cover letters — list most recent run folder
+ls -lt output/cover-letters/ | head -3
+ls output/cover-letters/<run_id>/COVER_LETTER/
+ls output/cover-letters/<run_id>/REVIEW_QUEUE/
+
+# Orchestrator health — last 20 lines
+tail -20 output/logs/orchestrator.log
+
+# Postgres — last 10 runs with key stats
+psql $DATABASE_URL -c "
+  SELECT run_id, source, jobs_total, jobs_passed, jobs_covered,
+         extractions_attempted, extractions_succeeded,
+         exit_code, last_heartbeat, finished_at
+  FROM runs
+  ORDER BY started_at DESC
+  LIMIT 10;
+"
+
+# Postgres — verdicts and cover letter paths for latest run
+psql $DATABASE_URL -c "
+  SELECT j.title, j.company, jv.verdict, jv.bucket, cl.file_path
+  FROM jobs j
+  LEFT JOIN judge_verdicts jv ON jv.job_id = j.job_id AND jv.run_id = j.run_id
+  LEFT JOIN cover_letters cl  ON cl.job_id = j.job_id AND cl.run_id = j.run_id
+  ORDER BY j.scraped_at DESC
+  LIMIT 20;
+"
+
+# Redis — how many Dice jobs have been seen (exact dedup state)
+redis-cli --scan --pattern 'seen:dice:*' | wc -l
+
+# Redis — check for active orchestrator locks (should be empty when idle)
+redis-cli --scan --pattern 'orchestrator:lock:*'
 ```
 
 ---

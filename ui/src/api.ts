@@ -6,6 +6,7 @@ export interface ApplyQueueRow {
   source_url: string;
   source: string;
   scraped_at: string;
+  jobright_id: string | null;
   score_total: number;
   skills: number;
   semantic: number;
@@ -31,6 +32,7 @@ export interface HardRejectionRow {
   source_url: string;
   source: string;
   scraped_at: string;
+  jobright_id: string | null;
   reason: string;
   flags: Record<string, unknown> | null;
   label: 'yes' | 'maybe' | 'no' | null;
@@ -45,6 +47,7 @@ export interface SoftRejectionRow {
   source_url: string;
   source: string;
   scraped_at: string;
+  jobright_id: string | null;
   score_total: number;
   skills: number;
   semantic: number;

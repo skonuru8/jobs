@@ -405,8 +405,14 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.action-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .open-btn {
-  align-self: flex-start;
   display: inline-block;
   padding: 5px 12px;
   background: #1a2040;
@@ -420,6 +426,16 @@ body {
 
 .open-btn:hover {
   background: #20286a;
+}
+
+.jobright-btn {
+  background: #1a2a1a;
+  border-color: #2a6030;
+  color: #60c080;
+}
+
+.jobright-btn:hover {
+  background: #1e3a20;
 }
 
 .label-btns {

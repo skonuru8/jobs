@@ -34,14 +34,27 @@ export interface CoverLetterJobInput {
 // Full generator input
 // ---------------------------------------------------------------------------
 
+export interface CandidateContact {
+  name: string;
+  email: string;
+  phone: string;
+  linkedin: string;
+  github: string;
+  city: string;
+  state: string;
+}
+
+export interface CandidateProfile {
+  skills: Array<{ name: string; years: number; confidence: string; category: string }>;
+  years_experience: number;
+  education: { degree: string; field: string };
+  preferred_domains: string[];
+  contact: CandidateContact;
+}
+
 export interface CoverLetterInput {
   job:    CoverLetterJobInput;
-  profile: {
-    skills: Array<{ name: string; years: number; confidence: string; category: string }>;
-    years_experience: number;
-    education: { degree: string; field: string };
-    preferred_domains: string[];
-  };
+  profile: CandidateProfile;
   resume: string | null;   // raw text from config/resume.md — null if file missing/empty
 }
 
