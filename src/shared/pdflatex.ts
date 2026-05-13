@@ -29,8 +29,3 @@ export async function runPdflatex(texPathAbs: string, outputDirAbs: string): Pro
     return { ok: false, log };
   }
 }
-
-/** True if pdflatex log looks like a successful run (PDF written). */
-export function pdflatexLogSuggestsSuccess(log: string): boolean {
-  return !/Fatal error|Emergency stop|! LaTeX Error|No pages of output/i.test(log);
-}

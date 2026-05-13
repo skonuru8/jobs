@@ -37,7 +37,7 @@ function fmtScore(n: number) {
 
 /** Flags that should draw a visible warning on the card (§13). */
 function artifactFlagsNeedWarning(flags: string[]): boolean {
-  const warn = /compile|malformed|too_short|length_off|failed|invalid|missing/i;
+  const warn = /compile|malformed|too_short|length_off|failed|invalid|missing|leak/i;
   return flags.some(f => warn.test(f));
 }
 

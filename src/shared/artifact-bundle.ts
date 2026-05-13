@@ -134,7 +134,10 @@ export function coverLetterInputFromBundle(bundle: ArtifactBundleOk): CoverLette
         city:     bundle.profile.contact.city,
         state:    bundle.profile.contact.state,
       },
-      title: bundle.profile.target_titles?.[0] ?? "Senior Software Engineer",
+      title:
+        bundle.profile.contact.title?.trim()
+        ?? bundle.profile.target_titles?.[0]
+        ?? "Senior Software Engineer",
       location_line: formatProfileLocationLine(bundle.profile),
     },
     resume: bundle.canonical_resume_tex,
@@ -154,6 +157,8 @@ function formatJobLocationLine(job: Job): string | null {
 
 function formatProfileLocationLine(profile: Profile): string {
   const c = profile.contact;
+  const note = c.work_arrangement_note?.trim();
+  if (note) return `${c.city}, ${c.state} \\quad (${note})`;
   const types = profile.location.acceptable_types?.join(" / ") ?? "Remote";
   return `${c.city}, ${c.state} \\quad (${types})`;
 }

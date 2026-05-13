@@ -64,6 +64,10 @@ export interface ProfileContact {
   github: string
   city: string
   state: string
+  /** Display headline (decoupled from target_titles ordering). */
+  title?: string
+  /** e.g. "Open to Onsite" — matches resume header when set. */
+  work_arrangement_note?: string
 }
 
 export interface Profile {

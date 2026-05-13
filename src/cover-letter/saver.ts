@@ -7,7 +7,7 @@ import * as path from "path";
 
 import type { ArtifactBundleOk } from "@/shared/artifact-bundle";
 import { coverLetterInputFromBundle } from "@/shared/artifact-bundle";
-import { runPdflatex, pdflatexLogSuggestsSuccess } from "@/shared/pdflatex";
+import { runPdflatex } from "@/shared/pdflatex";
 
 import { generateCoverLetter } from "./generator";
 import { COVER_PROMPT_SHA } from "./prompt";
@@ -47,6 +47,7 @@ export async function generateAndSaveCoverLetter(
       meta: buildMeta({
         bundle, ctx, clResult, version, flags, compileStatus: "failed",
         wordCount: 0, canonicalSha: bundle.canonical_sha,
+        jobLocationLine: input.job.location_line ?? null,
       }),
       flags,
       word_count: 0,
@@ -58,8 +59,8 @@ export async function generateAndSaveCoverLetter(
     flags.push("cover_letter_length_off");
   }
 
-  if (!basicTexSanity(clResult.text)) {
-    flags.push("tex_malformed");
+  if (bodyHasLatexLeak(clResult.text)) {
+    flags.push("cover_body_latex_leak");
   }
 
   const templatePath = path.join(repoRoot, "config", "cover_letter_template.tex");
@@ -72,6 +73,7 @@ export async function generateAndSaveCoverLetter(
       meta: buildMeta({
         bundle, ctx, clResult, version, flags, compileStatus: "failed",
         wordCount: wc, canonicalSha: bundle.canonical_sha,
+        jobLocationLine: input.job.location_line ?? null,
       }),
       flags,
       word_count: wc,
@@ -107,6 +109,10 @@ export async function generateAndSaveCoverLetter(
     tex = tex.split(`<<${k}>>`).join(v);
   }
 
+  if (!finalTexValid(tex)) {
+    flags.push("tex_malformed");
+  }
+
   fs.mkdirSync(jobFolderAbs, { recursive: true });
   const vBase = `v${version}`;
   const texAbs = path.join(jobFolderAbs, `${vBase}.tex`);
@@ -119,7 +125,7 @@ export async function generateAndSaveCoverLetter(
     for (let attempt = 0; attempt < 2; attempt++) {
       const r = await runPdflatex(texAbs, jobFolderAbs);
       log = r.log;
-      if (r.ok && pdflatexLogSuggestsSuccess(log)) {
+      if (r.ok) {
         const expectedPdf = path.join(jobFolderAbs, `${vBase}.pdf`);
         if (fs.existsSync(expectedPdf)) {
           pdfAbs = expectedPdf;
@@ -151,6 +157,7 @@ export async function generateAndSaveCoverLetter(
     texRel: path.relative(repoRoot, texAbs),
     pdfRel: pdfAbs ? path.relative(repoRoot, pdfAbs) : null,
     metaRel: path.relative(repoRoot, path.join(jobFolderAbs, `${vBase}.meta.json`)),
+    jobLocationLine: input.job.location_line ?? null,
   });
 
   const metaAbs = path.join(jobFolderAbs, `${vBase}.meta.json`);
@@ -225,10 +232,23 @@ export function escapeLatexPlain(raw: string): string {
   return escapeLatexBody(raw).replace(/\n/g, " ");
 }
 
-function basicTexSanity(body: string): boolean {
+/** True if LLM body contains LaTeX-ish content (should be plain prose). */
+function bodyHasLatexLeak(body: string): boolean {
   const open = (body.match(/\{/g) ?? []).length;
   const close = (body.match(/\}/g) ?? []).length;
-  return Math.abs(open - close) <= 2;
+  const hasCommand = /\\[a-zA-Z]+/.test(body);
+  return open > 0 || close > 0 || hasCommand;
+}
+
+/** Assembled document has document env and nearly balanced braces. */
+function finalTexValid(tex: string): boolean {
+  const open = (tex.match(/\{/g) ?? []).length;
+  const close = (tex.match(/\}/g) ?? []).length;
+  return (
+    tex.includes("\\begin{document}")
+    && tex.includes("\\end{document}")
+    && Math.abs(open - close) <= 1
+  );
 }
 
 function buildMeta(args: {
@@ -240,13 +260,14 @@ function buildMeta(args: {
   compileStatus: string;
   wordCount: number;
   canonicalSha: string;
+  jobLocationLine: string | null;
   texRel?: string | null;
   pdfRel?: string | null;
   metaRel?: string | null;
 }): Record<string, unknown> {
   const { bundle, ctx, clResult, version, flags, compileStatus, wordCount, canonicalSha } = args;
   const job = bundle.job;
-  const locLine = coverLetterInputFromBundle(bundle).job.location_line;
+  const locLine = args.jobLocationLine;
   return {
     job_id:          job.meta.job_id,
     run_id:          ctx.runId,

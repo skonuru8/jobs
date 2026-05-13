@@ -5,7 +5,7 @@
 import * as fs   from "fs";
 import * as path from "path";
 
-import { runPdflatex, pdflatexLogSuggestsSuccess } from "@/shared/pdflatex";
+import { runPdflatex } from "@/shared/pdflatex";
 
 export interface ResumeSaveResult {
   tex_path:       string;
@@ -32,7 +32,7 @@ export async function writeTexAndCompile(
   for (let attempt = 0; attempt < 2; attempt++) {
     const r = await runPdflatex(texAbs, jobFolderAbs);
     lastLog = r.log;
-    if (r.ok && pdflatexLogSuggestsSuccess(r.log)) {
+    if (r.ok) {
       const pdfAbs = path.join(jobFolderAbs, `${vBase}.pdf`);
       if (fs.existsSync(pdfAbs)) {
         return { tex_path: texAbs, pdf_path: pdfAbs };
