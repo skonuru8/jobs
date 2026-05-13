@@ -78,7 +78,7 @@ export async function generateResumeTex(
 
 function buildUserMessage(input: ResumeGenInput, shortHint?: string): string {
   const parts = [
-    "CANONICAL_RESUME_TEX:",
+    "CANONICAL_RESUME:",
     input.canonical_resume_tex,
     "",
     "JD_JSON:",

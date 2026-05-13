@@ -35,6 +35,12 @@ function fmtScore(n: number) {
   return (n * 100).toFixed(0);
 }
 
+/** Flags that should draw a visible warning on the card (§13). */
+function artifactFlagsNeedWarning(flags: string[]): boolean {
+  const warn = /compile|malformed|too_short|length_off|failed|invalid|missing/i;
+  return flags.some(f => warn.test(f));
+}
+
 function BucketBadge({ bucket }: { bucket: string }) {
   const colors: Record<string, string> = {
     COVER_LETTER: '#2d6a2d',
@@ -272,9 +278,24 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
       {applyRow && (
         <div className="artifact-actions">
           {applyRow.artifact_flags && applyRow.artifact_flags.length > 0 && (
-            <div className="artifact-flags-badge" title={applyRow.artifact_flags.join(', ')}>
-              Artifact flags
+            <div
+              className={`artifact-flags-badge${artifactFlagsNeedWarning(applyRow.artifact_flags) ? ' artifact-flags-warn' : ''}`}
+              title={applyRow.artifact_flags.join(', ')}
+            >
+              {artifactFlagsNeedWarning(applyRow.artifact_flags) ? 'Artifact issue' : 'Flags'}:{' '}
+              {applyRow.artifact_flags.join(', ')}
             </div>
+          )}
+          {(applyRow.resume_word_count != null || applyRow.cover_word_count != null) && (
+            <span className="artifact-word-counts">
+              {applyRow.resume_word_count != null && (
+                <span>Resume {applyRow.resume_word_count}w</span>
+              )}
+              {applyRow.resume_word_count != null && applyRow.cover_word_count != null && ' · '}
+              {applyRow.cover_word_count != null && (
+                <span>Cover {applyRow.cover_word_count}w</span>
+              )}
+            </span>
           )}
           <button
             type="button"
@@ -284,7 +305,14 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
           >
             {genLoading ? '…' : applyRow.cover_pdf_url || applyRow.resume_pdf_url ? 'Regenerate' : 'Generate'}
           </button>
-          {genError && <span className="gen-error">{genError}</span>}
+          {genError && (
+            <span className="gen-error">
+              {genError}{' '}
+              <button type="button" className="gen-retry-inline" onClick={handleGenerate} disabled={genLoading}>
+                Try again
+              </button>
+            </span>
+          )}
           <div className="artifact-pdf-links">
             {applyRow.resume_pdf_url && (
               <a href={applyRow.resume_pdf_url} target="_blank" rel="noopener noreferrer">Resume PDF</a>

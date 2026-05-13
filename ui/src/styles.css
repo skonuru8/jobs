@@ -655,9 +655,40 @@ body {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(196, 154, 26, 0.2);
-  color: var(--yellow);
-  border: 1px solid rgba(196, 154, 26, 0.45);
+  background: rgba(196, 154, 26, 0.12);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artifact-flags-badge.artifact-flags-warn {
+  background: rgba(212, 168, 0, 0.22);
+  color: #c9a227;
+  border: 1px solid rgba(212, 168, 0, 0.55);
+}
+
+.artifact-word-counts {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.gen-retry-inline {
+  margin-left: 6px;
+  padding: 0 6px;
+  font-size: 12px;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.gen-retry-inline:disabled {
+  opacity: 0.5;
+  cursor: wait;
 }
 
 .cover-pdf-note {

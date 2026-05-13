@@ -189,7 +189,16 @@ function formatLetterDate(): string {
   });
 }
 
-function deriveSalutation(_bundle: ArtifactBundleOk): string {
+/**
+ * <<SALUTATION>> completes "Dear Hiring …," / "Hiring …," (§6).
+ * "Manager" when the JD signals a manager-led hire; otherwise "Team".
+ */
+function deriveSalutation(bundle: ArtifactBundleOk): string {
+  const raw = (bundle.job.description_raw ?? "").slice(0, 12000);
+  if (/\bhiring\s+manager\b/i.test(raw)) return "Manager";
+  if (/\brecruiting\s+team\b|\btalent\s+acquisition\s+team\b|\bhiring\s+team\b/i.test(raw)) {
+    return "Team";
+  }
   return "Manager";
 }
 

@@ -59,7 +59,8 @@ import type { CoverLetterConfig } from "@/cover-letter/types";
 import { generateAndSaveResume } from "@/resume-generator/index";
 import type { ResumeGenConfig } from "@/resume-generator/types";
 
-import { buildArtifactBundle, makeJobSlug } from "@/shared/artifact-bundle";
+import { buildArtifactBundle } from "@/shared/artifact-bundle";
+import { makeJobSlug } from "@/shared/slug";
 
 // Dedup + storage — gracefully disabled via SKIP_DEDUP=1 / SKIP_PERSIST=1
 import {

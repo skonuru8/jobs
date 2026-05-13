@@ -21,6 +21,7 @@ export {
   saveJob,
   isSeenInDB,
   nextArtifactVersion,
+  jobHasAnyArtifacts,
   insertTailoredResumeArtifact,
   insertCoverLetterArtifact,
   markStorageDisabled,

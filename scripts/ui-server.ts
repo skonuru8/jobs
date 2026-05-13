@@ -277,10 +277,21 @@ async function main() {
         return;
       }
       const jobId = req.params.job_id;
-      const out = await manualGenerateArtifacts(REPO_ROOT, jobId);
+      const force = (req.body as { force?: boolean } | undefined)?.force;
+      const out = await manualGenerateArtifacts(REPO_ROOT, jobId, { force });
       if (!out.ok) {
+        if (out.conflict) {
+          res.status(409).json({
+            error: 'artifacts_exist',
+            detail: out.error ?? 'Set force to true to regenerate.',
+          });
+          return;
+        }
         const miss = out.error?.toLowerCase().includes('not found');
-        res.status(miss ? 404 : 400).json({ error: out.error ?? 'generate_failed' });
+        res.status(miss ? 404 : 400).json({
+          error: miss ? 'not_found' : 'generate_failed',
+          detail: out.error ?? 'Generation failed.',
+        });
         return;
       }
       res.json({ resume: out.resume, cover_letter: out.cover });

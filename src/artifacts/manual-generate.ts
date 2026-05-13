@@ -12,22 +12,38 @@ import type { CoverLetterConfig } from "@/cover-letter/types";
 import { loadCanonicalResumeMaster } from "@/cover-letter/resume";
 import { generateAndSaveResume } from "@/resume-generator/index";
 import type { ResumeGenConfig } from "@/resume-generator/types";
-import { buildArtifactBundle, makeJobSlug } from "@/shared/artifact-bundle";
+import { buildArtifactBundle } from "@/shared/artifact-bundle";
+import { makeJobSlug } from "@/shared/slug";
 import { fetchLatestJobSnapshotForArtifacts } from "@/storage/artifact-load";
 import {
   insertCoverLetterArtifact,
   insertTailoredResumeArtifact,
+  jobHasAnyArtifacts,
   nextArtifactVersion,
 } from "@/storage/persist";
 
 export interface ManualGenerateResult {
   ok: boolean;
+  /** True when force was false and rows already exist (HTTP 409). */
+  conflict?: boolean;
   error?: string;
   resume?: Record<string, unknown> | null;
   cover?: Record<string, unknown> | null;
 }
 
-export async function manualGenerateArtifacts(repoRoot: string, jobId: string): Promise<ManualGenerateResult> {
+export async function manualGenerateArtifacts(
+  repoRoot: string,
+  jobId: string,
+  options?: { force?: boolean },
+): Promise<ManualGenerateResult> {
+  if (options?.force === false && (await jobHasAnyArtifacts(jobId))) {
+    return {
+      ok: false,
+      conflict: true,
+      error: "Artifacts already exist for this job. Omit force or set force to true to regenerate.",
+    };
+  }
+
   const snapshot = await fetchLatestJobSnapshotForArtifacts(jobId);
   if (!snapshot) {
     return { ok: false, error: "Job not found or missing score/judge data." };

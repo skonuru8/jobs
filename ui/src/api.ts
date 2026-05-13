@@ -123,11 +123,14 @@ export async function postLabel(body: LabelPayload): Promise<{ ok: true }> {
   return res.json();
 }
 
-export async function postGenerateArtifacts(jobId: string): Promise<{ resume: unknown; cover_letter: unknown }> {
+export async function postGenerateArtifacts(
+  jobId: string,
+  options?: { force?: boolean },
+): Promise<{ resume: unknown; cover_letter: unknown }> {
   const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ force: options?.force }),
   });
   if (!res.ok) {
     const j = await res.json().catch(() => ({}));

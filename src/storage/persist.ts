@@ -354,6 +354,24 @@ export async function saveJob(job: JobRecord): Promise<void> {
 // Tailored resume + versioned cover letter rows (artifact pipeline)
 // ---------------------------------------------------------------------------
 
+/** True if this job already has a tailored resume or versioned cover letter row. */
+export async function jobHasAnyArtifacts(jobId: string): Promise<boolean> {
+  if (_disabled) return false;
+  try {
+    const result = await getPool().query<{ has_any: boolean }>(
+      `SELECT (
+          EXISTS (SELECT 1 FROM tailored_resumes WHERE job_id = $1)
+          OR EXISTS (SELECT 1 FROM cover_letters WHERE job_id = $1)
+        ) AS has_any`,
+      [jobId],
+    );
+    return Boolean(result.rows[0]?.has_any);
+  } catch (e) {
+    console.error("[storage] jobHasAnyArtifacts failed:", formatErr(e));
+    return false;
+  }
+}
+
 export async function nextArtifactVersion(jobId: string): Promise<number> {
   if (_disabled) return 1;
   try {
