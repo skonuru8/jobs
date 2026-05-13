@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { postLabel, getStats } from '../api';
+import { postLabel, getStats, postGenerateArtifacts } from '../api';
 import type { ApplyQueueRow, HardRejectionRow, SoftRejectionRow, Stats } from '../api';
 
 type Mode = 'apply' | 'hard-reject' | 'soft-reject';
@@ -11,6 +11,8 @@ interface JobCardProps {
   row: ApplyQueueRow | HardRejectionRow | SoftRejectionRow;
   onStatsUpdate: (stats: Stats) => void;
   onRemove?: (jobId: string, runId: string) => void;
+  /** Refetch list data after manual artifact generation (apply queue). */
+  onDataChange?: () => void;
 }
 
 // Change 4: relative time
@@ -78,7 +80,7 @@ const NOTE_CHIPS = [
   'Too senior / too junior',
 ];
 
-export function JobCard({ mode, row, onStatsUpdate, onRemove }: JobCardProps) {
+export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: JobCardProps) {
   const [label, setLabel] = useState<Label | null>(row.label ?? null);
   const [appStatus, setAppStatus] = useState<AppStatus>(
     mode === 'apply' ? ((row as ApplyQueueRow).application_status ?? null) : null
@@ -88,6 +90,8 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove }: JobCardProps) {
   const [clOpen, setClOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [genLoading, setGenLoading] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
 
   const applyRow = mode === 'apply' ? (row as ApplyQueueRow) : null;
   const hardRow = mode === 'hard-reject' ? (row as HardRejectionRow) : null;
@@ -98,6 +102,22 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove }: JobCardProps) {
   const isActioned = isApplied || isSkipped;
 
   // notes override: let doPost accept explicit notes so chips can pass their text
+  async function handleGenerate() {
+    if (mode !== 'apply') return;
+    setGenLoading(true);
+    setGenError(null);
+    try {
+      await postGenerateArtifacts(row.job_id);
+      onDataChange?.();
+      const fresh = await getStats();
+      onStatsUpdate(fresh);
+    } catch (e) {
+      setGenError((e as Error).message);
+    } finally {
+      setGenLoading(false);
+    }
+  }
+
   async function doPost(newLabel: Label, newAppStatus?: AppStatus, notesOverride?: string) {
     setSaving(true);
     setError(null);
@@ -250,6 +270,33 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove }: JobCardProps) {
       )}
 
       {applyRow && (
+        <div className="artifact-actions">
+          {applyRow.artifact_flags && applyRow.artifact_flags.length > 0 && (
+            <div className="artifact-flags-badge" title={applyRow.artifact_flags.join(', ')}>
+              Artifact flags
+            </div>
+          )}
+          <button
+            type="button"
+            className="gen-btn"
+            onClick={handleGenerate}
+            disabled={genLoading}
+          >
+            {genLoading ? '…' : applyRow.cover_pdf_url || applyRow.resume_pdf_url ? 'Regenerate' : 'Generate'}
+          </button>
+          {genError && <span className="gen-error">{genError}</span>}
+          <div className="artifact-pdf-links">
+            {applyRow.resume_pdf_url && (
+              <a href={applyRow.resume_pdf_url} target="_blank" rel="noopener noreferrer">Resume PDF</a>
+            )}
+            {applyRow.cover_pdf_url && (
+              <a href={applyRow.cover_pdf_url} target="_blank" rel="noopener noreferrer">Cover letter PDF</a>
+            )}
+          </div>
+        </div>
+      )}
+
+      {applyRow && (
         <div className="collapsible">
           <button className="collapse-btn" onClick={() => setClOpen(o => !o)}>
             {clOpen ? '▼' : '▶'} Cover Letter
@@ -258,7 +305,9 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove }: JobCardProps) {
             <div className="collapse-content cover-letter">
               {applyRow.cover_letter
                 ? <pre>{applyRow.cover_letter}</pre>
-                : <em>No cover letter — judge said STRONG but score below 0.70 threshold.</em>
+                : applyRow.cover_pdf_url
+                ? <p className="cover-pdf-note">Cover letter is available as PDF (see link above).</p>
+                : <em>No cover letter generated yet.</em>
               }
             </div>
           )}

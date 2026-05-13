@@ -608,3 +608,59 @@ body {
   text-align: center;
   font-style: italic;
 }
+
+.artifact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 10px 0 6px;
+  padding: 8px 10px;
+  background: var(--bg-card-hover);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.gen-btn {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.gen-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.gen-error {
+  color: #e07070;
+  font-size: 12px;
+}
+
+.artifact-pdf-links {
+  display: flex;
+  gap: 12px;
+}
+
+.artifact-pdf-links a {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.artifact-flags-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(196, 154, 26, 0.2);
+  color: var(--yellow);
+  border: 1px solid rgba(196, 154, 26, 0.45);
+}
+
+.cover-pdf-note {
+  color: var(--text-muted);
+  font-size: 13px;
+}

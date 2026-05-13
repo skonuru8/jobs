@@ -232,8 +232,7 @@ export async function getRunStats(runId: string): Promise<RunStats | null> {
 // (e.g. AggregateError when Postgres is down), the function must catch it
 // rather than letting it escape and crash the pipeline's Promise.all.
 //
-// The 6 INSERTs (jobs / filter_results / scores / judge_verdicts /
-// cover_letters / seen_jobs) are unchanged from the original.
+// The 5 INSERTs (jobs / filter_results / scores / judge_verdicts / seen_jobs)
 // ---------------------------------------------------------------------------
 
 export async function saveJob(job: JobRecord): Promise<void> {
@@ -329,25 +328,8 @@ export async function saveJob(job: JobRecord): Promise<void> {
       );
     }
 
-    // 5. cover_letters (only when cover letter was generated)
-    if (job.cover_letter_path) {
-      await client.query(
-        `INSERT INTO cover_letters
-           (job_id, run_id, content, file_path, word_count, model, generated_at)
-         VALUES ($1,$2,$3,$4,$5,$6, NOW())
-         ON CONFLICT (job_id, run_id) DO UPDATE
-           SET content    = EXCLUDED.content,
-               file_path  = EXCLUDED.file_path,
-               word_count = EXCLUDED.word_count`,
-        [
-          job.job_id, job.run_id,
-          job.cover_letter_content ?? null,
-          job.cover_letter_path,
-          job.cover_letter_words ?? null,
-          job.cover_letter_model ?? null,
-        ],
-      );
-    }
+    // 5. cover_letters — versioned rows are inserted by insertCoverLetterArtifact()
+    //    from the pipeline / manual generate path (not saveJob).
 
     // 6. seen_jobs (always — cross-run dedup backing store)
     await client.query(
@@ -365,6 +347,131 @@ export async function saveJob(job: JobRecord): Promise<void> {
     console.error("[storage] saveJob failed:", formatErr(e));
   } finally {
     client?.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tailored resume + versioned cover letter rows (artifact pipeline)
+// ---------------------------------------------------------------------------
+
+export async function nextArtifactVersion(jobId: string): Promise<number> {
+  if (_disabled) return 1;
+  try {
+    const result = await getPool().query<{ next_version: string }>(
+      `SELECT (COALESCE(GREATEST(
+          (SELECT MAX(version) FROM tailored_resumes WHERE job_id = $1),
+          (SELECT MAX(version) FROM cover_letters    WHERE job_id = $1)
+        ), 0) + 1)::text AS next_version`,
+      [jobId],
+    );
+    return parseInt(result.rows[0]?.next_version ?? "1", 10);
+  } catch (e) {
+    console.error("[storage] nextArtifactVersion failed:", formatErr(e));
+    return 1;
+  }
+}
+
+export interface TailoredResumeInsert {
+  job_id:          string;
+  run_id:          string | null;
+  version:         number;
+  tex_path:        string;
+  pdf_path:        string | null;
+  meta_path:       string;
+  word_count:      number | null;
+  model:           string;
+  prompt_sha:      string;
+  canonical_sha:   string;
+  input_tokens:    number | null;
+  output_tokens:   number | null;
+  compile_status:  string;
+  generated_by:    string;
+  flags:           string[];
+}
+
+export async function insertTailoredResumeArtifact(row: TailoredResumeInsert): Promise<void> {
+  if (_disabled) return;
+  try {
+    await getPool().query(
+      `INSERT INTO tailored_resumes (
+         job_id, run_id, version, tex_path, pdf_path, meta_path, word_count,
+         model, prompt_sha, canonical_sha, input_tokens, output_tokens,
+         compile_status, generated_by, flags, generated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::text[], NOW())`,
+      [
+        row.job_id,
+        row.run_id,
+        row.version,
+        row.tex_path,
+        row.pdf_path,
+        row.meta_path,
+        row.word_count,
+        row.model,
+        row.prompt_sha,
+        row.canonical_sha,
+        row.input_tokens,
+        row.output_tokens,
+        row.compile_status,
+        row.generated_by,
+        row.flags,
+      ],
+    );
+  } catch (e) {
+    console.error("[storage] insertTailoredResumeArtifact failed:", formatErr(e));
+  }
+}
+
+export interface CoverLetterArtifactInsert {
+  job_id:          string;
+  run_id:          string;
+  version:         number;
+  content:         string | null;
+  file_path:       string | null;
+  tex_path:        string | null;
+  pdf_path:        string | null;
+  meta_path:       string | null;
+  word_count:      number | null;
+  model:           string;
+  prompt_sha:      string;
+  canonical_sha:   string;
+  input_tokens:    number | null;
+  output_tokens:   number | null;
+  compile_status:  string;
+  generated_by:    string;
+  flags:           string[];
+}
+
+export async function insertCoverLetterArtifact(row: CoverLetterArtifactInsert): Promise<void> {
+  if (_disabled) return;
+  try {
+    await getPool().query(
+      `INSERT INTO cover_letters (
+         job_id, run_id, version, content, file_path, tex_path, pdf_path, meta_path,
+         word_count, model, prompt_sha, canonical_sha, input_tokens, output_tokens,
+         compile_status, generated_by, flags, generated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::text[], NOW())`,
+      [
+        row.job_id,
+        row.run_id,
+        row.version,
+        row.content,
+        row.file_path,
+        row.tex_path,
+        row.pdf_path,
+        row.meta_path,
+        row.word_count,
+        row.model,
+        row.prompt_sha,
+        row.canonical_sha,
+        row.input_tokens,
+        row.output_tokens,
+        row.compile_status,
+        row.generated_by,
+        row.flags,
+      ],
+    );
+  } catch (e) {
+    console.error("[storage] insertCoverLetterArtifact failed:", formatErr(e));
   }
 }
 

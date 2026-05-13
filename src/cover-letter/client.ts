@@ -26,8 +26,10 @@ export interface CompletionOptions {
 }
 
 export interface CompletionResult {
-  content: string;
-  model:   string;
+  content:        string;
+  model:          string;
+  input_tokens?:  number;
+  output_tokens?: number;
 }
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
@@ -73,17 +75,25 @@ export async function complete(opts: CompletionOptions): Promise<CompletionResul
   const raw     = (data?.choices?.[0]?.message?.content ?? "").trim();
   const content = stripThinkBlocks(raw);
   const model   = data?.model ?? opts.model;
+  const usage   = data?.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
 
   if (!content) {
     throw new Error("OpenRouter returned empty content");
   }
 
-  return { content, model };
+  return {
+    content,
+    model,
+    input_tokens:  usage?.prompt_tokens,
+    output_tokens: usage?.completion_tokens,
+  };
 }
 
 /** Remove <think>...</think> blocks from response content.
  *  Gemma 4 31B (thinking enabled) and Qwen 3.5 Flash both emit these.
  *  No-op for models that don't. */
 function stripThinkBlocks(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  return text
+    .replace(/<(?:redacted_thinking|think)>[\s\S]*?<\/(?:redacted_thinking|think)>/gi, "")
+    .trim();
 }

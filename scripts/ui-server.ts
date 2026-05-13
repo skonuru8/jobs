@@ -8,9 +8,13 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { config as loadEnv } from 'dotenv';
 import { getPool } from '../src/storage/db.js';
+import { manualGenerateArtifacts } from '../src/artifacts/manual-generate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.join(__dirname, '..');
+loadEnv({ path: path.join(REPO_ROOT, '.env') });
 
 /**
  * Cover letter content is stored on disk (content col is NULL in DB).
@@ -36,13 +40,17 @@ function readCoverLetter(filePath: string | null): string | null {
 async function main() {
   const pool = getPool();
 
-  // Run migration 004 idempotently on startup
-  const migrationPath = path.join(__dirname, '../migrations/004_ui_application_tracking.sql');
-  const migrationSql = fs.readFileSync(migrationPath, 'utf-8');
-  await pool.query(migrationSql);
+  for (const mig of ['004_ui_application_tracking.sql', '005_tailored_artifacts.sql']) {
+    const migrationPath = path.join(REPO_ROOT, 'migrations', mig);
+    if (fs.existsSync(migrationPath)) {
+      await pool.query(fs.readFileSync(migrationPath, 'utf-8'));
+    }
+  }
 
   const app = express();
   app.use(express.json());
+
+  app.use('/output', express.static(path.join(REPO_ROOT, 'output')));
 
   // Serve production build
   app.use(express.static(path.join(__dirname, '../ui/dist')));
@@ -59,13 +67,27 @@ async function main() {
           CASE WHEN j.source = 'jobright_api' THEN j.meta->>'job_id' ELSE NULL END AS jobright_id,
           s.total AS score_total, s.skills, s.semantic, s.yoe, s.seniority, s.location,
           jv.verdict AS judge_verdict, jv.bucket, jv.reasoning, jv.concerns,
-          cl.content AS cover_letter, cl.file_path AS cover_letter_path,
+          cl.content AS cover_letter,
+          cl.file_path AS cover_letter_path,
+          tr.pdf_path AS resume_pdf_path,
+          tr.word_count AS resume_word_count,
+          tr.flags AS resume_flags,
+          cl.pdf_path AS cover_pdf_path,
+          cl.word_count AS cover_word_count,
+          cl.flags AS cover_flags,
           l.label, l.notes AS label_notes,
           l.application_status, l.applied_at
         FROM jobs j
         JOIN scores         s  ON s.job_id  = j.job_id AND s.run_id  = j.run_id
         JOIN judge_verdicts jv ON jv.job_id = j.job_id AND jv.run_id = j.run_id
-        LEFT JOIN cover_letters cl ON cl.job_id = j.job_id AND cl.run_id = j.run_id
+        LEFT JOIN LATERAL (
+          SELECT content, file_path, pdf_path, word_count, flags
+          FROM cover_letters WHERE job_id = j.job_id ORDER BY version DESC NULLS LAST LIMIT 1
+        ) cl ON true
+        LEFT JOIN LATERAL (
+          SELECT pdf_path, word_count, flags
+          FROM tailored_resumes WHERE job_id = j.job_id ORDER BY version DESC NULLS LAST LIMIT 1
+        ) tr ON true
         LEFT JOIN labels        l  ON l.job_id  = j.job_id AND l.run_id  = j.run_id
         WHERE jv.bucket IN ('COVER_LETTER', 'REVIEW_QUEUE', 'RESULTS')
         ORDER BY
@@ -78,10 +100,23 @@ async function main() {
         LIMIT 200
       `);
       const rows = result.rows.map(row => {
-        if (!row.cover_letter && row.cover_letter_path) {
+        if (!row.cover_letter && row.cover_letter_path && /\.md$/i.test(row.cover_letter_path)) {
           row.cover_letter = readCoverLetter(row.cover_letter_path);
+        } else if (row.cover_pdf_path || (row.cover_letter_path && /\.pdf$/i.test(row.cover_letter_path))) {
+          row.cover_letter = null;
         }
+        const toUrl = (p: string | null) =>
+          p ? `/${String(p).replace(/\\/g, '/')}` : null;
+        row.resume_pdf_url = toUrl(row.resume_pdf_path);
+        row.cover_pdf_url = toUrl(row.cover_pdf_path ?? (row.cover_letter_path && /\.pdf$/i.test(row.cover_letter_path) ? row.cover_letter_path : null));
+        const rf = row.resume_flags as string[] | null;
+        const cf = row.cover_flags as string[] | null;
+        row.artifact_flags = [...(rf ?? []), ...(cf ?? [])];
         delete row.cover_letter_path;
+        delete row.resume_pdf_path;
+        delete row.cover_pdf_path;
+        delete row.resume_flags;
+        delete row.cover_flags;
         return row;
       });
       res.json(rows);
@@ -229,6 +264,29 @@ async function main() {
     } catch (err) {
       console.error('[ui-server] /api/label error:', err);
       res.status(500).json({ error: 'db_error', detail: (err as Error).message });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/jobs/:job_id/generate — resume + cover letter (manual)
+  // -------------------------------------------------------------------------
+  app.post('/api/jobs/:job_id/generate', async (req, res) => {
+    try {
+      if (!process.env.OPENROUTER_API_KEY) {
+        res.status(503).json({ error: 'no_api_key', detail: 'OPENROUTER_API_KEY is not set' });
+        return;
+      }
+      const jobId = req.params.job_id;
+      const out = await manualGenerateArtifacts(REPO_ROOT, jobId);
+      if (!out.ok) {
+        const miss = out.error?.toLowerCase().includes('not found');
+        res.status(miss ? 404 : 400).json({ error: out.error ?? 'generate_failed' });
+        return;
+      }
+      res.json({ resume: out.resume, cover_letter: out.cover });
+    } catch (err) {
+      console.error('[ui-server] /api/jobs/:job_id/generate error:', err);
+      res.status(500).json({ error: 'generate_error', detail: (err as Error).message });
     }
   });
 

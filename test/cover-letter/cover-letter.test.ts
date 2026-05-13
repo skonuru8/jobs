@@ -13,10 +13,10 @@ import * as fs   from "fs";
 import * as path from "path";
 import * as os   from "os";
 
-import { buildCoverLetterPrompt, SYSTEM_PROMPT } from "@/cover-letter/prompt";
-import { saveCoverLetter }                        from "@/cover-letter/generate";
+import { buildCoverLetterPrompt, SYSTEM_PROMPT, COVER_PROMPT_SHA } from "@/cover-letter/prompt";
+import { escapeLatexBody } from "@/cover-letter/generate";
 import { stripLatex, loadResume }                 from "@/cover-letter/resume";
-import type { CoverLetterInput, CoverLetterResult } from "@/cover-letter/types";
+import type { CoverLetterInput } from "@/cover-letter/types";
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -90,15 +90,19 @@ const BASE_INPUT: CoverLetterInput = {
 describe("SYSTEM_PROMPT", () => {
   it("is non-empty and contains core rules", () => {
     expect(SYSTEM_PROMPT.length).toBeGreaterThan(200);
-    expect(SYSTEM_PROMPT).toContain("Three paragraphs");
-    expect(SYSTEM_PROMPT).toContain("clichés");
-    expect(SYSTEM_PROMPT).toContain("specific");
+    expect(SYSTEM_PROMPT).toContain("OUTPUT FORMAT");
+    expect(SYSTEM_PROMPT).toContain("LaTeX");
+    expect(SYSTEM_PROMPT).toContain("350-600");
   });
 
   it("bans specific cliché phrases", () => {
-    expect(SYSTEM_PROMPT).toContain("excited to apply");
-    expect(SYSTEM_PROMPT).toContain("passionate");
-    expect(SYSTEM_PROMPT).toContain("team player");
+    expect(SYSTEM_PROMPT).toContain("I believe");
+    expect(SYSTEM_PROMPT).toContain("I think");
+    expect(SYSTEM_PROMPT).toContain("I feel");
+  });
+
+  it("exposes a stable prompt sha", () => {
+    expect(COVER_PROMPT_SHA).toMatch(/^[a-f0-9]{12}$/);
   });
 });
 
@@ -143,7 +147,7 @@ describe("buildCoverLetterPrompt", () => {
   it("shows visa note when sponsorship is null", () => {
     const p = buildCoverLetterPrompt(BASE_INPUT);
     expect(p).toContain("not mentioned");
-    expect(p).toContain("OPT");
+    expect(p).toContain("work authorization");
   });
 
   it("shows 'sponsorship is explicitly offered' when visa_sponsorship = true", () => {
@@ -225,92 +229,15 @@ describe("buildCoverLetterPrompt", () => {
 
 
 // ---------------------------------------------------------------------------
-// saveCoverLetter
+// escapeLatexBody
 // ---------------------------------------------------------------------------
 
-describe("saveCoverLetter", () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cover-letter-test-"));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  const okResult: CoverLetterResult = {
-    status:         "ok",
-    text:           "Six years of building Java microservices...\n\nAt Citi, I...\n\nI am available immediately and require OPT sponsorship.",
-    model:          "google/gemini-2.5-flash",
-    prompt_version: "v1",
-    generated_at:   "2026-04-23T00:00:00Z",
-    word_count:     42,
-  };
-
-  it("creates the output file", () => {
-    const filepath = saveCoverLetter(okResult, BASE_INPUT, tmpDir);
-    expect(fs.existsSync(filepath)).toBe(true);
-  });
-
-  it("filename contains company and title slug", () => {
-    const filepath = saveCoverLetter(okResult, BASE_INPUT, tmpDir);
-    const filename = path.basename(filepath);
-    expect(filename).toContain("citi");
-    expect(filename).toContain("java");
-  });
-
-  it("filename ends with .md", () => {
-    const filepath = saveCoverLetter(okResult, BASE_INPUT, tmpDir);
-    expect(filepath.endsWith(".md")).toBe(true);
-  });
-
-  it("file contains YAML frontmatter", () => {
-    const filepath = saveCoverLetter(okResult, BASE_INPUT, tmpDir);
-    const content = fs.readFileSync(filepath, "utf-8");
-    expect(content).toContain("---");
-    expect(content).toContain('title:');
-    expect(content).toContain('company:');
-    expect(content).toContain('score:');
-    expect(content).toContain('job_id:');
-  });
-
-  it("file contains the cover letter body text", () => {
-    const filepath = saveCoverLetter(okResult, BASE_INPUT, tmpDir);
-    const content = fs.readFileSync(filepath, "utf-8");
-    expect(content).toContain("Six years of building Java microservices");
-  });
-
-  it("file contains judge reasoning section", () => {
-    const filepath = saveCoverLetter(okResult, BASE_INPUT, tmpDir);
-    const content = fs.readFileSync(filepath, "utf-8");
-    expect(content).toContain("Judge notes");
-    expect(content).toContain("Accenture typically sponsors visas");
-  });
-
-  it("creates output directory if it does not exist", () => {
-    const nestedDir = path.join(tmpDir, "nested", "output");
-    const filepath = saveCoverLetter(okResult, BASE_INPUT, nestedDir);
-    expect(fs.existsSync(filepath)).toBe(true);
-  });
-
-  it("throws when result status is error", () => {
-    const errResult: CoverLetterResult = {
-      status:         "error",
-      text:           null,
-      model:          "test",
-      prompt_version: "v1",
-      generated_at:   "2026-04-23T00:00:00Z",
-      error:          "API failed",
-    };
-    expect(() => saveCoverLetter(errResult, BASE_INPUT, tmpDir)).toThrow();
+describe("escapeLatexBody", () => {
+  it("escapes backslash first then specials", () => {
+    expect(escapeLatexBody("100\\%")).toContain("textbackslash");
+    expect(escapeLatexBody("a & b")).toContain("\\&");
   });
 });
-
-
-// ---------------------------------------------------------------------------
-// stripLatex
-// ---------------------------------------------------------------------------
 
 describe("stripLatex", () => {
   it("removes preamble up to \\begin{document}", () => {

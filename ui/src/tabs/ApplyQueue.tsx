@@ -107,6 +107,9 @@ export function ApplyQueue({ onStatsUpdate }: Props) {
           mode="apply"
           row={row}
           onStatsUpdate={onStatsUpdate}
+          onDataChange={() => {
+            getApplyQueue().then(setRows).catch(e => setError((e as Error).message));
+          }}
           onRemove={(jobId, runId) =>
             setRows(prev => prev.filter(r => !(r.job_id === jobId && r.run_id === runId)))
           }

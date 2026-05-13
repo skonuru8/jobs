@@ -20,6 +20,9 @@ export {
   finishRun,
   saveJob,
   isSeenInDB,
+  nextArtifactVersion,
+  insertTailoredResumeArtifact,
+  insertCoverLetterArtifact,
   markStorageDisabled,
   isStorageAvailable,
   formatErr,
@@ -27,3 +30,7 @@ export {
 } from "./persist.js";
 
 export type { RunRecord, RunStats, JobRecord } from "./types.js";
+export type { TailoredResumeInsert, CoverLetterArtifactInsert } from "./persist.js";
+
+export { fetchLatestJobSnapshotForArtifacts } from "./artifact-load.js";
+export type { JobArtifactSnapshot } from "./artifact-load.js";

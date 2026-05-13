@@ -18,6 +18,11 @@ export interface ApplyQueueRow {
   reasoning: string;
   concerns: string[] | null;
   cover_letter: string | null;
+  resume_pdf_url?: string | null;
+  cover_pdf_url?: string | null;
+  resume_word_count?: number | null;
+  cover_word_count?: number | null;
+  artifact_flags?: string[];
   label: 'yes' | 'maybe' | 'no' | null;
   label_notes: string | null;
   application_status: 'applied' | 'skipped' | 'apply_later' | null;
@@ -115,5 +120,18 @@ export async function postLabel(body: LabelPayload): Promise<{ ok: true }> {
     }),
   });
   if (!res.ok) throw new Error(`label failed: ${res.status}`);
+  return res.json();
+}
+
+export async function postGenerateArtifacts(jobId: string): Promise<{ resume: unknown; cover_letter: unknown }> {
+  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error((j as { detail?: string; error?: string }).detail ?? (j as { error?: string }).error ?? `generate failed: ${res.status}`);
+  }
   return res.json();
 }

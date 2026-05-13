@@ -12,7 +12,7 @@
  *   Stage 12 — gate             (score >= threshold → GATE_PASS, else ARCHIVE)
  *   Stage 13 — judge            (LLM verdict: STRONG | MAYBE | WEAK)
  *   Stage 14 — route            (COVER_LETTER | RESULTS | REVIEW_QUEUE | ARCHIVE)
- *   Stage 15 — cover letter     (COVER_LETTER bucket only → output/cover-letters/)
+ *   Stage 15 — tailored resume + cover letter (parallel → output/resumes + output/cover_letters)
  *
  * Run from project root:
  *   npx tsx scripts/run-pipeline.ts
@@ -52,9 +52,14 @@ import type { ScoringWeights, ScoreResult } from "@/scorer/types";
 import { judge, getBucket } from "@/judge/judge";
 import type { JudgeInput, JudgeResult, FinalBucket } from "@/judge/types";
 
-import { generateCoverLetter, saveCoverLetter } from "@/cover-letter/generate";
-import { loadResume } from "@/cover-letter/resume";
-import type { CoverLetterInput, CoverLetterConfig } from "@/cover-letter/types";
+import { generateAndSaveCoverLetter } from "@/cover-letter/saver";
+import { loadCanonicalResumeMaster, loadResume } from "@/cover-letter/resume";
+import type { CoverLetterConfig } from "@/cover-letter/types";
+
+import { generateAndSaveResume } from "@/resume-generator/index";
+import type { ResumeGenConfig } from "@/resume-generator/types";
+
+import { buildArtifactBundle, makeJobSlug } from "@/shared/artifact-bundle";
 
 // Dedup + storage — gracefully disabled via SKIP_DEDUP=1 / SKIP_PERSIST=1
 import {
@@ -63,6 +68,7 @@ import {
 } from "@/dedup/index";
 import {
   runMigrations, saveRun, finishRun, saveJob, closePool,
+  nextArtifactVersion, insertTailoredResumeArtifact, insertCoverLetterArtifact,
 } from "@/storage/index";
 import type { JobRecord } from "@/storage/types";
 
@@ -95,6 +101,10 @@ const DO_EXTRACT     = Boolean(process.env.EXTRACT);   // opt-in — costs LLM c
 const DO_SCORE       = DO_EXTRACT || Boolean(process.env.SCORE);  // auto when extract runs
 const DO_JUDGE       = DO_EXTRACT || Boolean(process.env.JUDGE);  // auto when extract runs
 const DO_COVER       = DO_EXTRACT || Boolean(process.env.COVER);  // auto when extract runs
+/** When false, skip tailored resume LLM+PDF (default: enabled). */
+const DO_RESUME_ARTIFACT = !["0", "false"].includes((process.env.DO_RESUME ?? "").toLowerCase());
+/** When false, skip cover letter LLM+PDF (default: enabled). */
+const DO_COVER_ARTIFACT = !["0", "false"].includes((process.env.DO_COVER ?? "").toLowerCase());
 const SAVE_FIXTURES  = Boolean(process.env.SAVE_FIXTURES); // save real extraction fixtures
 const SKIP_DEDUP     = Boolean(process.env.SKIP_DEDUP);    // bypass Redis + pgvector dedup
 const SKIP_PERSIST   = Boolean(process.env.SKIP_PERSIST);  // bypass Postgres persistence 
@@ -116,10 +126,8 @@ const POSTED_WITHIN  = process.env.POSTED_WITHIN ?? "";   // "" = no filter
 const FIXTURES_DIR   = path.join(REPO_ROOT, "fixtures", "extractor");
 const CONFIG_DIR     = path.join(REPO_ROOT, "config");
 const RUN_ID = process.env.RUN_ID ?? randomUUID();
-// Each run gets its own subdirectory — old runs are never touched.
-// Bucket subfolders (COVER_LETTER / REVIEW_QUEUE) let you triage at a glance.
-const COVER_OUT_BASE = path.join(REPO_ROOT, "output", "cover-letters");
-const COVER_OUT_DIR  = path.join(COVER_OUT_BASE, RUN_ID);
+const RESUME_OUT_DIR = path.join(REPO_ROOT, "output", "resumes");
+const COVER_LETTERS_OUT_DIR = path.join(REPO_ROOT, "output", "cover_letters");
 
 // ---------------------------------------------------------------------------
 // Main
@@ -164,9 +172,23 @@ async function main(): Promise<void> {
     temperature: config.llm.cover_letter.temperature as number,
     throttle_ms: (config.llm.cover_letter.throttle_ms ?? 1000) as number,
     review_queue_threshold: (config.llm.cover_letter.review_queue_threshold ?? 0.70) as number,
+    retries:     (config.llm.cover_letter.retries ?? 1) as number,
+    compile_pdf: (config.llm.cover_letter.compile_pdf ?? true) as boolean,
     ...(config.llm.cover_letter.thinking
       ? { thinking: config.llm.cover_letter.thinking as { type: "enabled"; budget_tokens: number } }
       : {}),
+  };
+  const resumeGeneratorConfig: ResumeGenConfig = {
+    model: (config.llm.resume_generator?.model ?? config.llm.cover_letter.model) as string,
+    fallback_model: config.llm.resume_generator?.fallback_model as string | undefined,
+    max_tokens:  (config.llm.resume_generator?.max_tokens ?? 8000) as number,
+    temperature: (config.llm.resume_generator?.temperature ?? 0.3) as number,
+    throttle_ms: (config.llm.resume_generator?.throttle_ms ?? 1000) as number,
+    compile_pdf: (config.llm.resume_generator?.compile_pdf ?? true) as boolean,
+    review_queue_threshold: (config.llm.resume_generator?.review_queue_threshold ?? 0.70) as number,
+    retries:     (config.llm.resume_generator?.retries ?? 1) as number,
+    word_count_min: config.llm.resume_generator?.word_count_min as number | undefined,
+    word_count_max: config.llm.resume_generator?.word_count_max as number | undefined,
   };
   const scoringWeights: ScoringWeights = config.scoring?.weights ?? {
     skills: 0.35, semantic: 0.25, yoe: 0.15, seniority: 0.15, location: 0.10,
@@ -181,12 +203,26 @@ async function main(): Promise<void> {
   const aliases    = buildAliasMap(skillsJson);
   log(`Skill aliases loaded: ${Object.keys(aliases).length} entries`);
 
-  // --- Load resume (resume.tex preferred, falls back to resume.md) ---
+  // --- Canonical resume (required when resume/cover artifacts run) ---
+  let canonicalResumeTex: string | null = null;
+  if (DO_EXTRACT && (DO_RESUME_ARTIFACT || DO_COVER_ARTIFACT)) {
+    canonicalResumeTex = loadCanonicalResumeMaster(REPO_ROOT);
+    if (!canonicalResumeTex) {
+      die(`Missing config/resume_master.tex (required when EXTRACT=1 and resume/cover artifacts are enabled).`);
+    }
+    const skillPath = path.join(REPO_ROOT, "skills", "resume-tailor", "SKILL.md");
+    if (DO_RESUME_ARTIFACT && !fs.existsSync(skillPath)) {
+      die(`Missing resume tailor skill: ${skillPath}`);
+    }
+    log(`Canonical resume loaded (${canonicalResumeTex.length} chars)`);
+  }
+
+  // --- Plain resume text (optional, for logging / legacy) ---
   const resumeText = loadResume(CONFIG_DIR);
-  if (resumeText) {
-    log(`Resume loaded (${resumeText.length} chars) — cover letters will use real background`);
-  } else {
-    log(`No resume found — add config/resume.tex to get specific, achievement-backed cover letters`);
+  if (resumeText && !canonicalResumeTex) {
+    log(`Resume text loaded (${resumeText.length} chars) — add config/resume_master.tex for full LaTeX tailoring`);
+  } else if (!resumeText && !canonicalResumeTex) {
+    log(`No resume text found in config/ — artifact generation requires resume_master.tex when enabled`);
   }
 
   if (DO_EXTRACT) {
@@ -245,9 +281,10 @@ async function main(): Promise<void> {
   const nowIso  = new Date().toISOString();
   const results = await processJobs(
     jsonlPath, profile, aliases,
-    extractorConfig, judgeConfig, coverLetterConfig,
+    extractorConfig, judgeConfig, coverLetterConfig, resumeGeneratorConfig,
     scoringWeights, scoringThreshold,
-    profileEmbedding, resumeText, nowIso,
+    profileEmbedding, resumeText, canonicalResumeTex, nowIso,
+    REPO_ROOT, RUN_ID, DO_RESUME_ARTIFACT, DO_COVER_ARTIFACT,
   );
 
   printResults(results, SOURCE, scoringThreshold);
@@ -267,7 +304,7 @@ async function main(): Promise<void> {
       jobs_total:   results.length,
       jobs_passed:  results.filter(r => r.verdict !== "REJECT" && r.verdict !== "DEDUP").length,
       jobs_gated:   results.filter(r => r.verdict === "GATE_PASS").length,
-      jobs_covered: results.filter(r => r.cover_letter_path != null).length,
+      jobs_covered: results.filter(r => r.cover_letter_path != null || r.resume_pdf_path != null).length,
       extractions_attempted: results.filter(r => r.extract_status === "ok" || r.extract_status === "error").length,
       extractions_succeeded: results.filter(r => r.extract_status === "ok").length,
     });
@@ -359,6 +396,7 @@ interface JobResult {
   // Populated after cover letter (Stage 15)
   cover_letter_path?: string | null;
   cover_letter_words?: number | null;
+  resume_pdf_path?: string | null;
 }
 
 async function processJobs(
@@ -368,11 +406,17 @@ async function processJobs(
   extractorConfig:     { model: string; max_tokens: number; temperature: number; throttle_ms: number; reasoning?: Record<string, unknown> },
   judgeConfigArg:      { model: string; max_tokens: number; temperature: number; throttle_ms: number; reasoning?: Record<string, unknown> },
   coverLetterConfigArg: CoverLetterConfig,
+  resumeGeneratorConfigArg: ResumeGenConfig,
   scoringWeights:      ScoringWeights,
   scoringThreshold:    number,
   profileEmbedding:    Float32Array | null,
   resumeText:          string | null,
+  canonicalResumeTex:  string | null,
   nowIso:              string,
+  repoRoot:            string,
+  runIdForArtifacts:   string,
+  doResumeArtifact:    boolean,
+  doCoverArtifact:     boolean,
 ): Promise<JobResult[]> {
   // ---------------------------------------------------------------------------
   // Phase 1 — read all JSONL lines + synchronous sanitize/hard-filter
@@ -486,6 +530,8 @@ async function processJobs(
 
   const passPromises = passQueue.map(({ jobNum: n, sanitized }) =>
     limit(async (): Promise<{ jobNum: number; result: JobResult }> => {
+
+      const jobId = (sanitized.meta?.job_id as string | undefined) ?? `job-${n}`;
 
       // Stage 5 — fetch JD
       // Sources like jobright_api populate description_raw at scrape time
@@ -720,87 +766,136 @@ async function processJobs(
       }
     }
 
-    // Stage 15 — Cover letter
-    // Always: COVER_LETTER bucket.
-    // Also: REVIEW_QUEUE jobs with score >= review_queue_threshold get a draft.
-    //   Bucket stays REVIEW_QUEUE — human still reviews judge concerns before sending.
-    //   Set review_queue_threshold: 1.0 in config to disable this behaviour.
+    // Stage 15 — Tailored resume + cover letter (parallel)
     let coverLetterPath: string | null  = null;
     let coverLetterWords: number | null = null;
+    let resumePdfPath: string | null = null;
 
-    const rvqThreshold = coverLetterConfigArg.review_queue_threshold ?? 0.70;
-    const shouldWriteLetter = DO_COVER && scoreResult && (
-      bucket === "COVER_LETTER" ||
-      (bucket === "REVIEW_QUEUE" && scoreResult.score >= rvqThreshold)
+    const rvqThreshold = Math.min(
+      coverLetterConfigArg.review_queue_threshold ?? 0.70,
+      resumeGeneratorConfigArg.review_queue_threshold ?? 0.70,
     );
+    const qualifiesArtifacts = Boolean(
+      scoreResult &&
+      (bucket === "COVER_LETTER" ||
+        (bucket === "REVIEW_QUEUE" && scoreResult.score >= rvqThreshold)),
+    );
+    const shouldArtifacts =
+      DO_EXTRACT &&
+      qualifiesArtifacts &&
+      (doResumeArtifact || doCoverArtifact) &&
+      Boolean(canonicalResumeTex);
 
-    if (shouldWriteLetter) {
-      if (coverLetterConfigArg.throttle_ms > 0) {
-        await new Promise(r => setTimeout(r, coverLetterConfigArg.throttle_ms));
+    if (shouldArtifacts) {
+      if (resumeGeneratorConfigArg.throttle_ms > 0) {
+        await new Promise(r => setTimeout(r, resumeGeneratorConfigArg.throttle_ms));
       }
 
-      log(`[${n}]  Writing cover letter...`);
-      const clInput: CoverLetterInput = {
-        job: {
-          job_id:           sanitized.meta?.job_id ?? `job-${jobNum}`,
-          title:            sanitized.title         ?? "",
-          company:          sanitized.company?.name ?? "",
-          domain:           sanitized.domain        ?? null,
-          employment_type:  sanitized.employment_type ?? null,
-          required_skills:  (sanitized.required_skills ?? []).map((s: any) => ({
-            name:           s.name,
-            importance:     s.importance ?? "required",
-            years_required: s.years_required ?? null,
-          })),
-          responsibilities: sanitized.responsibilities ?? [],
-          yoe_min:          sanitized.years_experience?.min ?? null,
-          yoe_max:          sanitized.years_experience?.max ?? null,
-          visa_sponsorship: sanitized.visa_sponsorship ?? null,
-          score:            scoreResult!.score,
-          score_components: {
-            skills:    scoreResult!.components.skills,
-            semantic:  scoreResult!.components.semantic,
-            yoe:       scoreResult!.components.yoe,
-            seniority: scoreResult!.components.seniority,
-            location:  scoreResult!.components.location,
-          },
-          judge_reasoning: judgeResult?.fields?.reasoning ?? null,
-          judge_concerns:  judgeResult?.fields?.concerns  ?? [],
-        },
-        profile: {
-          skills:            (profile as any).skills ?? [],
-          years_experience:  (profile as any).years_experience ?? 0,
-          education:         (profile as any).education ?? { degree: "bachelor", field: "" },
-          preferred_domains: (profile as any).preferred_domains ?? [],
-          contact:           (profile as any).contact,
-        },
-        resume: resumeText,
-      };
+      const bundle = buildArtifactBundle({
+        sanitized: sanitized as import("@/filter/types").Job,
+        scoreResult: scoreResult ?? null,
+        judgeResult: judgeResult ?? null,
+        profile: profile as any,
+        canonical_resume_tex: canonicalResumeTex!,
+      });
 
-      const clResult = await generateCoverLetter(clInput, coverLetterConfigArg);
-      if (clResult.status === "ok" && clResult.text) {
-        try {
-          // Route into bucket subfolder so COVER_LETTER and REVIEW_QUEUE are separate.
-          const bucketLabel = bucket === "COVER_LETTER" ? "COVER_LETTER" : "REVIEW_QUEUE";
-          const clOutDir    = path.join(COVER_OUT_DIR, bucketLabel);
-          coverLetterPath   = saveCoverLetter(clResult, clInput, clOutDir);
-          coverLetterWords = clResult.word_count ?? null;
-          log(`[${n}]  Cover letter: ${coverLetterPath} (${coverLetterWords} words)`);
-        } catch (e) {
-          log(`[${n}]  Cover letter save failed: ${e}`);
-          allFlags.push("cover_letter_save_failed");
-        }
+      if (!bundle.ok) {
+        log(`[${n}]  Skipping artifact gen: ${bundle.reason}`);
+        allFlags.push("artifact_bundle_invalid");
       } else {
-        log(`[${n}]  Cover letter generation failed: ${clResult.error}`);
-        allFlags.push("cover_letter_failed");
+        const jobSlug = makeJobSlug(
+          {
+            title:      bundle.job.title,
+            company:    bundle.job.company.name,
+            posted_at:  bundle.job.meta.posted_at,
+          },
+          jobId,
+        );
+        const resumeFolder = path.join(repoRoot, "output", "resumes", jobSlug);
+        const coverFolder  = path.join(repoRoot, "output", "cover_letters", jobSlug);
+
+        const version = SKIP_PERSIST ? 1 : await nextArtifactVersion(jobId);
+        log(`[${n}]  Generating resume + cover letter (v${version})...`);
+
+        const [resumeOutcome, coverOutcome] = await Promise.all([
+          doResumeArtifact
+            ? generateAndSaveResume(bundle, resumeGeneratorConfigArg, repoRoot, resumeFolder, version, {
+                runId: runIdForArtifacts, bucket: bucket ?? "UNKNOWN", generatedBy: "pipeline",
+              })
+            : Promise.resolve(null),
+          doCoverArtifact
+            ? generateAndSaveCoverLetter(bundle, coverLetterConfigArg, repoRoot, coverFolder, version, {
+                runId: runIdForArtifacts, bucket: bucket ?? "UNKNOWN", generatedBy: "pipeline",
+              })
+            : Promise.resolve(null),
+        ]);
+
+        if (resumeOutcome) {
+          allFlags.push(...resumeOutcome.flags);
+          if (resumeOutcome.tex_path) {
+            log(`[${n}]  Resume v${version}: ${resumeOutcome.tex_path} (${resumeOutcome.word_count}w)`);
+            resumePdfPath = resumeOutcome.pdf_path
+              ? path.relative(repoRoot, resumeOutcome.pdf_path)
+              : null;
+          }
+          if (!SKIP_PERSIST && resumeOutcome.tex_path) {
+            await insertTailoredResumeArtifact({
+              job_id:          jobId,
+              run_id:          runIdForArtifacts,
+              version,
+              tex_path:        path.relative(repoRoot, resumeOutcome.tex_path),
+              pdf_path:        resumeOutcome.pdf_path ? path.relative(repoRoot, resumeOutcome.pdf_path) : null,
+              meta_path:       path.relative(repoRoot, resumeOutcome.meta_path!),
+              word_count:      resumeOutcome.word_count,
+              model:           String(resumeOutcome.meta.model ?? resumeGeneratorConfigArg.model),
+              prompt_sha:      String(resumeOutcome.meta.prompt_sha ?? ""),
+              canonical_sha:   String(resumeOutcome.meta.canonical_sha ?? ""),
+              input_tokens:    (resumeOutcome.meta.input_tokens as number | null) ?? null,
+              output_tokens:   (resumeOutcome.meta.output_tokens as number | null) ?? null,
+              compile_status:  String(resumeOutcome.meta.compile_status ?? "failed"),
+              generated_by:    "pipeline",
+              flags:           resumeOutcome.flags,
+            });
+          }
+        }
+
+        if (coverOutcome) {
+          allFlags.push(...coverOutcome.flags);
+          if (coverOutcome.tex_path) {
+            coverLetterWords = coverOutcome.word_count;
+            coverLetterPath = coverOutcome.pdf_path
+              ? path.relative(repoRoot, coverOutcome.pdf_path)
+              : path.relative(repoRoot, coverOutcome.tex_path);
+            log(`[${n}]  Cover v${version}: ${coverOutcome.tex_path} (${coverLetterWords}w)`);
+          }
+          if (!SKIP_PERSIST && coverOutcome.tex_path) {
+            await insertCoverLetterArtifact({
+              job_id:          jobId,
+              run_id:          runIdForArtifacts,
+              version,
+              content:         null,
+              file_path:       coverLetterPath,
+              tex_path:        path.relative(repoRoot, coverOutcome.tex_path),
+              pdf_path:        coverOutcome.pdf_path ? path.relative(repoRoot, coverOutcome.pdf_path) : null,
+              meta_path:       path.relative(repoRoot, coverOutcome.meta_path!),
+              word_count:      coverLetterWords,
+              model:           String(coverOutcome.meta.model ?? coverLetterConfigArg.model),
+              prompt_sha:      String(coverOutcome.meta.prompt_sha ?? ""),
+              canonical_sha:   String(coverOutcome.meta.canonical_sha ?? ""),
+              input_tokens:    (coverOutcome.meta.input_tokens as number | null) ?? null,
+              output_tokens:   (coverOutcome.meta.output_tokens as number | null) ?? null,
+              compile_status:  String(coverOutcome.meta.compile_status ?? "failed"),
+              generated_by:    "pipeline",
+              flags:           coverOutcome.flags,
+            });
+          }
+        }
       }
     }
 
     // Stage 16 — persist to Postgres + mark seen in Redis
     // Runs after all stages so a mid-run crash doesn't mark the job as seen
     // prematurely (it would be retried on the next run).
-    const jobId = (sanitized.meta?.job_id as string | undefined) ?? `job-${n}`;
-
     if (!SKIP_PERSIST) {
       const jobRecord: JobRecord = {
         job_id:          jobId,
@@ -867,6 +962,7 @@ async function processJobs(
         bucket,
         cover_letter_path:   coverLetterPath,
         cover_letter_words:  coverLetterWords,
+        resume_pdf_path:     resumePdfPath,
       },
     };
   })); // end limit()

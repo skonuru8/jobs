@@ -15,10 +15,29 @@ import * as path from "path";
 // ---------------------------------------------------------------------------
 
 /**
+ * Load canonical resume LaTeX from `config/resume_master.tex` under repo root.
+ * Returns raw TeX (not stripped) for tailoring + cover letter JSON payloads.
+ */
+export function loadCanonicalResumeMaster(repoRoot: string): string | null {
+  const p = path.join(repoRoot, "config", "resume_master.tex");
+  if (!fs.existsSync(p)) return null;
+  const raw = fs.readFileSync(p, "utf8").trim();
+  if (!raw.includes("\\documentclass")) return null;
+  return raw;
+}
+
+/**
  * Load resume text from configDir, stripping LaTeX if needed.
  * Returns plain text suitable for embedding in an LLM prompt, or null.
  */
 export function loadResume(configDir: string): string | null {
+  const masterPath = path.join(configDir, "resume_master.tex");
+  if (fs.existsSync(masterPath)) {
+    const raw = fs.readFileSync(masterPath, "utf-8");
+    const text = stripLatex(raw).trim();
+    if (text && !isPlaceholder(text)) return text;
+  }
+
   const texPath = path.join(configDir, "resume.tex");
   const mdPath  = path.join(configDir, "resume.md");
 

@@ -1,6 +1,5 @@
 /**
  * types.ts — input/output types for cover letter generation.
- * Bible §12 Milestone 6.
  */
 
 // ---------------------------------------------------------------------------
@@ -28,6 +27,10 @@ export interface CoverLetterJobInput {
   };
   judge_reasoning:  string | null;
   judge_concerns:   string[];
+  /** Human-readable job location for LaTeX template (city, country). */
+  location_line?:   string | null;
+  /** Optional requisition id for Re: line suffix. */
+  req_id?:          string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -50,12 +53,17 @@ export interface CandidateProfile {
   education: { degree: string; field: string };
   preferred_domains: string[];
   contact: CandidateContact;
+  /** Default headline under name in template. */
+  title?: string;
+  /** LaTeX line for location + work arrangement, e.g. "Jersey City, NJ \\quad (Remote)". */
+  location_line?: string;
 }
 
 export interface CoverLetterInput {
   job:    CoverLetterJobInput;
   profile: CandidateProfile;
-  resume: string | null;   // raw text from config/resume.md — null if file missing/empty
+  /** Full canonical resume TeX or stripped text; may be large. */
+  resume: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,13 +71,17 @@ export interface CoverLetterInput {
 // ---------------------------------------------------------------------------
 
 export interface CoverLetterResult {
-  status:         "ok" | "error";
-  text:           string | null;   // plain text body (no greeting, no sign-off)
-  model:          string;
-  prompt_version: string;
-  generated_at:   string;
-  word_count?:    number;
-  error?:         string;
+  status:          "ok" | "error";
+  /** Prose body only (no greeting/sign-off). */
+  text:            string | null;
+  model:           string;
+  prompt_version:  string;
+  prompt_sha:      string;
+  generated_at:    string;
+  word_count?:     number;
+  input_tokens?:   number;
+  output_tokens?:  number;
+  error?:          string;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,10 +93,10 @@ export interface CoverLetterConfig {
   max_tokens:  number;
   temperature: number;
   throttle_ms: number;
-  /** Jobs in REVIEW_QUEUE with score >= this threshold also get a draft.
-   *  Bucket stays REVIEW_QUEUE — human still reviews judge concerns first.
-   *  Set to 1.0 to disable (only COVER_LETTER bucket gets letters). */
+  /** Jobs in REVIEW_QUEUE with score >= this threshold also get a draft. */
   review_queue_threshold?: number;
+  retries?: number;
+  compile_pdf?: boolean;
   thinking?: {
     type:          "enabled";
     budget_tokens: number;
