@@ -4,10 +4,27 @@
 
 import { z } from "zod";
 
+const judgeGap = z.object({
+  requirement:   z.string().min(1),
+  severity:        z.enum(["minor", "moderate", "major"]),
+  reframe_angle:   z.string(),
+});
+
 export const JudgeFieldsSchema = z.object({
   verdict:   z.enum(["STRONG", "MAYBE", "WEAK"]),
   reasoning: z.string().min(1),
   concerns:  z.array(z.string()),
+
+  confidence:      z.number().min(0).max(1).optional(),
+  key_matches:     z.array(z.string()).optional(),
+  gaps:            z.array(judgeGap).optional(),
+  why_apply:       z.string().optional(),
+  tailoring_hints: z.object({
+    emphasize_roles:      z.array(z.string()).optional(),
+    emphasize_skills:     z.array(z.string()).optional(),
+    downplay_skills:      z.array(z.string()).optional(),
+    domain_reframe_angle: z.string().optional(),
+  }).optional(),
 });
 
 export type ValidatedJudgeFields = z.infer<typeof JudgeFieldsSchema>;

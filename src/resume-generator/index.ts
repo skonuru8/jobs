@@ -2,14 +2,13 @@
  * index.ts — public API: generateAndSaveResume
  */
 
-import * as fs   from "fs";
 import * as path from "path";
 
 import type { ArtifactBundleOk } from "@/shared/artifact-bundle";
 
 import { generateResumeTex, latexStructureOk } from "./generator";
 import { PROMPT_SHA } from "./prompt";
-import { copyLatestResume, writeTexAndCompile } from "./saver";
+import { writeTexAndCompile } from "./saver";
 import type { ResumeGenConfig, ResumeGenInput } from "./types";
 
 export interface ResumeArtifactOutcome {
@@ -26,7 +25,7 @@ function toResumeInput(bundle: ArtifactBundleOk): ResumeGenInput {
     job: bundle.job,
     profile: bundle.profile,
     canonical_resume_tex: bundle.canonical_resume_tex,
-    jd_json: bundle.jd_json,
+    jd_json: bundle.jd_json as Record<string, unknown>,
     judge_json: bundle.judge_json,
     score: bundle.score,
     canonical_sha: bundle.canonical_sha,
@@ -38,7 +37,6 @@ export async function generateAndSaveResume(
   config: ResumeGenConfig,
   repoRoot: string,
   jobFolderAbs: string,
-  version: number,
   ctx: {
     runId: string;
     bucket: string;
@@ -50,10 +48,12 @@ export async function generateAndSaveResume(
   const wMin = config.word_count_min ?? 1900;
   const wMax = config.word_count_max ?? 2500;
 
+  const combinedMetaRel = path.relative(repoRoot, path.join(jobFolderAbs, "meta.json"));
+
   let gen = await generateResumeTex(input, config);
   if (gen.status !== "ok" || !gen.tex) {
     flags.push("resume_gen_failed");
-    return emptyOutcome(bundle, ctx, version, flags, gen);
+    return emptyOutcome(bundle, ctx, flags, gen, combinedMetaRel);
   }
 
   let tex = gen.tex;
@@ -76,17 +76,14 @@ export async function generateAndSaveResume(
     flags.push("tex_malformed");
   }
 
-  const saved = await writeTexAndCompile(tex, jobFolderAbs, version, config.compile_pdf !== false);
+  const saved = await writeTexAndCompile(tex, jobFolderAbs, config.compile_pdf !== false);
   if (!saved.pdf_path) {
     flags.push("pdf_compile_failed");
   }
 
-  const vBase = `v${version}`;
-  const metaAbs = path.join(jobFolderAbs, `${vBase}.meta.json`);
   const meta: Record<string, unknown> = {
     job_id:          bundle.job.meta.job_id,
     run_id:          ctx.runId,
-    version,
     artifact_type:   "resume",
     bucket:          ctx.bucket,
     generated_at:    new Date().toISOString(),
@@ -110,16 +107,13 @@ export async function generateAndSaveResume(
     },
     tex_path:  path.relative(repoRoot, saved.tex_path),
     pdf_path:  saved.pdf_path ? path.relative(repoRoot, saved.pdf_path) : null,
-    meta_path: path.relative(repoRoot, metaAbs),
+    meta_path: combinedMetaRel,
   };
-
-  fs.writeFileSync(metaAbs, JSON.stringify(meta, null, 2), "utf8");
-  copyLatestResume(jobFolderAbs, version, !!saved.pdf_path);
 
   return {
     tex_path:   saved.tex_path,
     pdf_path:   saved.pdf_path,
-    meta_path:  metaAbs,
+    meta_path:  path.join(jobFolderAbs, "meta.json"),
     meta,
     flags,
     word_count: wc,
@@ -129,9 +123,9 @@ export async function generateAndSaveResume(
 function emptyOutcome(
   bundle: ArtifactBundleOk,
   ctx: { runId: string; bucket: string; generatedBy: "pipeline" | "manual" },
-  version: number,
   flags: string[],
   gen: { model: string; error?: string; tokens: { input: number; output: number } },
+  metaRel: string,
 ): ResumeArtifactOutcome {
   return {
     tex_path: null,
@@ -140,7 +134,6 @@ function emptyOutcome(
     meta: {
       job_id: bundle.job.meta.job_id,
       run_id: ctx.runId,
-      version,
       artifact_type: "resume",
       bucket: ctx.bucket,
       generated_at: new Date().toISOString(),
@@ -153,6 +146,7 @@ function emptyOutcome(
       word_count: 0,
       compile_status: "failed",
       flags,
+      meta_path: metaRel,
       error: gen.error,
     },
     flags,

@@ -1,33 +1,53 @@
 /**
  * prompt.ts — system prompt and user prompt builder for the LLM judge.
- *
- * Design:
- * - Candidate profile is baked into the system prompt (single-user system).
- * - Judge receives structured job data + score breakdown, NOT raw JD text.
- * - Three verdicts: STRONG | MAYBE | WEAK (with routing logic in judge.ts).
- * - Temperature 0 (set in config). JSON mode enforced.
  */
 
+import * as crypto from "crypto";
+
+import type { Profile } from "@/filter/types";
 import type { JudgeInput } from "./types";
 
-export const PROMPT_VERSION = "v2";
+export const PROMPT_VERSION = "v3";
 
-// ---------------------------------------------------------------------------
-// System prompt
-// ---------------------------------------------------------------------------
+export function buildCandidateProfileSection(profile: Profile): string {
+  const expert = profile.skills
+    .filter(s => s.confidence === "expert")
+    .map(s => s.name)
+    .slice(0, 8);
+  const strong = profile.skills
+    .filter(s => s.confidence === "strong")
+    .map(s => s.name)
+    .slice(0, 12);
+  const visaLine = profile.work_authorization.requires_sponsorship
+    ? `Requires ${profile.work_authorization.visa_type} visa sponsorship`
+    : "No sponsorship required";
+  const locTypes = profile.location.acceptable_types.join("/");
+  const titles = profile.target_titles.slice(0, 3).join(" / ");
+  const minComp = profile.compensation.min_acceptable.toLocaleString();
+  const domains = profile.preferred_domains.join(", ");
 
-export const SYSTEM_PROMPT = `You are a job application screener for a senior software engineer.
+  return `CANDIDATE PROFILE:
+- ${profile.years_experience} years of experience. Expert in ${expert.join(", ")}.
+- Strong: ${strong.join(", ")}.
+- ${visaLine}. Located in ${profile.contact.city}, ${profile.contact.state} (open to ${locTypes} in USA).
+- Target: ${titles}. Minimum $${minComp} annual.
+- Preferred domains: ${domains}.`;
+}
 
-CANDIDATE PROFILE:
-- 6 years of experience. Expert in Java, Spring Boot, Angular, Azure, CI/CD.
-- Strong: TypeScript, Python, AWS, Kafka, Docker, Node.js, Microservices, Hibernate/JPA.
-- Requires OPT visa sponsorship. Located in Jersey City NJ (open to remote/hybrid/onsite in USA).
-- Target: senior/staff-level full-stack or backend roles. Minimum $110k annual.
-- Preferred domains: fintech, healthcare, telecom, enterprise SaaS.
+export function buildSystemPrompt(profile: Profile, rolesList?: string): string {
+  const candidateSection = buildCandidateProfileSection(profile);
+  const rolesSection = rolesList?.trim()
+    ? `\n\nCANDIDATE WORK HISTORY (for tailoring hints):\n${rolesList.trim()}`
+    : "";
+
+  return `You are a job application screener for a senior software engineer.
+
+${candidateSection}${rolesSection}
 
 CONTEXT:
 A deterministic hard filter and scorer (threshold 0.55) already confirmed this job is worth reviewing.
-Your task: decide if it is genuinely worth the candidate's time to apply.
+Your task: decide if it is genuinely worth the candidate's time to apply, and produce structured guidance
+for the resume + cover letter generators that run downstream.
 
 VERDICT DEFINITIONS:
 - STRONG: Clearly a good fit. Strong skill overlap with the candidate's stack, appropriate seniority, no major blockers. Sponsorship offered OR not mentioned — both are fine for STRONG. Apply confidently.
@@ -55,11 +75,47 @@ RULES:
 5. third_party_contract flag alone is NOT a downgrade trigger. Only downgrade when paired with another concern (poor skills match, YOE gap, niche stack, or no end client AND no clear technology requirements).
 6. Do not hallucinate requirements not in the job data.
 7. reasoning: 1-3 sentences. concerns: list of strings (empty list if none).
-8. If skills = 1.00 and skills_required = "none extracted", note it as a concern but do NOT use it as a STRONG signal — treat technical fit as unknown.`;
+8. If skills = 1.00 and skills_required = "none extracted", note it as a concern but do NOT use it as a STRONG signal — treat technical fit as unknown.
 
-// ---------------------------------------------------------------------------
-// User prompt
-// ---------------------------------------------------------------------------
+OUTPUT FORMAT:
+Return JSON with exactly this shape:
+{
+  "verdict":     "STRONG" | "MAYBE" | "WEAK",
+  "confidence":  0.0 to 1.0 (your own confidence in the verdict, not the score),
+  "reasoning":   "1-3 sentence explanation",
+  "concerns":    ["specific concern strings"],
+
+  "key_matches": [
+    "Concrete strength as a short phrase, naming the candidate role and the JD requirement it addresses."
+  ],
+  "gaps": [
+    {
+      "requirement": "what the JD asks for that the candidate lacks",
+      "severity": "minor" | "moderate" | "major",
+      "reframe_angle": "honest adjacent experience the candidate can surface — never fabrication"
+    }
+  ],
+  "why_apply": "1-2 sentences naming a specific reason this company/role fits the candidate, derived from JD and profile.",
+  "tailoring_hints": {
+    "emphasize_roles": ["role names from work history that should lead the resume"],
+    "emphasize_skills": ["skills from candidate profile that should appear prominently"],
+    "downplay_skills": ["skills present in canonical but not relevant to this JD"],
+    "domain_reframe_angle": "If JD requires a domain the candidate hasn't directly worked in, the honest reframe — else empty string"
+  }
+}
+
+GUIDANCE FOR THE NEW FIELDS:
+- key_matches: 3-5 entries. Each must name a SPECIFIC role and a SPECIFIC JD requirement. Generic statements ("strong Java skills") are not acceptable.
+- gaps: every JD requirement the candidate genuinely lacks. severity: minor (1 missing tool/lib), moderate (missing methodology or years), major (missing domain or core stack). reframe_angle MUST be honest — adjacent experience the candidate can truthfully claim.
+- why_apply: NOT generic. Name a domain, project, team, or stated company value from the JD that intersects the candidate's history.
+- tailoring_hints.emphasize_roles: pull from CANDIDATE WORK HISTORY block above by exact role string.
+- tailoring_hints.emphasize_skills / downplay_skills: pull from the candidate profile skills, NOT invent new ones.
+- Empty arrays/strings are fine when nothing applies. Do not invent.`;
+}
+
+export function computeSystemPromptSha(systemPrompt: string): string {
+  return crypto.createHash("sha256").update(systemPrompt, "utf8").digest("hex").slice(0, 12);
+}
 
 export function buildJudgePrompt(input: JudgeInput): string {
   const { job, score } = input;
@@ -109,10 +165,5 @@ SCORE BREAKDOWN (total: ${fmt(score.total)}, gate threshold: 0.55):
   Seniority  ${fmt(score.components.seniority)}   (15% weight)
   Location   ${fmt(score.components.location)}   (10% weight)
 
-Return JSON with exactly this shape:
-{
-  "verdict":   "STRONG" | "MAYBE" | "WEAK",
-  "reasoning": "1-3 sentence explanation",
-  "concerns":  ["specific concern 1", "specific concern 2"]
-}`;
+Return JSON exactly matching the OUTPUT FORMAT in the system prompt (no markdown fences).`;
 }

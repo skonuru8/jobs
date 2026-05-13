@@ -88,6 +88,13 @@ export function validateProfile(profile: Profile): void {
     }
   }
 
+  if (contact.title !== undefined && typeof contact.title !== "string") {
+    throw new Error("profile.contact.title must be a string if present")
+  }
+  if (contact.work_arrangement_note !== undefined && typeof contact.work_arrangement_note !== "string") {
+    throw new Error("profile.contact.work_arrangement_note must be a string if present")
+  }
+
   if (
     typeof profile.years_experience !== "number" ||
     isNaN(profile.years_experience) ||

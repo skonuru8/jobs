@@ -310,26 +310,40 @@ export async function saveJob(job: JobRecord): Promise<void> {
     if (job.judge_verdict) {
       await client.query(
         `INSERT INTO judge_verdicts
-           (job_id, run_id, verdict, bucket, reasoning, concerns, model, judged_at)
-         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7, NOW())
+           (job_id, run_id, verdict, bucket, reasoning, concerns, model, judged_at,
+            confidence, key_matches, gaps, why_apply, tailoring_hints, system_prompt_sha)
+         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7, NOW(),
+            $8, $9::jsonb, $10::jsonb, $11, $12::jsonb, $13)
          ON CONFLICT (job_id, run_id) DO UPDATE
            SET verdict   = EXCLUDED.verdict,
                bucket    = EXCLUDED.bucket,
                reasoning = EXCLUDED.reasoning,
-               concerns  = EXCLUDED.concerns`,
+               concerns  = EXCLUDED.concerns,
+               model     = COALESCE(EXCLUDED.model, judge_verdicts.model),
+               confidence = EXCLUDED.confidence,
+               key_matches = EXCLUDED.key_matches,
+               gaps = EXCLUDED.gaps,
+               why_apply = EXCLUDED.why_apply,
+               tailoring_hints = EXCLUDED.tailoring_hints,
+               system_prompt_sha = EXCLUDED.system_prompt_sha`,
         [
           job.job_id, job.run_id,
           job.judge_verdict,
           job.judge_bucket ?? null,
           job.judge_reasoning ?? null,
           JSON.stringify(job.judge_concerns ?? []),
-          null,  // model not currently passed through JobRecord
+          job.judge_model ?? null,
+          job.judge_confidence ?? null,
+          JSON.stringify(job.judge_key_matches ?? []),
+          JSON.stringify(job.judge_gaps ?? []),
+          job.judge_why_apply ?? null,
+          JSON.stringify(job.judge_tailoring_hints ?? {}),
+          job.judge_system_prompt_sha ?? null,
         ],
       );
     }
 
-    // 5. cover_letters — versioned rows are inserted by insertCoverLetterArtifact()
-    //    from the pipeline / manual generate path (not saveJob).
+    // 5. cover_letters — rows inserted by insertCoverLetterArtifact() from pipeline / manual path
 
     // 6. seen_jobs (always — cross-run dedup backing store)
     await client.query(
@@ -351,10 +365,10 @@ export async function saveJob(job: JobRecord): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Tailored resume + versioned cover letter rows (artifact pipeline)
+// Tailored resume + cover letter rows (artifact pipeline)
 // ---------------------------------------------------------------------------
 
-/** True if this job already has a tailored resume or versioned cover letter row. */
+/** True if this job already has a tailored resume or cover letter row. */
 export async function jobHasAnyArtifacts(jobId: string): Promise<boolean> {
   if (_disabled) return false;
   try {
@@ -372,27 +386,9 @@ export async function jobHasAnyArtifacts(jobId: string): Promise<boolean> {
   }
 }
 
-export async function nextArtifactVersion(jobId: string): Promise<number> {
-  if (_disabled) return 1;
-  try {
-    const result = await getPool().query<{ next_version: string }>(
-      `SELECT (COALESCE(GREATEST(
-          (SELECT MAX(version) FROM tailored_resumes WHERE job_id = $1),
-          (SELECT MAX(version) FROM cover_letters    WHERE job_id = $1)
-        ), 0) + 1)::text AS next_version`,
-      [jobId],
-    );
-    return parseInt(result.rows[0]?.next_version ?? "1", 10);
-  } catch (e) {
-    console.error("[storage] nextArtifactVersion failed:", formatErr(e));
-    return 1;
-  }
-}
-
 export interface TailoredResumeInsert {
   job_id:          string;
   run_id:          string | null;
-  version:         number;
   tex_path:        string;
   pdf_path:        string | null;
   meta_path:       string;
@@ -412,14 +408,13 @@ export async function insertTailoredResumeArtifact(row: TailoredResumeInsert): P
   try {
     await getPool().query(
       `INSERT INTO tailored_resumes (
-         job_id, run_id, version, tex_path, pdf_path, meta_path, word_count,
+         job_id, run_id, tex_path, pdf_path, meta_path, word_count,
          model, prompt_sha, canonical_sha, input_tokens, output_tokens,
          compile_status, generated_by, flags, generated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::text[], NOW())`,
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::text[], NOW())`,
       [
         row.job_id,
         row.run_id,
-        row.version,
         row.tex_path,
         row.pdf_path,
         row.meta_path,
@@ -442,7 +437,6 @@ export async function insertTailoredResumeArtifact(row: TailoredResumeInsert): P
 export interface CoverLetterArtifactInsert {
   job_id:          string;
   run_id:          string;
-  version:         number;
   content:         string | null;
   file_path:       string | null;
   tex_path:        string | null;
@@ -464,14 +458,13 @@ export async function insertCoverLetterArtifact(row: CoverLetterArtifactInsert):
   try {
     await getPool().query(
       `INSERT INTO cover_letters (
-         job_id, run_id, version, content, file_path, tex_path, pdf_path, meta_path,
+         job_id, run_id, content, file_path, tex_path, pdf_path, meta_path,
          word_count, model, prompt_sha, canonical_sha, input_tokens, output_tokens,
          compile_status, generated_by, flags, generated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::text[], NOW())`,
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::text[], NOW())`,
       [
         row.job_id,
         row.run_id,
-        row.version,
         row.content,
         row.file_path,
         row.tex_path,
@@ -490,6 +483,37 @@ export async function insertCoverLetterArtifact(row: CoverLetterArtifactInsert):
     );
   } catch (e) {
     console.error("[storage] insertCoverLetterArtifact failed:", formatErr(e));
+  }
+}
+
+/** Latest tailored resume + cover letter rows for a job_id (by generated_at). */
+export async function getLatestArtifactsForJob(jobId: string): Promise<{
+  resume: { tex_path: string | null; pdf_path: string | null; generated_at: string } | null;
+  cover:  { tex_path: string | null; pdf_path: string | null; generated_at: string } | null;
+}> {
+  if (_disabled) return { resume: null, cover: null };
+  try {
+    const [rRes, cRes] = await Promise.all([
+      getPool().query<{ tex_path: string; pdf_path: string | null; generated_at: string }>(
+        `SELECT tex_path, pdf_path, generated_at
+           FROM tailored_resumes WHERE job_id = $1
+           ORDER BY generated_at DESC NULLS LAST LIMIT 1`,
+        [jobId],
+      ),
+      getPool().query<{ tex_path: string | null; pdf_path: string | null; generated_at: string }>(
+        `SELECT tex_path, pdf_path, generated_at
+           FROM cover_letters WHERE job_id = $1
+           ORDER BY generated_at DESC NULLS LAST LIMIT 1`,
+        [jobId],
+      ),
+    ]);
+    return {
+      resume: rRes.rows[0] ?? null,
+      cover:  cRes.rows[0] ?? null,
+    };
+  } catch (e) {
+    console.error("[storage] getLatestArtifactsForJob failed:", formatErr(e));
+    return { resume: null, cover: null };
   }
 }
 

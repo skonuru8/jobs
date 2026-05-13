@@ -5,6 +5,12 @@
 import { complete } from "@/cover-letter/client";
 import { stripLatex } from "@/cover-letter/resume";
 
+import {
+  hasExtendedJudgeContext,
+  buildSlimJdForPrompts,
+  buildSlimProfileForPrompts,
+} from "@/shared/artifact-bundle";
+
 import { PROMPT_SHA, TOTAL_MODE_PROMPT } from "./prompt";
 import type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "./types";
 
@@ -77,25 +83,32 @@ export async function generateResumeTex(
 }
 
 function buildUserMessage(input: ResumeGenInput, shortHint?: string): string {
+  const useSlim = hasExtendedJudgeContext(input.judge_json);
+  const jdNames = (input.job.required_skills ?? []).map(s => s.name);
+  const jdPayload = useSlim ? buildSlimJdForPrompts(input.jd_json) : input.jd_json;
+  const profilePayload = useSlim
+    ? buildSlimProfileForPrompts(input.profile, jdNames)
+    : {
+        skills: input.profile.skills,
+        years_experience: input.profile.years_experience,
+        education: input.profile.education,
+        preferred_domains: input.profile.preferred_domains,
+        contact: input.profile.contact,
+        target_titles: input.profile.target_titles,
+      };
+
   const parts = [
     "CANONICAL_RESUME:",
     input.canonical_resume_tex,
     "",
     "JD_JSON:",
-    JSON.stringify(input.jd_json, null, 2),
+    JSON.stringify(jdPayload, null, 2),
     "",
     "JUDGE_JSON:",
     JSON.stringify(input.judge_json, null, 2),
     "",
     "PROFILE_JSON:",
-    JSON.stringify({
-      skills: input.profile.skills,
-      years_experience: input.profile.years_experience,
-      education: input.profile.education,
-      preferred_domains: input.profile.preferred_domains,
-      contact: input.profile.contact,
-      target_titles: input.profile.target_titles,
-    }, null, 2),
+    JSON.stringify(profilePayload, null, 2),
     "",
     "SCORE_JSON:",
     JSON.stringify(input.score, null, 2),

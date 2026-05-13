@@ -27,6 +27,8 @@ export interface ApplyQueueRow {
   label_notes: string | null;
   application_status: 'applied' | 'skipped' | 'apply_later' | null;
   applied_at: string | null;
+  /** Link to saved job_description.md under output/applications/<slug>/ */
+  job_description_url?: string | null;
 }
 
 export interface HardRejectionRow {

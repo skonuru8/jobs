@@ -10,6 +10,7 @@ import { validateProfile } from "@/filter/validate";
 import { generateAndSaveCoverLetter } from "@/cover-letter/saver";
 import type { CoverLetterConfig } from "@/cover-letter/types";
 import { loadCanonicalResumeMaster } from "@/cover-letter/resume";
+import { buildResumeBriefFromCanonicalTex } from "@/cover-letter/resume-brief";
 import { generateAndSaveResume } from "@/resume-generator/index";
 import type { ResumeGenConfig } from "@/resume-generator/types";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
@@ -19,8 +20,9 @@ import {
   insertCoverLetterArtifact,
   insertTailoredResumeArtifact,
   jobHasAnyArtifacts,
-  nextArtifactVersion,
 } from "@/storage/persist";
+import { writeJobDescription } from "@/applications/job-description-writer";
+import { writeCombinedMeta } from "@/applications/combined-meta";
 
 export interface ManualGenerateResult {
   ok: boolean;
@@ -28,7 +30,7 @@ export interface ManualGenerateResult {
   conflict?: boolean;
   error?: string;
   resume?: Record<string, unknown> | null;
-  cover?: Record<string, unknown> | null;
+  cover?:  Record<string, unknown> | null;
 }
 
 export async function manualGenerateArtifacts(
@@ -71,12 +73,15 @@ export async function manualGenerateArtifacts(
     return { ok: false, error: "config/resume_master.tex missing" };
   }
 
+  const resumeBrief = buildResumeBriefFromCanonicalTex(canonicalResumeTex);
+
   const bundle = buildArtifactBundle({
     sanitized: snapshot.job,
     scoreResult: snapshot.scoreResult,
     judgeResult: snapshot.judgeResult,
     profile,
     canonical_resume_tex: canonicalResumeTex,
+    resume_brief: resumeBrief,
   });
   if (!bundle.ok) {
     return { ok: false, error: bundle.reason };
@@ -108,7 +113,6 @@ export async function manualGenerateArtifacts(
     word_count_max: config.llm.resume_generator?.word_count_max as number | undefined,
   };
 
-  const version = await nextArtifactVersion(jobId);
   const jobSlug = makeJobSlug(
     {
       title:     bundle.job.title,
@@ -117,8 +121,7 @@ export async function manualGenerateArtifacts(
     },
     jobId,
   );
-  const resumeFolder = path.join(repoRoot, "output", "resumes", jobSlug);
-  const coverFolder  = path.join(repoRoot, "output", "cover_letters", jobSlug);
+  const jobFolderAbs = path.join(repoRoot, "output", "applications", jobSlug);
 
   const ctx = {
     runId:         snapshot.run_id,
@@ -126,10 +129,16 @@ export async function manualGenerateArtifacts(
     generatedBy:   "manual" as const,
   };
 
+  writeJobDescription(bundle, jobFolderAbs);
+
   const [resumeOutcome, coverOutcome] = await Promise.all([
-    generateAndSaveResume(bundle, resumeGeneratorConfig, repoRoot, resumeFolder, version, ctx),
-    generateAndSaveCoverLetter(bundle, coverLetterConfig, repoRoot, coverFolder, version, ctx),
+    generateAndSaveResume(bundle, resumeGeneratorConfig, repoRoot, jobFolderAbs, ctx),
+    generateAndSaveCoverLetter(bundle, coverLetterConfig, repoRoot, jobFolderAbs, ctx),
   ]);
+
+  writeCombinedMeta(jobFolderAbs, repoRoot, bundle, resumeOutcome, coverOutcome, ctx);
+
+  const metaRel = path.relative(repoRoot, path.join(jobFolderAbs, "meta.json"));
 
   let coverLetterPath: string | null = null;
   if (coverOutcome.tex_path) {
@@ -142,10 +151,9 @@ export async function manualGenerateArtifacts(
     await insertTailoredResumeArtifact({
       job_id:          jobId,
       run_id:          snapshot.run_id,
-      version,
       tex_path:        path.relative(repoRoot, resumeOutcome.tex_path),
       pdf_path:        resumeOutcome.pdf_path ? path.relative(repoRoot, resumeOutcome.pdf_path) : null,
-      meta_path:       path.relative(repoRoot, resumeOutcome.meta_path!),
+      meta_path:       metaRel,
       word_count:      resumeOutcome.word_count,
       model:           String(resumeOutcome.meta.model ?? resumeGeneratorConfig.model),
       prompt_sha:      String(resumeOutcome.meta.prompt_sha ?? ""),
@@ -162,12 +170,11 @@ export async function manualGenerateArtifacts(
     await insertCoverLetterArtifact({
       job_id:          jobId,
       run_id:          snapshot.run_id,
-      version,
       content:         null,
       file_path:       coverLetterPath,
       tex_path:        path.relative(repoRoot, coverOutcome.tex_path),
       pdf_path:        coverOutcome.pdf_path ? path.relative(repoRoot, coverOutcome.pdf_path) : null,
-      meta_path:       path.relative(repoRoot, coverOutcome.meta_path!),
+      meta_path:       metaRel,
       word_count:      coverOutcome.word_count,
       model:           String(coverOutcome.meta.model ?? coverLetterConfig.model),
       prompt_sha:      String(coverOutcome.meta.prompt_sha ?? ""),

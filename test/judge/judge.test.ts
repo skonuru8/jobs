@@ -12,9 +12,10 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 
 import { validateJudge }                     from "@/judge/validate";
-import { buildJudgePrompt, SYSTEM_PROMPT }   from "@/judge/prompt";
+import { buildJudgePrompt, buildSystemPrompt } from "@/judge/prompt";
 import { getBucket }                         from "@/judge/judge";
 import type { JudgeInput, JudgeResult }      from "@/judge/types";
+import { baseProfile } from "../../test/filter/helpers";
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES   = path.join(__dirname, "../../fixtures/judge");
@@ -109,6 +110,25 @@ describe("validateJudge", () => {
     if (!result.ok) expect(result.error).toMatch(/JSON parse failed/);
   });
 
+  it("accepts extended judge fields", () => {
+    const raw = JSON.stringify({
+      verdict: "STRONG",
+      reasoning: "Good fit.",
+      concerns: [],
+      confidence: 0.88,
+      key_matches: ["Nokia CPQ — Spring Boot microservices"],
+      gaps: [],
+      why_apply: "Fintech domain overlap.",
+      tailoring_hints: { emphasize_roles: ["Nokia"] },
+    });
+    const result = validateJudge(raw);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.confidence).toBeCloseTo(0.88);
+      expect(result.data.key_matches?.length).toBe(1);
+    }
+  });
+
   it("strips markdown code fences before parsing", () => {
     const inner = JSON.stringify({ verdict: "STRONG", reasoning: "Good.", concerns: [] });
     const result = validateJudge("```json\n" + inner + "\n```");
@@ -170,12 +190,10 @@ describe("buildJudgePrompt", () => {
     expect(buildJudgePrompt(no_flags)).toContain("Flags:            none");
   });
 
-  it("is non-empty and contains verdict instructions", () => {
+  it("is non-empty and points to system prompt JSON contract", () => {
     const prompt = buildJudgePrompt(input);
     expect(prompt.length).toBeGreaterThan(200);
-    expect(prompt).toContain("STRONG");
-    expect(prompt).toContain("MAYBE");
-    expect(prompt).toContain("WEAK");
+    expect(prompt).toMatch(/system prompt|OUTPUT FORMAT/i);
   });
 });
 
@@ -185,18 +203,20 @@ describe("buildJudgePrompt", () => {
 // ---------------------------------------------------------------------------
 
 describe("SYSTEM_PROMPT", () => {
+  const systemPrompt = buildSystemPrompt(baseProfile(), "");
+
   it("is non-empty", () => {
-    expect(SYSTEM_PROMPT.length).toBeGreaterThan(100);
+    expect(systemPrompt.length).toBeGreaterThan(100);
   });
 
   it("defines all three verdict values", () => {
-    expect(SYSTEM_PROMPT).toContain("STRONG");
-    expect(SYSTEM_PROMPT).toContain("MAYBE");
-    expect(SYSTEM_PROMPT).toContain("WEAK");
+    expect(systemPrompt).toContain("STRONG");
+    expect(systemPrompt).toContain("MAYBE");
+    expect(systemPrompt).toContain("WEAK");
   });
 
   it("contains the no-sponsorship hard rule", () => {
-    expect(SYSTEM_PROMPT).toContain("visa_sponsorship = false");
+    expect(systemPrompt).toContain("visa_sponsorship = false");
   });
 });
 

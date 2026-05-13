@@ -5,11 +5,24 @@
 import * as crypto from "crypto";
 
 import type { Job, Profile } from "@/filter/types";
-import type { JudgeResult } from "@/judge/types";
+import type { JudgeResult, JudgeFields, JudgeGap } from "@/judge/types";
 import type { ScoreResult } from "@/scorer/types";
 import type { CoverLetterInput } from "@/cover-letter/types";
+import type { ResumeBrief } from "@/cover-letter/resume-brief";
 
 export { makeJobSlug, slugify } from "./slug";
+
+/** Judge fields persisted for generators + job_description.md */
+export type ArtifactJudgeJson = {
+  verdict:     string | null;
+  reasoning:   string | null;
+  concerns:    string[];
+  confidence?: number;
+  key_matches?: string[];
+  gaps?:       JudgeGap[];
+  why_apply?:  string | null;
+  tailoring_hints?: JudgeFields["tailoring_hints"];
+};
 
 export interface ArtifactBundleOk {
   ok: true;
@@ -18,15 +31,46 @@ export interface ArtifactBundleOk {
   canonical_resume_tex: string;
   canonical_sha: string;
   jd_json: Record<string, unknown>;
-  judge_json: {
-    verdict: string | null;
-    reasoning: string | null;
-    concerns: string[];
-  };
+  judge_json: ArtifactJudgeJson;
   score: { total: number; components: ScoreResult["components"] };
+  /** Structured resume summary for cover letter LLM (token savings). */
+  resume_brief: ResumeBrief;
 }
 
 export type ArtifactBundle = ArtifactBundleOk | { ok: false; reason: string };
+
+export function hasExtendedJudgeContext(j: ArtifactJudgeJson): boolean {
+  return Boolean(j.key_matches?.length || j.gaps?.length || j.tailoring_hints);
+}
+
+export function buildSlimJdForPrompts(jd: Record<string, unknown>): Record<string, unknown> {
+  const skills = (jd.required_skills as Array<{ name?: string }> | undefined) ?? [];
+  const resp = (jd.responsibilities as string[] | undefined) ?? [];
+  return {
+    title:                     jd.title,
+    company:                   jd.company,
+    domain:                    jd.domain,
+    required_skills_summary:   skills.map(s => s.name ?? "").filter(Boolean).join(", "),
+    responsibilities_summary: resp.slice(0, 3).join("; "),
+  };
+}
+
+export function buildSlimProfileForPrompts(profile: Profile, jdRequiredNames: string[]): Record<string, unknown> {
+  const requiredSet = new Set(jdRequiredNames.map(s => s.toLowerCase()));
+  const relevant = profile.skills.filter(s =>
+    requiredSet.has(s.name.toLowerCase()) || s.confidence === "expert",
+  );
+  return {
+    skills:            relevant.slice(0, 25),
+    years_experience:  profile.years_experience,
+    education:         profile.education,
+    preferred_domains: profile.preferred_domains,
+    contact:           profile.contact,
+    title:             profile.contact.title,
+    location_line:     formatProfileLocationLine(profile),
+    target_titles:     profile.target_titles?.slice(0, 4) ?? [],
+  };
+}
 
 export function buildArtifactBundle(args: {
   sanitized: Job;
@@ -34,8 +78,9 @@ export function buildArtifactBundle(args: {
   judgeResult: JudgeResult | null;
   profile: Profile;
   canonical_resume_tex: string;
+  resume_brief: ResumeBrief;
 }): ArtifactBundle {
-  const { sanitized, scoreResult, judgeResult, profile, canonical_resume_tex } = args;
+  const { sanitized, scoreResult, judgeResult, profile, canonical_resume_tex, resume_brief } = args;
 
   if (!canonical_resume_tex.trim()) {
     return { ok: false, reason: "canonical resume empty" };
@@ -68,11 +113,7 @@ export function buildArtifactBundle(args: {
     meta:             { posted_at: sanitized.meta.posted_at, source_url: sanitized.meta.source_url },
   };
 
-  const judge_json = {
-    verdict:   judgeResult?.verdict ?? null,
-    reasoning: judgeResult?.fields?.reasoning ?? null,
-    concerns:  judgeResult?.fields?.concerns ?? [],
-  };
+  const judge_json = judgeJsonFromResult(judgeResult);
 
   return {
     ok: true,
@@ -83,10 +124,28 @@ export function buildArtifactBundle(args: {
     jd_json,
     judge_json,
     score: { total: scoreResult.score, components: scoreResult.components },
+    resume_brief,
   };
 }
 
-/** Map bundle → cover letter module input (canonical resume = full TeX). */
+function judgeJsonFromResult(judgeResult: JudgeResult | null): ArtifactJudgeJson {
+  const f = judgeResult?.fields;
+  if (!f) {
+    return { verdict: null, reasoning: null, concerns: [] };
+  }
+  return {
+    verdict:           f.verdict,
+    reasoning:         f.reasoning,
+    concerns:          f.concerns ?? [],
+    confidence:        f.confidence,
+    key_matches:       f.key_matches,
+    gaps:              f.gaps,
+    why_apply:         f.why_apply ?? null,
+    tailoring_hints: f.tailoring_hints,
+  };
+}
+
+/** Map bundle → cover letter module input. */
 export function coverLetterInputFromBundle(bundle: ArtifactBundleOk): CoverLetterInput {
   const j = bundle.job;
   const meta = j.meta;
@@ -140,7 +199,8 @@ export function coverLetterInputFromBundle(bundle: ArtifactBundleOk): CoverLette
         ?? "Senior Software Engineer",
       location_line: formatProfileLocationLine(bundle.profile),
     },
-    resume: bundle.canonical_resume_tex,
+    resume:        null,
+    resume_brief:  bundle.resume_brief,
   };
 }
 
@@ -155,12 +215,17 @@ function formatJobLocationLine(job: Job): string | null {
   return parts.length ? parts.join(", ") : null;
 }
 
-function formatProfileLocationLine(profile: Profile): string {
+export function formatProfileLocationLine(profile: Profile): string {
   const c = profile.contact;
   const note = c.work_arrangement_note?.trim();
   if (note) return `${c.city}, ${c.state} \\quad (${note})`;
-  const types = profile.location.acceptable_types?.join(" / ") ?? "Remote";
-  return `${c.city}, ${c.state} \\quad (${types})`;
+  const types = profile.location.acceptable_types ?? [];
+  const fallback = types.includes("onsite")
+    ? "Open to Onsite"
+    : types.includes("hybrid")
+    ? "Open to Hybrid"
+    : "Open to Remote";
+  return `${c.city}, ${c.state} \\quad (${fallback})`;
 }
 
 function readReqId(meta: Job["meta"]): string | null {

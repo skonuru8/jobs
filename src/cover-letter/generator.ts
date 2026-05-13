@@ -16,7 +16,8 @@ export async function generateCoverLetter(
   input: CoverLetterInput,
   config: CoverLetterConfig,
   jdJson?: Record<string, unknown>,
-  judgeJson?: { verdict: string | null; reasoning: string | null; concerns: string[] },
+  judgeJson?: Record<string, unknown> | null,
+  profileForPrompt?: Record<string, unknown>,
 ): Promise<CoverLetterResult> {
   const generated_at = new Date().toISOString();
   const jd = jdJson ?? {
@@ -32,19 +33,20 @@ export async function generateCoverLetter(
     concerns: input.job.judge_concerns,
   };
   const base = buildCoverLetterPrompt(input);
+  const profileDoc = profileForPrompt ?? {
+    skills: input.profile.skills,
+    years_experience: input.profile.years_experience,
+    education: input.profile.education,
+    preferred_domains: input.profile.preferred_domains,
+    contact: input.profile.contact,
+    title: input.profile.title,
+    location_line: input.profile.location_line,
+  };
   const userPrompt = appendStructuredJsonSections(
     base,
     jd,
     judge,
-    {
-      skills: input.profile.skills,
-      years_experience: input.profile.years_experience,
-      education: input.profile.education,
-      preferred_domains: input.profile.preferred_domains,
-      contact: input.profile.contact,
-      title: input.profile.title,
-      location_line: input.profile.location_line,
-    },
+    profileDoc,
   );
 
   const call = (model: string) => complete({

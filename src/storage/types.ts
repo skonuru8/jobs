@@ -66,6 +66,13 @@ export interface JobRecord {
   judge_bucket?:    string | null;
   judge_reasoning?: string | null;
   judge_concerns?:  string[];
+  judge_model?:               string | null;
+  judge_confidence?:          number | null;
+  judge_key_matches?:         unknown;
+  judge_gaps?:                unknown;
+  judge_why_apply?:          string | null;
+  judge_tailoring_hints?:   unknown;
+  judge_system_prompt_sha?: string | null;
 
   // Cover letter stage (optional)
   cover_letter_content?: string | null;

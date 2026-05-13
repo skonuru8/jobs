@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import { config as loadEnv } from 'dotenv';
 import { getPool } from '../src/storage/db.js';
 import { manualGenerateArtifacts } from '../src/artifacts/manual-generate.js';
+import { makeJobSlug } from '../src/shared/slug.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, '..');
@@ -40,7 +41,7 @@ function readCoverLetter(filePath: string | null): string | null {
 async function main() {
   const pool = getPool();
 
-  for (const mig of ['004_ui_application_tracking.sql', '005_tailored_artifacts.sql']) {
+  for (const mig of ['004_ui_application_tracking.sql', '005_tailored_artifacts.sql', '006_consolidate_artifacts.sql']) {
     const migrationPath = path.join(REPO_ROOT, 'migrations', mig);
     if (fs.existsSync(migrationPath)) {
       await pool.query(fs.readFileSync(migrationPath, 'utf-8'));
@@ -63,7 +64,7 @@ async function main() {
       const result = await pool.query(`
         SELECT
           j.job_id, j.run_id, j.title, j.company, j.source_url, j.source,
-          j.scraped_at,
+          j.scraped_at, j.posted_at,
           CASE WHEN j.source = 'jobright_api' THEN j.meta->>'job_id' ELSE NULL END AS jobright_id,
           s.total AS score_total, s.skills, s.semantic, s.yoe, s.seniority, s.location,
           jv.verdict AS judge_verdict, jv.bucket, jv.reasoning, jv.concerns,
@@ -82,11 +83,11 @@ async function main() {
         JOIN judge_verdicts jv ON jv.job_id = j.job_id AND jv.run_id = j.run_id
         LEFT JOIN LATERAL (
           SELECT content, file_path, pdf_path, word_count, flags
-          FROM cover_letters WHERE job_id = j.job_id ORDER BY version DESC NULLS LAST LIMIT 1
+          FROM cover_letters WHERE job_id = j.job_id ORDER BY generated_at DESC NULLS LAST LIMIT 1
         ) cl ON true
         LEFT JOIN LATERAL (
           SELECT pdf_path, word_count, flags
-          FROM tailored_resumes WHERE job_id = j.job_id ORDER BY version DESC NULLS LAST LIMIT 1
+          FROM tailored_resumes WHERE job_id = j.job_id ORDER BY generated_at DESC NULLS LAST LIMIT 1
         ) tr ON true
         LEFT JOIN labels        l  ON l.job_id  = j.job_id AND l.run_id  = j.run_id
         WHERE jv.bucket IN ('COVER_LETTER', 'REVIEW_QUEUE', 'RESULTS')
@@ -109,6 +110,12 @@ async function main() {
           p ? `/${String(p).replace(/\\/g, '/')}` : null;
         row.resume_pdf_url = toUrl(row.resume_pdf_path);
         row.cover_pdf_url = toUrl(row.cover_pdf_path ?? (row.cover_letter_path && /\.pdf$/i.test(row.cover_letter_path) ? row.cover_letter_path : null));
+        const postedIso = row.posted_at ? new Date(row.posted_at as string).toISOString() : null;
+        const slug = makeJobSlug(
+          { title: row.title ?? "", company: row.company ?? "", posted_at: postedIso },
+          row.job_id,
+        );
+        row.job_description_url = toUrl(`output/applications/${slug}/job_description.md`);
         const rf = row.resume_flags as string[] | null;
         const cf = row.cover_flags as string[] | null;
         row.artifact_flags = [...(rf ?? []), ...(cf ?? [])];

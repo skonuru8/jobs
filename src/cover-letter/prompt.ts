@@ -44,7 +44,7 @@ export const SYSTEM_PROMPT = COVER_LETTER_SYSTEM;
 export function appendStructuredJsonSections(
   narrativePrompt: string,
   jd: Record<string, unknown>,
-  judge: { verdict: string | null; reasoning: string | null; concerns: string[] },
+  judge: Record<string, unknown>,
   profile: unknown,
 ): string {
   return [
@@ -101,7 +101,9 @@ export function buildCoverLetterPrompt(input: CoverLetterInput): string {
     ? "solid partial match"
     : "semantic match — some gaps";
 
-  const resumeSection = resume?.trim()
+  const resumeSection = input.resume_brief
+    ? `RESUME_BRIEF (metrics must match canonical history — use only these facts, do not invent):\n${JSON.stringify(input.resume_brief, null, 2)}`
+    : resume?.trim()
     ? `CANONICAL RESUME (LaTeX or text — metrics must match this source only):\n${resume.trim()}`
     : `CANONICAL RESUME: Not provided. Use profile skills only; do not invent metrics.`;
 

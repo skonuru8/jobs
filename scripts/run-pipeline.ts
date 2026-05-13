@@ -12,7 +12,7 @@
  *   Stage 12 — gate             (score >= threshold → GATE_PASS, else ARCHIVE)
  *   Stage 13 — judge            (LLM verdict: STRONG | MAYBE | WEAK)
  *   Stage 14 — route            (COVER_LETTER | RESULTS | REVIEW_QUEUE | ARCHIVE)
- *   Stage 15 — tailored resume + cover letter (parallel → output/resumes + output/cover_letters)
+ *   Stage 15 — tailored resume + cover letter (parallel → output/applications/<slug>/)
  *
  * Run from project root:
  *   npx tsx scripts/run-pipeline.ts
@@ -55,10 +55,16 @@ import type { JudgeInput, JudgeResult, FinalBucket } from "@/judge/types";
 import { generateAndSaveCoverLetter } from "@/cover-letter/saver";
 import { loadCanonicalResumeMaster, loadResume } from "@/cover-letter/resume";
 import type { CoverLetterConfig } from "@/cover-letter/types";
+import type { Profile } from "@/filter/types";
+import type { ResumeBrief } from "@/cover-letter/resume-brief";
 
 import { generateAndSaveResume } from "@/resume-generator/index";
 import type { ResumeGenConfig } from "@/resume-generator/types";
 
+import { buildResumeBriefFromCanonicalTex } from "@/cover-letter/resume-brief";
+import { extractRolesFromCanonicalResume } from "@/judge/roles-extractor";
+import { writeJobDescription } from "@/applications/job-description-writer";
+import { writeCombinedMeta } from "@/applications/combined-meta";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
 import { makeJobSlug } from "@/shared/slug";
 
@@ -69,7 +75,7 @@ import {
 } from "@/dedup/index";
 import {
   runMigrations, saveRun, finishRun, saveJob, closePool,
-  nextArtifactVersion, insertTailoredResumeArtifact, insertCoverLetterArtifact,
+  insertTailoredResumeArtifact, insertCoverLetterArtifact,
 } from "@/storage/index";
 import type { JobRecord } from "@/storage/types";
 
@@ -127,8 +133,6 @@ const POSTED_WITHIN  = process.env.POSTED_WITHIN ?? "";   // "" = no filter
 const FIXTURES_DIR   = path.join(REPO_ROOT, "fixtures", "extractor");
 const CONFIG_DIR     = path.join(REPO_ROOT, "config");
 const RUN_ID = process.env.RUN_ID ?? randomUUID();
-const RESUME_OUT_DIR = path.join(REPO_ROOT, "output", "resumes");
-const COVER_LETTERS_OUT_DIR = path.join(REPO_ROOT, "output", "cover_letters");
 
 // ---------------------------------------------------------------------------
 // Main
@@ -280,13 +284,30 @@ async function main(): Promise<void> {
 
   // --- Process ---
   const nowIso  = new Date().toISOString();
+  const resumeBrief = canonicalResumeTex
+    ? buildResumeBriefFromCanonicalTex(canonicalResumeTex)
+    : { summary_metrics: [] as string[], recent_roles: [] as string[], flagship_projects: [] as string[] };
+  const rolesList = canonicalResumeTex
+    ? extractRolesFromCanonicalResume(path.join(REPO_ROOT, "config", "resume_master.tex"))
+    : "";
+
   const results = await processJobs(
     jsonlPath, profile, aliases,
     extractorConfig, judgeConfig, coverLetterConfig, resumeGeneratorConfig,
     scoringWeights, scoringThreshold,
-    profileEmbedding, resumeText, canonicalResumeTex, nowIso,
+    profileEmbedding, resumeText, canonicalResumeTex, resumeBrief, rolesList, nowIso,
     REPO_ROOT, RUN_ID, DO_RESUME_ARTIFACT, DO_COVER_ARTIFACT,
   );
+
+  let artifactIn = 0;
+  let artifactOut = 0;
+  for (const r of results) {
+    artifactIn += r.artifact_input_tokens ?? 0;
+    artifactOut += r.artifact_output_tokens ?? 0;
+  }
+  if (artifactIn + artifactOut > 0) {
+    log(`Artifact LLM tokens (resume+cover this run): input=${artifactIn} output=${artifactOut} total=${artifactIn + artifactOut}`);
+  }
 
   printResults(results, SOURCE, scoringThreshold);
 
@@ -398,6 +419,9 @@ interface JobResult {
   cover_letter_path?: string | null;
   cover_letter_words?: number | null;
   resume_pdf_path?: string | null;
+  /** Sum of LLM input+output tokens for resume+cover when generated this run. */
+  artifact_input_tokens?:  number;
+  artifact_output_tokens?: number;
 }
 
 async function processJobs(
@@ -413,6 +437,8 @@ async function processJobs(
   profileEmbedding:    Float32Array | null,
   resumeText:          string | null,
   canonicalResumeTex:  string | null,
+  resumeBrief:         ResumeBrief,
+  rolesList:           string,
   nowIso:              string,
   repoRoot:            string,
   runIdForArtifacts:   string,
@@ -750,6 +776,8 @@ async function processJobs(
             location:  scoreResult.components.location,
           },
         },
+        profile:    profile as Profile,
+        roles_list: rolesList || undefined,
       };
 
       judgeResult = await judge(judgeInput, judgeConfigArg);
@@ -771,6 +799,8 @@ async function processJobs(
     let coverLetterPath: string | null  = null;
     let coverLetterWords: number | null = null;
     let resumePdfPath: string | null = null;
+    let artifactInputTokens = 0;
+    let artifactOutputTokens = 0;
 
     const rvqThreshold = Math.min(
       coverLetterConfigArg.review_queue_threshold ?? 0.70,
@@ -796,8 +826,9 @@ async function processJobs(
         sanitized: sanitized as import("@/filter/types").Job,
         scoreResult: scoreResult ?? null,
         judgeResult: judgeResult ?? null,
-        profile: profile as any,
+        profile: profile as Profile,
         canonical_resume_tex: canonicalResumeTex!,
+        resume_brief: resumeBrief,
       });
 
       if (!bundle.ok) {
@@ -812,29 +843,40 @@ async function processJobs(
           },
           jobId,
         );
-        const resumeFolder = path.join(repoRoot, "output", "resumes", jobSlug);
-        const coverFolder  = path.join(repoRoot, "output", "cover_letters", jobSlug);
+        const jobFolderAbs = path.join(repoRoot, "output", "applications", jobSlug);
 
-        const version = SKIP_PERSIST ? 1 : await nextArtifactVersion(jobId);
-        log(`[${n}]  Generating resume + cover letter (v${version})...`);
+        log(`[${n}]  Generating resume + cover letter → ${jobSlug}...`);
+
+        writeJobDescription(bundle, jobFolderAbs);
 
         const [resumeOutcome, coverOutcome] = await Promise.all([
           doResumeArtifact
-            ? generateAndSaveResume(bundle, resumeGeneratorConfigArg, repoRoot, resumeFolder, version, {
+            ? generateAndSaveResume(bundle, resumeGeneratorConfigArg, repoRoot, jobFolderAbs, {
                 runId: runIdForArtifacts, bucket: bucket ?? "UNKNOWN", generatedBy: "pipeline",
               })
             : Promise.resolve(null),
           doCoverArtifact
-            ? generateAndSaveCoverLetter(bundle, coverLetterConfigArg, repoRoot, coverFolder, version, {
+            ? generateAndSaveCoverLetter(bundle, coverLetterConfigArg, repoRoot, jobFolderAbs, {
                 runId: runIdForArtifacts, bucket: bucket ?? "UNKNOWN", generatedBy: "pipeline",
               })
             : Promise.resolve(null),
         ]);
 
+        writeCombinedMeta(
+          jobFolderAbs,
+          repoRoot,
+          bundle,
+          resumeOutcome,
+          coverOutcome,
+          { runId: runIdForArtifacts, bucket: bucket ?? "UNKNOWN", generatedBy: "pipeline" },
+        );
+
+        const metaRel = path.relative(repoRoot, path.join(jobFolderAbs, "meta.json"));
+
         if (resumeOutcome) {
           allFlags.push(...resumeOutcome.flags);
           if (resumeOutcome.tex_path) {
-            log(`[${n}]  Resume v${version}: ${resumeOutcome.tex_path} (${resumeOutcome.word_count}w)`);
+            log(`[${n}]  Resume: ${resumeOutcome.tex_path} (${resumeOutcome.word_count}w)`);
             resumePdfPath = resumeOutcome.pdf_path
               ? path.relative(repoRoot, resumeOutcome.pdf_path)
               : null;
@@ -843,10 +885,9 @@ async function processJobs(
             await insertTailoredResumeArtifact({
               job_id:          jobId,
               run_id:          runIdForArtifacts,
-              version,
               tex_path:        path.relative(repoRoot, resumeOutcome.tex_path),
               pdf_path:        resumeOutcome.pdf_path ? path.relative(repoRoot, resumeOutcome.pdf_path) : null,
-              meta_path:       path.relative(repoRoot, resumeOutcome.meta_path!),
+              meta_path:       metaRel,
               word_count:      resumeOutcome.word_count,
               model:           String(resumeOutcome.meta.model ?? resumeGeneratorConfigArg.model),
               prompt_sha:      String(resumeOutcome.meta.prompt_sha ?? ""),
@@ -867,18 +908,17 @@ async function processJobs(
             coverLetterPath = coverOutcome.pdf_path
               ? path.relative(repoRoot, coverOutcome.pdf_path)
               : path.relative(repoRoot, coverOutcome.tex_path);
-            log(`[${n}]  Cover v${version}: ${coverOutcome.tex_path} (${coverLetterWords}w)`);
+            log(`[${n}]  Cover: ${coverOutcome.tex_path} (${coverLetterWords}w)`);
           }
           if (!SKIP_PERSIST && coverOutcome.tex_path) {
             await insertCoverLetterArtifact({
               job_id:          jobId,
               run_id:          runIdForArtifacts,
-              version,
               content:         null,
               file_path:       coverLetterPath,
               tex_path:        path.relative(repoRoot, coverOutcome.tex_path),
               pdf_path:        coverOutcome.pdf_path ? path.relative(repoRoot, coverOutcome.pdf_path) : null,
-              meta_path:       path.relative(repoRoot, coverOutcome.meta_path!),
+              meta_path:       metaRel,
               word_count:      coverLetterWords,
               model:           String(coverOutcome.meta.model ?? coverLetterConfigArg.model),
               prompt_sha:      String(coverOutcome.meta.prompt_sha ?? ""),
@@ -890,6 +930,15 @@ async function processJobs(
               flags:           coverOutcome.flags,
             });
           }
+        }
+
+        if (resumeOutcome) {
+          artifactInputTokens += Number(resumeOutcome.meta.input_tokens ?? 0);
+          artifactOutputTokens += Number(resumeOutcome.meta.output_tokens ?? 0);
+        }
+        if (coverOutcome) {
+          artifactInputTokens += Number(coverOutcome.meta.input_tokens ?? 0);
+          artifactOutputTokens += Number(coverOutcome.meta.output_tokens ?? 0);
         }
       }
     }
@@ -930,6 +979,13 @@ async function processJobs(
         judge_bucket:    bucket                          ?? null,
         judge_reasoning: judgeResult?.fields?.reasoning  ?? null,
         judge_concerns:  judgeResult?.fields?.concerns   ?? [],
+        judge_model:               judgeResult?.model ?? null,
+        judge_confidence:          judgeResult?.fields?.confidence ?? null,
+        judge_key_matches:         judgeResult?.fields?.key_matches ?? null,
+        judge_gaps:                judgeResult?.fields?.gaps ?? null,
+        judge_why_apply:           judgeResult?.fields?.why_apply ?? null,
+        judge_tailoring_hints:     judgeResult?.fields?.tailoring_hints ?? null,
+        judge_system_prompt_sha:   judgeResult?.system_prompt_sha ?? null,
         cover_letter_path:  coverLetterPath,
         cover_letter_words: coverLetterWords,
         cover_letter_model: coverLetterPath ? coverLetterConfigArg.model : null,
@@ -964,6 +1020,8 @@ async function processJobs(
         cover_letter_path:   coverLetterPath,
         cover_letter_words:  coverLetterWords,
         resume_pdf_path:     resumePdfPath,
+        artifact_input_tokens:  artifactInputTokens || undefined,
+        artifact_output_tokens: artifactOutputTokens || undefined,
       },
     };
   })); // end limit()

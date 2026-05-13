@@ -16,12 +16,10 @@ export interface ResumeSaveResult {
 export async function writeTexAndCompile(
   texContent: string,
   jobFolderAbs: string,
-  version: number,
   compilePdf: boolean,
 ): Promise<ResumeSaveResult> {
   fs.mkdirSync(jobFolderAbs, { recursive: true });
-  const vBase = `v${version}`;
-  const texAbs = path.join(jobFolderAbs, `${vBase}.tex`);
+  const texAbs = path.join(jobFolderAbs, "resume.tex");
   fs.writeFileSync(texAbs, texContent, "utf8");
 
   if (!compilePdf) {
@@ -32,26 +30,27 @@ export async function writeTexAndCompile(
   for (let attempt = 0; attempt < 2; attempt++) {
     const r = await runPdflatex(texAbs, jobFolderAbs);
     lastLog = r.log;
-    if (r.ok) {
-      const pdfAbs = path.join(jobFolderAbs, `${vBase}.pdf`);
-      if (fs.existsSync(pdfAbs)) {
-        return { tex_path: texAbs, pdf_path: pdfAbs };
-      }
+    const pdfAbs = path.join(jobFolderAbs, "resume.pdf");
+    if (r.ok && fs.existsSync(pdfAbs)) {
+      cleanupAuxFiles(jobFolderAbs, "resume");
+      return { tex_path: texAbs, pdf_path: pdfAbs };
     }
   }
 
   fs.writeFileSync(
-    path.join(jobFolderAbs, `${vBase}.compile-error.log`),
+    path.join(jobFolderAbs, "resume.compile-error.log"),
     lastLog.slice(-24_000),
     "utf8",
   );
+  cleanupAuxFiles(jobFolderAbs, "resume");
   return { tex_path: texAbs, pdf_path: null, compile_error: lastLog.slice(0, 2000) };
 }
 
-export function copyLatestResume(dir: string, version: number, hasPdf: boolean): void {
-  const vBase = `v${version}`;
-  fs.copyFileSync(path.join(dir, `${vBase}.tex`), path.join(dir, "latest.tex"));
-  if (hasPdf) {
-    fs.copyFileSync(path.join(dir, `${vBase}.pdf`), path.join(dir, "latest.pdf"));
+function cleanupAuxFiles(dir: string, basename: string): void {
+  for (const ext of [".aux", ".log", ".out"]) {
+    const p = path.join(dir, `${basename}${ext}`);
+    if (fs.existsSync(p)) {
+      try { fs.unlinkSync(p); } catch { /* ignore */ }
+    }
   }
 }

@@ -4,13 +4,14 @@
 
 import type { Job, Profile } from "@/filter/types";
 import type { ScoreResult } from "@/scorer/types";
+import type { ArtifactJudgeJson } from "@/shared/artifact-bundle";
 
 export interface ResumeGenInput {
   job: Job;
   profile: Profile;
   canonical_resume_tex: string;
   jd_json: Record<string, unknown>;
-  judge_json: { verdict: string | null; reasoning: string | null; concerns: string[] };
+  judge_json: ArtifactJudgeJson;
   score: { total: number; components: ScoreResult["components"] };
   canonical_sha: string;
 }

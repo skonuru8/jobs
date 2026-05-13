@@ -3,7 +3,7 @@
  */
 
 import type { Job, JobMeta, JobLocation } from "@/filter/types";
-import type { JudgeResult, JudgeVerdict } from "@/judge/types";
+import type { JudgeResult, JudgeVerdict, JudgeFields } from "@/judge/types";
 import type { ScoreResult } from "@/scorer/types";
 import { DEFAULT_THRESHOLD, DEFAULT_WEIGHTS } from "@/scorer/score";
 
@@ -29,7 +29,13 @@ export async function fetchLatestJobSnapshotForArtifacts(
               s.yoe AS s_yoe, s.seniority AS s_seniority, s.location AS s_location,
               jv.verdict AS jv_verdict, jv.bucket AS jv_bucket, jv.reasoning AS jv_reasoning,
               jv.concerns AS jv_concerns,
-              jv.bucket AS jv_bucket
+              jv.model AS jv_model,
+              jv.confidence AS jv_confidence,
+              jv.key_matches AS jv_key_matches,
+              jv.gaps AS jv_gaps,
+              jv.why_apply AS jv_why_apply,
+              jv.tailoring_hints AS jv_tailoring_hints,
+              jv.system_prompt_sha AS jv_system_prompt_sha
          FROM jobs j
          JOIN scores s ON s.job_id = j.job_id AND s.run_id = j.run_id
          JOIN judge_verdicts jv ON jv.job_id = j.job_id AND jv.run_id = j.run_id
@@ -113,15 +119,30 @@ export async function fetchLatestJobSnapshotForArtifacts(
       : [];
 
     const verdict = (row.jv_verdict ?? null) as JudgeVerdict | null;
+    const fields: JudgeFields | null = verdict
+      ? {
+          verdict,
+          reasoning: row.jv_reasoning ?? "",
+          concerns,
+          confidence: row.jv_confidence != null ? Number(row.jv_confidence) : undefined,
+          key_matches: Array.isArray(row.jv_key_matches) ? (row.jv_key_matches as string[]) : undefined,
+          gaps: Array.isArray(row.jv_gaps) ? (row.jv_gaps as JudgeFields["gaps"]) : undefined,
+          why_apply: row.jv_why_apply ?? undefined,
+          tailoring_hints:
+            row.jv_tailoring_hints && typeof row.jv_tailoring_hints === "object"
+              ? (row.jv_tailoring_hints as JudgeFields["tailoring_hints"])
+              : undefined,
+        }
+      : null;
+
     const judgeResult: JudgeResult = {
-      status:         "ok",
+      status:              "ok",
       verdict,
-      fields:         verdict
-        ? { verdict, reasoning: row.jv_reasoning ?? "", concerns }
-        : null,
-      model:          "",
-      prompt_version: "",
-      judged_at:      new Date().toISOString(),
+      fields,
+      model:                 row.jv_model ?? "",
+      prompt_version:        "v3",
+      system_prompt_sha:     row.jv_system_prompt_sha ?? undefined,
+      judged_at:             new Date().toISOString(),
     };
 
     return { job, scoreResult, judgeResult, run_id: row.run_id, bucket: row.jv_bucket ?? "RESULTS" };

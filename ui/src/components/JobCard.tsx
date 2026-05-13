@@ -320,6 +320,9 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
             {applyRow.cover_pdf_url && (
               <a href={applyRow.cover_pdf_url} target="_blank" rel="noopener noreferrer">Cover letter PDF</a>
             )}
+            {applyRow.job_description_url && (
+              <a href={applyRow.job_description_url} target="_blank" rel="noopener noreferrer">View JD</a>
+            )}
           </div>
         </div>
       )}
