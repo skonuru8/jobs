@@ -24,6 +24,7 @@ export {
   insertTailoredResumeArtifact,
   insertCoverLetterArtifact,
   getLatestArtifactsForJob,
+  insertLedgerEntries,
   markStorageDisabled,
   isStorageAvailable,
   formatErr,

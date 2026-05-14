@@ -53,6 +53,7 @@ export async function generateAndSaveResume(
   let gen = await generateResumeTex(input, config);
   if (gen.status !== "ok" || !gen.tex) {
     flags.push("resume_gen_failed");
+    console.log(`[resume] early return — reason: gen failed or empty tex (status=${gen.status})`);
     return emptyOutcome(bundle, ctx, flags, gen, combinedMetaRel);
   }
 
@@ -76,7 +77,37 @@ export async function generateAndSaveResume(
     flags.push("tex_malformed");
   }
 
-  const saved = await writeTexAndCompile(tex, jobFolderAbs, config.compile_pdf !== false);
+  let saved;
+  try {
+    saved = await writeTexAndCompile(tex, jobFolderAbs, config.compile_pdf !== false);
+  } catch (e) {
+    flags.push("resume_llm_threw");
+    console.log(`[resume] early return — reason: writeTexAndCompile threw: ${String(e).slice(0, 500)}`);
+    return {
+      tex_path: null,
+      pdf_path: null,
+      meta_path: null,
+      meta: {
+        job_id: bundle.job.meta.job_id,
+        run_id: ctx.runId,
+        artifact_type: "resume",
+        bucket: ctx.bucket,
+        generated_at: new Date().toISOString(),
+        generated_by: ctx.generatedBy,
+        model: gen.model,
+        prompt_sha: gen.prompt_sha,
+        canonical_sha: bundle.canonical_sha,
+        input_tokens: gen.tokens.input,
+        output_tokens: gen.tokens.output,
+        word_count: wc,
+        compile_status: "failed",
+        flags,
+        error: String(e).slice(0, 500),
+      },
+      flags,
+      word_count: wc,
+    };
+  }
   if (!saved.pdf_path) {
     flags.push("pdf_compile_failed");
   }
@@ -110,7 +141,7 @@ export async function generateAndSaveResume(
     meta_path: combinedMetaRel,
   };
 
-  return {
+  const outcome: ResumeArtifactOutcome = {
     tex_path:   saved.tex_path,
     pdf_path:   saved.pdf_path,
     meta_path:  path.join(jobFolderAbs, "meta.json"),
@@ -118,6 +149,18 @@ export async function generateAndSaveResume(
     flags,
     word_count: wc,
   };
+
+  // Safety net: if we got here with no file AND no flag, something fell through silently.
+  if (!outcome.tex_path && (outcome.flags?.length ?? 0) === 0) {
+    outcome.flags = [...(outcome.flags ?? []), "resume_gen_skipped_no_reason"];
+    outcome.meta = {
+      ...outcome.meta,
+      compile_status: "skipped_unknown",
+    };
+    console.log("[resume] safety net triggered — no tex_path and no flags, marking skipped_unknown");
+  }
+
+  return outcome;
 }
 
 function emptyOutcome(

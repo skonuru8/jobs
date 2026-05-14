@@ -66,6 +66,12 @@ this message is the sole and authoritative source.
 - Domain reframes for missing JD domains: apply them; do not print the rationale.
 - Reorder roles, sections, and skill categories to lead with JD-relevant content.
 
+--- TECH SWAPS ---
+If JUDGE_JSON contains tailoring_hints.tech_swaps with entries, apply those swaps across
+the canonical resume content. Replace each `from` with the corresponding `to` everywhere
+it appears (Skills section, bullets, summary). This is a Mode B substitution — no
+surrounding word changes, replace only the technology name itself.
+
 --- LENGTH CONSTRAINT ---
 Word count of the rendered text (ignoring LaTeX commands): between 1900 and 2500.
 Do NOT summarize. Do NOT shorten. If the canonical is at 1959 words, the tailored

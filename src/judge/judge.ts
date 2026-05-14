@@ -9,6 +9,7 @@ import {
   computeSystemPromptSha,
   PROMPT_VERSION,
 } from "./prompt";
+import { extractSkillsSectionFromCanonical } from "./roles-extractor";
 import { validateJudge } from "./validate";
 import type { JudgeInput, JudgeResult, FinalBucket, JudgeFields } from "./types";
 import type { Profile } from "@/filter/types";
@@ -66,7 +67,7 @@ export async function judge(
   const judged_at  = new Date().toISOString();
   const userPrompt = buildJudgePrompt(input);
   const profile = input.profile ?? defaultProfileForJudge();
-  const systemPrompt = buildSystemPrompt(profile, input.roles_list);
+  const systemPrompt = buildSystemPrompt(profile, input.roles_list, input.canonical_skills);
   const systemPromptSha = computeSystemPromptSha(systemPrompt);
 
   const messages = [

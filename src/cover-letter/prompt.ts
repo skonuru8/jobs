@@ -6,7 +6,7 @@ import * as crypto from "crypto";
 
 import type { CoverLetterInput } from "./types";
 
-export const PROMPT_VERSION = "pipeline-tex-v1";
+export const PROMPT_VERSION = "pipeline-tex-v2";
 
 export const COVER_LETTER_SYSTEM = `You are writing the body of a professional cover letter for a job application.
 
@@ -20,11 +20,20 @@ OUTPUT FORMAT:
 - Separate paragraphs with a single blank line
 - Output must be safe for LaTeX: avoid %, &, $, _, #, ~, ^, \\ — use plain text alternatives
 
-STRUCTURE (3-4 paragraphs, 350-600 words total):
+STRUCTURE (4 paragraphs, 400-550 words total. UNDER 400 WORDS IS A FAILURE):
+Count words before output. If the body is under 400 words, add a fourth paragraph that either:
+  - addresses the strongest judge.gaps[].reframe_angle in depth, OR
+  - expands on why_apply with a specific company-relevant detail from the JD
+Do not pad with generic filler. Do not repeat earlier paragraphs.
 1. Opening: "I am writing to apply for [role] at [company]" + one positioning sentence (years of experience + 3-4 key technologies from the JD that match the canonical resume)
 2. Strongest relevant past experience with specific metrics from the canonical resume only (e.g., 85% reduction, 55% latency improvement, 100+ GB telemetry) mapped to JD requirements
-3. (Optional) Second relevant experience or a company/role-specific hook (the company's domain, mission, or stated values from the JD)
+3. Second relevant experience or a company/role-specific hook (the company's domain, mission, or stated values from the JD)
 4. Closing: location/availability fit, education (M.S. CS from Stevens), closing offer to discuss
+
+TECH SWAPS:
+If judge.tailoring_hints.tech_swaps is non-empty, apply those swaps when referencing
+technologies. Replace each `from` skill with the corresponding `to` skill everywhere
+it appears. This is a Mode B substitution — no surrounding word changes.
 
 STYLE:
 - Confident, direct, specific numbers — never vague

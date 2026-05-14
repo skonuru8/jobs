@@ -7,7 +7,7 @@ import * as crypto from "crypto";
 import type { Profile } from "@/filter/types";
 import type { JudgeInput } from "./types";
 
-export const PROMPT_VERSION = "v3";
+export const PROMPT_VERSION = "v4";
 
 export function buildCandidateProfileSection(profile: Profile): string {
   const expert = profile.skills
@@ -34,15 +34,22 @@ export function buildCandidateProfileSection(profile: Profile): string {
 - Preferred domains: ${domains}.`;
 }
 
-export function buildSystemPrompt(profile: Profile, rolesList?: string): string {
+export function buildSystemPrompt(
+  profile: Profile,
+  rolesList?: string,
+  canonicalSkills?: string,
+): string {
   const candidateSection = buildCandidateProfileSection(profile);
   const rolesSection = rolesList?.trim()
     ? `\n\nCANDIDATE WORK HISTORY (for tailoring hints):\n${rolesList.trim()}`
     : "";
+  const skillsSection = canonicalSkills?.trim()
+    ? `\n\nCANDIDATE FULL SKILLS LIST (verbatim from resume):\n${canonicalSkills.trim()}\n\nWhen identifying gaps, FIRST check this list. Do not flag a technology as a gap if it appears here.`
+    : "";
 
   return `You are a job application screener for a senior software engineer.
 
-${candidateSection}${rolesSection}
+${candidateSection}${rolesSection}${skillsSection}
 
 CONTEXT:
 A deterministic hard filter and scorer (threshold 0.55) already confirmed this job is worth reviewing.
@@ -110,7 +117,31 @@ GUIDANCE FOR THE NEW FIELDS:
 - why_apply: NOT generic. Name a domain, project, team, or stated company value from the JD that intersects the candidate's history.
 - tailoring_hints.emphasize_roles: pull from CANDIDATE WORK HISTORY block above by exact role string.
 - tailoring_hints.emphasize_skills / downplay_skills: pull from the candidate profile skills, NOT invent new ones.
-- Empty arrays/strings are fine when nothing applies. Do not invent.`;
+- Empty arrays/strings are fine when nothing applies. Do not invent.
+
+RISK MAP USAGE (CRITICAL):
+Every JD required_skill now has an attached \`risk_entry\`. Use it to set verdict honestly.
+
+INTERPRETATION:
+- relationship "exact" or "reworded" → candidate has it. NOT a gap.
+- relationship "direct_equivalent" → emit tailoring_hints.tech_swaps:
+    { from: <candidate_source_skill>, to: <target_skill> }
+  This is a known-defensible swap. NOT a gap, NOT a true-gap.
+- relationship "adjacent" → reframe only. Emit a gap with reframe_angle drawn from
+  risk_entry.safe_language[] verbatim. NEVER produce a tech_swap for adjacent entries.
+- relationship "unsupported_inference" → emit gap with severity "major". reframe_angle
+  must use safe_language[]. Note this in concerns[].
+- relationship "fabricated" → emit gap with severity "major". reframe_angle must use
+  safe_language[]. Strong concern in concerns[].
+- risk_entry === null → JD skill not in the map. Treat as fabricated-tier risk.
+  Emit gap with severity "major", reframe_angle = "no defensible source in candidate's
+  resume; honest framing only".
+
+DISALLOWED CLAIMS:
+If a risk_entry has disallowed_claims[], your verdict-related output (concerns, reasoning)
+must reflect those constraints. Do not write reframe language that violates them.
+
+NEVER produce a tailoring_hints.tech_swaps entry where the map says swap_allowed === false.`;
 }
 
 export function computeSystemPromptSha(systemPrompt: string): string {

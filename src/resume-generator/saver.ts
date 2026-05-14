@@ -37,12 +37,12 @@ export async function writeTexAndCompile(
     }
   }
 
+  // Failure — keep aux files for debugging, write compile-error log
   fs.writeFileSync(
     path.join(jobFolderAbs, "resume.compile-error.log"),
     lastLog.slice(-24_000),
     "utf8",
   );
-  cleanupAuxFiles(jobFolderAbs, "resume");
   return { tex_path: texAbs, pdf_path: null, compile_error: lastLog.slice(0, 2000) };
 }
 

@@ -44,3 +44,24 @@ export function extractRolesFromCanonicalTex(tex: string): string {
 
   return roles.slice(0, 12).join("\n");
 }
+
+/**
+ * Extract and clean the SKILLS section text from canonical resume TeX.
+ * Used by the judge prompt so the LLM can avoid flagging known skills as gaps.
+ */
+export function extractSkillsSectionFromCanonical(canonicalTexPath: string): string {
+  let tex: string;
+  try {
+    tex = fs.readFileSync(canonicalTexPath, "utf8");
+  } catch {
+    return "";
+  }
+  const m = tex.match(/\\section\*?\{SKILLS\}([\s\S]*?)(?=\\section\*?\{|\\end\{document\})/i);
+  if (!m) return "";
+  return m[1]
+    .replace(/\\textbf\{([^}]*)\}/g, "$1")
+    .replace(/\\\\/g, "\n")
+    .replace(/\\[a-zA-Z]+\*?\{?/g, "")
+    .replace(/[{}]/g, "")
+    .trim();
+}

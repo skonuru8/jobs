@@ -164,12 +164,12 @@ export async function generateAndSaveCoverLetter(
     }
     if (!pdfAbs) {
       flags.push("pdf_compile_failed");
+      // Failure — keep aux files for debugging, write compile-error log
       fs.writeFileSync(
         path.join(jobFolderAbs, "cover_letter.compile-error.log"),
         log.slice(-24_000),
         "utf8",
       );
-      cleanupAuxFiles(jobFolderAbs, "cover_letter");
     }
   }
 

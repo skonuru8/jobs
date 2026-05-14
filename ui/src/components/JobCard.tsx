@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { postLabel, getStats, postGenerateArtifacts } from '../api';
-import type { ApplyQueueRow, HardRejectionRow, SoftRejectionRow, Stats } from '../api';
+import type { ApplyQueueRow, HardRejectionRow, SoftRejectionRow, Stats, RiskSummary } from '../api';
 
 type Mode = 'apply' | 'hard-reject' | 'soft-reject';
 type Label = 'yes' | 'maybe' | 'no';
@@ -76,6 +76,48 @@ function VerdictBadge({ verdict }: { verdict: string }) {
 
 function SourceBadge({ source }: { source: string }) {
   return <span className="badge source-badge">{source}</span>;
+}
+
+function badgeFor(status: 'ok' | 'needs_review' | undefined): 'green' | 'yellow' {
+  return status === 'needs_review' ? 'yellow' : 'green';
+}
+
+function RiskBadge({ label, status, summary }: { label: string; status: 'ok' | 'needs_review' | undefined; summary: RiskSummary | null | undefined }) {
+  const [open, setOpen] = useState(false);
+  const color = badgeFor(status);
+  const style: React.CSSProperties = {
+    background: color === 'yellow' ? '#6a5a1a' : '#2d6a2d',
+    cursor: color === 'yellow' ? 'pointer' : 'default',
+  };
+  return (
+    <span style={{ position: 'relative', display: 'inline-block' }}>
+      <span
+        className="badge"
+        style={style}
+        onClick={() => color === 'yellow' && setOpen(o => !o)}
+        title={color === 'yellow' ? 'Click to see review items' : 'All clear'}
+      >
+        {label} {color === 'yellow' ? '⚠' : '✓'}
+      </span>
+      {open && summary && summary.human_review_items.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '1.5em', left: 0, zIndex: 100,
+          background: '#1e1e1e', border: '1px solid #555', borderRadius: 6,
+          padding: '8px 12px', minWidth: 300, maxWidth: 420,
+          fontSize: '0.8em', color: '#ccc', lineHeight: 1.5,
+        }}>
+          <strong style={{ color: '#fff' }}>Items requiring review:</strong>
+          <ul style={{ margin: '6px 0 0', padding: '0 0 0 16px' }}>
+            {summary.human_review_items.map((item, i) => (
+              <li key={i}>
+                <strong>{item.text}</strong> ({item.relationship}) — {item.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </span>
+  );
 }
 
 // Change 2: quick-fill chips
@@ -324,6 +366,24 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
               <a href={applyRow.job_description_url} target="_blank" rel="noopener noreferrer">View JD</a>
             )}
           </div>
+          {(applyRow.resume_pdf_url || applyRow.cover_pdf_url) && (
+            <div className="risk-badges" style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              {applyRow.resume_pdf_url && (
+                <RiskBadge
+                  label="Resume"
+                  status={applyRow.resume_export_status}
+                  summary={applyRow.resume_risk_summary}
+                />
+              )}
+              {applyRow.cover_pdf_url && (
+                <RiskBadge
+                  label="Cover"
+                  status={applyRow.cover_export_status}
+                  summary={applyRow.cover_risk_summary}
+                />
+              )}
+            </div>
+          )}
         </div>
       )}
 

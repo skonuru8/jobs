@@ -47,6 +47,8 @@ export interface JudgeInput {
   profile?: Profile;
   /** Work-history lines extracted from canonical resume TeX. */
   roles_list?: string;
+  /** SKILLS section text from canonical resume TeX — prevents judge from flagging known skills as gaps. */
+  canonical_skills?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +77,7 @@ export interface JudgeFields {
     emphasize_skills?:     string[];
     downplay_skills?:      string[];
     domain_reframe_angle?: string;
+    tech_swaps?: Array<{ from: string; to: string; confidence: number }>;
   };
 }
 

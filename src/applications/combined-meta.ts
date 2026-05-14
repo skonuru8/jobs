@@ -75,11 +75,28 @@ function resumeBlock(
   o: ResumeArtifactOutcome | null,
   rel: (p: string | null | undefined) => string | null,
 ): Record<string, unknown> {
-  if (!o?.tex_path) {
+  if (o === null) {
     return {
       model: null, prompt_sha: null, input_tokens: null, output_tokens: null,
-      word_count: null, compile_status: "skipped", flags: [],
+      word_count: null, compile_status: "skipped", flags: ["resume_gen_skipped_no_reason"],
       tex_path: null, pdf_path: null,
+      risk_summary: null, export_status: "ok",
+    };
+  }
+  if (!o.tex_path) {
+    const flags = (o.flags?.length ?? 0) > 0
+      ? o.flags
+      : ["resume_gen_skipped_no_reason"];
+    return {
+      model:          o.meta?.model ?? null,
+      prompt_sha:     o.meta?.prompt_sha ?? null,
+      input_tokens:   o.meta?.input_tokens ?? null,
+      output_tokens:  o.meta?.output_tokens ?? null,
+      word_count:     o.word_count ?? null,
+      compile_status: o.meta?.compile_status ?? "skipped_unknown",
+      flags,
+      tex_path: null, pdf_path: null,
+      risk_summary: null, export_status: "ok",
     };
   }
   const m = o.meta;
@@ -93,6 +110,8 @@ function resumeBlock(
     flags:            o.flags,
     tex_path:         rel(o.tex_path),
     pdf_path:         rel(o.pdf_path),
+    risk_summary:   (m as Record<string, unknown>).risk_summary ?? null,
+    export_status:  (m as Record<string, unknown>).export_status ?? "ok",
   };
 }
 
@@ -105,6 +124,7 @@ function coverBlock(
       model: null, prompt_sha: null, input_tokens: null, output_tokens: null,
       word_count: null, compile_status: "skipped", flags: [],
       tex_path: null, pdf_path: null,
+      risk_summary: null, export_status: "ok",
     };
   }
   const m = o.meta;
@@ -118,5 +138,7 @@ function coverBlock(
     flags:            o.flags,
     tex_path:         rel(o.tex_path),
     pdf_path:         rel(o.pdf_path),
+    risk_summary:   (m as Record<string, unknown>).risk_summary ?? null,
+    export_status:  (m as Record<string, unknown>).export_status ?? "ok",
   };
 }

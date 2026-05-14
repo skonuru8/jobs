@@ -52,9 +52,18 @@ export function buildResumeBriefFromCanonicalTex(tex: string): ResumeBrief {
     }
   }
 
-  return {
+  const brief = {
     summary_metrics: summaryMetrics.slice(0, 5),
     recent_roles: recentRoles.slice(0, 6),
     flagship_projects: flagshipProjects.slice(0, 5),
   };
+
+  if (brief.summary_metrics.length === 0 && brief.recent_roles.length === 0) {
+    console.warn(
+      "[resume-brief] extraction returned empty — check resume_master.tex structure. " +
+      "Expected sections: SUMMARY, EXPERIENCE, PROJECTS.",
+    );
+  }
+
+  return brief;
 }

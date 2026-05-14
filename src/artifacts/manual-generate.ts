@@ -15,14 +15,17 @@ import { generateAndSaveResume } from "@/resume-generator/index";
 import type { ResumeGenConfig } from "@/resume-generator/types";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
 import { makeJobSlug } from "@/shared/slug";
+import { makeManualFolderName } from "@/applications/run-folder";
 import { fetchLatestJobSnapshotForArtifacts } from "@/storage/artifact-load";
 import {
   insertCoverLetterArtifact,
   insertTailoredResumeArtifact,
+  insertLedgerEntries,
   jobHasAnyArtifacts,
 } from "@/storage/persist";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
+import { auditTailoredArtifact } from "@/risk-map";
 
 export interface ManualGenerateResult {
   ok: boolean;
@@ -121,7 +124,9 @@ export async function manualGenerateArtifacts(
     },
     jobId,
   );
-  const jobFolderAbs = path.join(repoRoot, "output", "applications", jobSlug);
+  const runFolderName = makeManualFolderName(new Date());
+  const runDir = path.join(repoRoot, "output", "applications", runFolderName);
+  const jobFolderAbs = path.join(runDir, jobSlug);
 
   const ctx = {
     runId:         snapshot.run_id,
@@ -135,6 +140,43 @@ export async function manualGenerateArtifacts(
     generateAndSaveResume(bundle, resumeGeneratorConfig, repoRoot, jobFolderAbs, ctx),
     generateAndSaveCoverLetter(bundle, coverLetterConfig, repoRoot, jobFolderAbs, ctx),
   ]);
+
+  // --- Post-generation audit (risk map ledger) ---
+  if (resumeOutcome.tex_path) {
+    try {
+      const resumeTex = fs.readFileSync(resumeOutcome.tex_path, "utf8");
+      const { summary, ledger } = auditTailoredArtifact({
+        tailoredText:  resumeTex,
+        canonicalText: bundle.canonical_resume_tex,
+        jobId,
+        runId:         null,
+        artifactType:  "resume",
+      });
+      (resumeOutcome.meta as Record<string, unknown>).risk_summary  = summary;
+      (resumeOutcome.meta as Record<string, unknown>).export_status = summary.human_review_items.length > 0 ? "needs_review" : "ok";
+      await insertLedgerEntries(ledger);
+    } catch (e) {
+      console.warn(`[manual-generate] audit(resume) failed: ${e}`);
+    }
+  }
+
+  if (coverOutcome.tex_path) {
+    try {
+      const coverTex = fs.readFileSync(coverOutcome.tex_path, "utf8");
+      const { summary, ledger } = auditTailoredArtifact({
+        tailoredText:  coverTex,
+        canonicalText: bundle.canonical_resume_tex,
+        jobId,
+        runId:         null,
+        artifactType:  "cover_letter",
+      });
+      (coverOutcome.meta as Record<string, unknown>).risk_summary  = summary;
+      (coverOutcome.meta as Record<string, unknown>).export_status = summary.human_review_items.length > 0 ? "needs_review" : "ok";
+      await insertLedgerEntries(ledger);
+    } catch (e) {
+      console.warn(`[manual-generate] audit(cover) failed: ${e}`);
+    }
+  }
 
   writeCombinedMeta(jobFolderAbs, repoRoot, bundle, resumeOutcome, coverOutcome, ctx);
 

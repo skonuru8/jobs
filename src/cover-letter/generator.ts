@@ -49,25 +49,31 @@ export async function generateCoverLetter(
     profileDoc,
   );
 
-  const call = (model: string) => complete({
-    model,
-    messages: [
-      { role: "system", content: COVER_LETTER_SYSTEM },
-      { role: "user",   content: userPrompt },
-    ],
-    max_tokens:  config.max_tokens,
-    temperature: config.temperature,
-    ...(config.thinking ? { thinking: config.thinking } : {}),
-  });
-
   const maxAttempts = (config.retries ?? 1) + 1;
   let lastErr: string | undefined;
+  let currentUserPrompt = userPrompt;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const result = await call(config.model);
+      const result = await complete({
+        model: config.model,
+        messages: [
+          { role: "system", content: COVER_LETTER_SYSTEM },
+          { role: "user",   content: currentUserPrompt },
+        ],
+        max_tokens:  config.max_tokens,
+        temperature: config.temperature,
+        ...(config.thinking ? { thinking: config.thinking } : {}),
+      });
       const cleaned = stripMarkdown(result.content);
       const wordCount = countWords(cleaned);
+
+      if (cleaned && wordCount < 350 && attempt < maxAttempts - 1) {
+        const retryAddendum = `\n\nPREVIOUS OUTPUT WAS ${wordCount} WORDS. Minimum 400 required. Generate a longer body. Address the judge's gap reframe angles in more depth. Add a fourth paragraph if needed. Do not return under 400 words.`;
+        currentUserPrompt = userPrompt + retryAddendum;
+        continue;
+      }
+
       return {
         status:         "ok",
         text:           cleaned,

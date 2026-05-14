@@ -27,6 +27,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { getPool } from "./db.js";
 import type { RunRecord, RunStats, JobRecord } from "./types.js";
+import type { LedgerEntryInput } from "../risk-map/types.js";
 
 // ---------------------------------------------------------------------------
 // Storage availability flag
@@ -514,6 +515,40 @@ export async function getLatestArtifactsForJob(jobId: string): Promise<{
   } catch (e) {
     console.error("[storage] getLatestArtifactsForJob failed:", formatErr(e));
     return { resume: null, cover: null };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fabrication ledger
+// ---------------------------------------------------------------------------
+
+export async function insertLedgerEntries(rows: LedgerEntryInput[]): Promise<void> {
+  if (rows.length === 0) return;
+  if (_disabled) return;
+
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    for (const r of rows) {
+      await client.query(`
+        INSERT INTO fabrication_ledger (
+          job_id, run_id, artifact_type, jd_skill, canonical_skill_found,
+          generated_skill_or_claim, change_type, truth_distance_score,
+          fabrication_risk, location, human_review_required
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `, [
+        r.job_id, r.run_id, r.artifact_type, r.jd_skill, r.canonical_skill_found,
+        r.generated_skill_or_claim, r.change_type, r.truth_distance_score,
+        r.fabrication_risk, r.location, r.human_review_required,
+      ]);
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("[storage] insertLedgerEntries failed:", formatErr(e));
+    throw e;
+  } finally {
+    client.release();
   }
 }
 

@@ -12,6 +12,7 @@ import { config as loadEnv } from 'dotenv';
 import { getPool } from '../src/storage/db.js';
 import { manualGenerateArtifacts } from '../src/artifacts/manual-generate.js';
 import { makeJobSlug } from '../src/shared/slug.js';
+import { loadRiskMap } from '../src/risk-map/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, '..');
@@ -41,12 +42,15 @@ function readCoverLetter(filePath: string | null): string | null {
 async function main() {
   const pool = getPool();
 
-  for (const mig of ['004_ui_application_tracking.sql', '005_tailored_artifacts.sql', '006_consolidate_artifacts.sql']) {
+  for (const mig of ['004_ui_application_tracking.sql', '005_tailored_artifacts.sql', '006_consolidate_artifacts.sql', '007_fabrication_ledger.sql']) {
     const migrationPath = path.join(REPO_ROOT, 'migrations', mig);
     if (fs.existsSync(migrationPath)) {
       await pool.query(fs.readFileSync(migrationPath, 'utf-8'));
     }
   }
+
+  loadRiskMap(REPO_ROOT);
+  console.log('[ui-server] risk map loaded');
 
   const app = express();
   app.use(express.json());
@@ -73,20 +77,22 @@ async function main() {
           tr.pdf_path AS resume_pdf_path,
           tr.word_count AS resume_word_count,
           tr.flags AS resume_flags,
+          tr.meta_path AS resume_meta_path,
           cl.pdf_path AS cover_pdf_path,
           cl.word_count AS cover_word_count,
           cl.flags AS cover_flags,
+          cl.meta_path AS cover_meta_path,
           l.label, l.notes AS label_notes,
           l.application_status, l.applied_at
         FROM jobs j
         JOIN scores         s  ON s.job_id  = j.job_id AND s.run_id  = j.run_id
         JOIN judge_verdicts jv ON jv.job_id = j.job_id AND jv.run_id = j.run_id
         LEFT JOIN LATERAL (
-          SELECT content, file_path, pdf_path, word_count, flags
+          SELECT content, file_path, pdf_path, word_count, flags, meta_path
           FROM cover_letters WHERE job_id = j.job_id ORDER BY generated_at DESC NULLS LAST LIMIT 1
         ) cl ON true
         LEFT JOIN LATERAL (
-          SELECT pdf_path, word_count, flags
+          SELECT pdf_path, word_count, flags, meta_path
           FROM tailored_resumes WHERE job_id = j.job_id ORDER BY generated_at DESC NULLS LAST LIMIT 1
         ) tr ON true
         LEFT JOIN labels        l  ON l.job_id  = j.job_id AND l.run_id  = j.run_id
@@ -119,11 +125,38 @@ async function main() {
         const rf = row.resume_flags as string[] | null;
         const cf = row.cover_flags as string[] | null;
         row.artifact_flags = [...(rf ?? []), ...(cf ?? [])];
+
+        // Attach risk_summary + export_status from meta.json for latest resume/cover
+        const resumeMetaPath = row.resume_meta_path as string | null;
+        const coverMetaPath  = row.cover_meta_path  as string | null;
+        if (resumeMetaPath) {
+          try {
+            const metaAbs = path.join(REPO_ROOT, resumeMetaPath);
+            if (fs.existsSync(metaAbs)) {
+              const meta = JSON.parse(fs.readFileSync(metaAbs, 'utf8'));
+              row.resume_risk_summary  = meta?.resume?.risk_summary  ?? null;
+              row.resume_export_status = meta?.resume?.export_status ?? 'ok';
+            }
+          } catch { /* best-effort */ }
+        }
+        if (coverMetaPath) {
+          try {
+            const metaAbs = path.join(REPO_ROOT, coverMetaPath);
+            if (fs.existsSync(metaAbs)) {
+              const meta = JSON.parse(fs.readFileSync(metaAbs, 'utf8'));
+              row.cover_risk_summary  = meta?.cover_letter?.risk_summary  ?? null;
+              row.cover_export_status = meta?.cover_letter?.export_status ?? 'ok';
+            }
+          } catch { /* best-effort */ }
+        }
+
         delete row.cover_letter_path;
         delete row.resume_pdf_path;
         delete row.cover_pdf_path;
         delete row.resume_flags;
         delete row.cover_flags;
+        delete row.resume_meta_path;
+        delete row.cover_meta_path;
         return row;
       });
       res.json(rows);

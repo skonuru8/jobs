@@ -62,11 +62,13 @@ import { generateAndSaveResume } from "@/resume-generator/index";
 import type { ResumeGenConfig } from "@/resume-generator/types";
 
 import { buildResumeBriefFromCanonicalTex } from "@/cover-letter/resume-brief";
-import { extractRolesFromCanonicalResume } from "@/judge/roles-extractor";
+import { extractRolesFromCanonicalResume, extractSkillsSectionFromCanonical } from "@/judge/roles-extractor";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
+import { makeRunFolderName } from "@/applications/run-folder";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
 import { makeJobSlug } from "@/shared/slug";
+import { loadRiskMap, auditTailoredArtifact } from "@/risk-map";
 
 // Dedup + storage — gracefully disabled via SKIP_DEDUP=1 / SKIP_PERSIST=1
 import {
@@ -76,6 +78,7 @@ import {
 import {
   runMigrations, saveRun, finishRun, saveJob, closePool,
   insertTailoredResumeArtifact, insertCoverLetterArtifact,
+  insertLedgerEntries,
 } from "@/storage/index";
 import type { JobRecord } from "@/storage/types";
 
@@ -200,6 +203,10 @@ async function main(): Promise<void> {
   };
   const scoringThreshold: number = config.scoring?.gate_threshold ?? 0.55;
 
+  // --- Load tech equivalence risk map ---
+  loadRiskMap(REPO_ROOT);
+  log(`[init] risk map loaded`);
+
   // --- Load skill aliases ---
   if (!fs.existsSync(SKILLS_PATH)) {
     die(`Skills not found at ${SKILLS_PATH}`);
@@ -284,19 +291,25 @@ async function main(): Promise<void> {
 
   // --- Process ---
   const nowIso  = new Date().toISOString();
+  const runStartedAt = new Date(nowIso);
+  const runFolderName = makeRunFolderName(runStartedAt, RUN_ID);
   const resumeBrief = canonicalResumeTex
     ? buildResumeBriefFromCanonicalTex(canonicalResumeTex)
     : { summary_metrics: [] as string[], recent_roles: [] as string[], flagship_projects: [] as string[] };
+  const canonicalTexPath = path.join(REPO_ROOT, "config", "resume_master.tex");
   const rolesList = canonicalResumeTex
-    ? extractRolesFromCanonicalResume(path.join(REPO_ROOT, "config", "resume_master.tex"))
+    ? extractRolesFromCanonicalResume(canonicalTexPath)
+    : "";
+  const canonicalSkillsText = canonicalResumeTex
+    ? extractSkillsSectionFromCanonical(canonicalTexPath)
     : "";
 
   const results = await processJobs(
     jsonlPath, profile, aliases,
     extractorConfig, judgeConfig, coverLetterConfig, resumeGeneratorConfig,
     scoringWeights, scoringThreshold,
-    profileEmbedding, resumeText, canonicalResumeTex, resumeBrief, rolesList, nowIso,
-    REPO_ROOT, RUN_ID, DO_RESUME_ARTIFACT, DO_COVER_ARTIFACT,
+    profileEmbedding, resumeText, canonicalResumeTex, resumeBrief, rolesList, canonicalSkillsText, nowIso,
+    REPO_ROOT, RUN_ID, runFolderName, DO_RESUME_ARTIFACT, DO_COVER_ARTIFACT,
   );
 
   let artifactIn = 0;
@@ -439,9 +452,11 @@ async function processJobs(
   canonicalResumeTex:  string | null,
   resumeBrief:         ResumeBrief,
   rolesList:           string,
+  canonicalSkillsText: string,
   nowIso:              string,
   repoRoot:            string,
   runIdForArtifacts:   string,
+  runFolderName:       string,
   doResumeArtifact:    boolean,
   doCoverArtifact:     boolean,
 ): Promise<JobResult[]> {
@@ -776,8 +791,9 @@ async function processJobs(
             location:  scoreResult.components.location,
           },
         },
-        profile:    profile as Profile,
-        roles_list: rolesList || undefined,
+        profile:          profile as Profile,
+        roles_list:       rolesList || undefined,
+        canonical_skills: canonicalSkillsText || undefined,
       };
 
       judgeResult = await judge(judgeInput, judgeConfigArg);
@@ -843,7 +859,8 @@ async function processJobs(
           },
           jobId,
         );
-        const jobFolderAbs = path.join(repoRoot, "output", "applications", jobSlug);
+        const runDir = path.join(repoRoot, "output", "applications", runFolderName);
+        const jobFolderAbs = path.join(runDir, jobSlug);
 
         log(`[${n}]  Generating resume + cover letter → ${jobSlug}...`);
 
@@ -861,6 +878,43 @@ async function processJobs(
               })
             : Promise.resolve(null),
         ]);
+
+        // --- Post-generation audit (risk map ledger) ---
+        if (resumeOutcome?.tex_path) {
+          try {
+            const resumeTex = fs.readFileSync(resumeOutcome.tex_path, "utf8");
+            const { summary, ledger } = auditTailoredArtifact({
+              tailoredText:  resumeTex,
+              canonicalText: bundle.canonical_resume_tex,
+              jobId,
+              runId:         runIdForArtifacts,
+              artifactType:  "resume",
+            });
+            (resumeOutcome.meta as Record<string, unknown>).risk_summary  = summary;
+            (resumeOutcome.meta as Record<string, unknown>).export_status = summary.human_review_items.length > 0 ? "needs_review" : "ok";
+            if (!SKIP_PERSIST) await insertLedgerEntries(ledger);
+          } catch (e) {
+            log(`[${n}]  audit(resume) failed: ${e}`);
+          }
+        }
+
+        if (coverOutcome?.tex_path) {
+          try {
+            const coverTex = fs.readFileSync(coverOutcome.tex_path, "utf8");
+            const { summary, ledger } = auditTailoredArtifact({
+              tailoredText:  coverTex,
+              canonicalText: bundle.canonical_resume_tex,
+              jobId,
+              runId:         runIdForArtifacts,
+              artifactType:  "cover_letter",
+            });
+            (coverOutcome.meta as Record<string, unknown>).risk_summary  = summary;
+            (coverOutcome.meta as Record<string, unknown>).export_status = summary.human_review_items.length > 0 ? "needs_review" : "ok";
+            if (!SKIP_PERSIST) await insertLedgerEntries(ledger);
+          } catch (e) {
+            log(`[${n}]  audit(cover) failed: ${e}`);
+          }
+        }
 
         writeCombinedMeta(
           jobFolderAbs,

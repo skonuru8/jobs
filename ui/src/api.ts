@@ -29,6 +29,27 @@ export interface ApplyQueueRow {
   applied_at: string | null;
   /** Link to saved job_description.md under output/applications/<slug>/ */
   job_description_url?: string | null;
+  resume_risk_summary?:  RiskSummary | null;
+  resume_export_status?: "ok" | "needs_review";
+  cover_risk_summary?:   RiskSummary | null;
+  cover_export_status?:  "ok" | "needs_review";
+}
+
+export interface RiskSummary {
+  counts: {
+    exact:                 number;
+    reworded:              number;
+    direct_equivalent:     number;
+    adjacent:              number;
+    unsupported_inference: number;
+    fabricated:            number;
+  };
+  human_review_items: Array<{
+    text:         string;
+    relationship: string;
+    reason:       string;
+  }>;
+  total_claims_audited: number;
 }
 
 export interface HardRejectionRow {

@@ -24,6 +24,11 @@ export const JudgeFieldsSchema = z.object({
     emphasize_skills:     z.array(z.string()).optional(),
     downplay_skills:      z.array(z.string()).optional(),
     domain_reframe_angle: z.string().optional(),
+    tech_swaps: z.array(z.object({
+      from:       z.string(),
+      to:         z.string(),
+      confidence: z.number(),
+    })).optional(),
   }).optional(),
 });
 
