@@ -107,7 +107,8 @@ Return JSON with exactly this shape:
     "emphasize_roles": ["role names from work history that should lead the resume"],
     "emphasize_skills": ["skills from candidate profile that should appear prominently"],
     "downplay_skills": ["skills present in canonical but not relevant to this JD"],
-    "domain_reframe_angle": "If JD requires a domain the candidate hasn't directly worked in, the honest reframe — else empty string"
+    "domain_reframe_angle": "If JD requires a domain the candidate hasn't directly worked in, the honest reframe — else empty string",
+    "tech_swaps": [{"from": "Camunda BPMN", "to": "Flowable", "confidence": 0.9}]
   }
 }
 
@@ -117,6 +118,7 @@ GUIDANCE FOR THE NEW FIELDS:
 - why_apply: NOT generic. Name a domain, project, team, or stated company value from the JD that intersects the candidate's history.
 - tailoring_hints.emphasize_roles: pull from CANDIDATE WORK HISTORY block above by exact role string.
 - tailoring_hints.emphasize_skills / downplay_skills: pull from the candidate profile skills, NOT invent new ones.
+- tailoring_hints.tech_swaps: emit ONLY when a JD required_skill has risk_entry.relationship === "direct_equivalent" AND risk_entry.swap_allowed === true. from = risk_entry.candidate_source_skill, to = risk_entry.target_skill, confidence = risk_entry.confidence. Empty array when no swaps apply.
 - Empty arrays/strings are fine when nothing applies. Do not invent.
 
 RISK MAP USAGE (CRITICAL):

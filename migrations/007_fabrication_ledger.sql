@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS fabrication_ledger (
   id                       SERIAL PRIMARY KEY,
-  job_id                   TEXT NOT NULL REFERENCES jobs(job_id),
+  job_id                   TEXT NOT NULL,
   run_id                   UUID,
   artifact_type            TEXT NOT NULL CHECK (artifact_type IN ('resume', 'cover_letter')),
 

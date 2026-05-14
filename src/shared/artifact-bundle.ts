@@ -9,7 +9,7 @@ import type { JudgeResult, JudgeFields, JudgeGap } from "@/judge/types";
 import type { ScoreResult } from "@/scorer/types";
 import type { CoverLetterInput } from "@/cover-letter/types";
 import type { ResumeBrief } from "@/cover-letter/resume-brief";
-import { lookupJdSkill, isRiskMapLoaded } from "@/risk-map";
+import { lookupJdSkill } from "@/risk-map";
 
 export { makeJobSlug, slugify } from "./slug";
 
@@ -114,14 +114,12 @@ export function buildArtifactBundle(args: {
     meta:             { posted_at: sanitized.meta.posted_at, source_url: sanitized.meta.source_url },
   };
 
-  if (isRiskMapLoaded()) {
-    const required = (sanitized.required_skills ?? []);
-    const enriched = required.map(s => ({
-      ...s,
-      risk_entry: lookupJdSkill(s.name),
-    }));
-    jd_json.required_skills_with_risk = enriched;
-  }
+  const required = (sanitized.required_skills ?? []);
+  const enriched = required.map(s => ({
+    ...s,
+    risk_entry: lookupJdSkill(s.name),
+  }));
+  jd_json.required_skills_with_risk = enriched;
 
   const judge_json = judgeJsonFromResult(judgeResult);
 

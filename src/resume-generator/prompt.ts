@@ -68,9 +68,9 @@ this message is the sole and authoritative source.
 
 --- TECH SWAPS ---
 If JUDGE_JSON contains tailoring_hints.tech_swaps with entries, apply those swaps across
-the canonical resume content. Replace each `from` with the corresponding `to` everywhere
-it appears (Skills section, bullets, summary). This is a Mode B substitution — no
-surrounding word changes, replace only the technology name itself.
+the canonical resume content. Replace each "from" value with the corresponding "to" value
+everywhere it appears (Skills section, bullets, summary). This is a Mode B substitution —
+no surrounding word changes, replace only the technology name itself.
 
 --- LENGTH CONSTRAINT ---
 Word count of the rendered text (ignoring LaTeX commands): between 1900 and 2500.

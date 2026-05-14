@@ -4,7 +4,7 @@ This document covers:
 
 - **Section 6** — configuration reference (`config/*.json`, scoring weights, filter rules, judge prompt shape)
 - **Section 7** — operational guide (logs, common failures, calibration, adding sources)
-- **Section 8** — decision log (architectural deviations carried forward in `THE-BIBLE-v7.md`)
+- **Section 8** — decision log (architectural deviations carried forward in `THE-BIBLE-LATEST.md`)
 
 ---
 
@@ -318,7 +318,7 @@ Collect ~50+ labeled jobs through the Review UI, then tune weights using `script
 
 ## 8. Decision Log
 
-This captures the major architectural decisions/deviations documented in `THE-BIBLE-v7.md` (carried forward).
+This captures the major architectural decisions/deviations documented in `THE-BIBLE-LATEST.md` (carried forward).
 
 ### 8.1 Orchestration: BullMQ per-stage queues → run-level orchestration
 

@@ -1,6 +1,6 @@
 # Project Documentation — job-hunter
 
-> This documentation is generated from the codebase and `THE-BIBLE-v7.md` and is intended to be **self-contained**.
+> This documentation is generated from the codebase and `THE-BIBLE-LATEST.md` and is intended to be **self-contained**.
 >
 > If you are reading this with no prior context, start with “How to Run the App”, then “Architecture and Flow”.
 

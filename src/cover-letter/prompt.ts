@@ -32,7 +32,7 @@ Do not pad with generic filler. Do not repeat earlier paragraphs.
 
 TECH SWAPS:
 If judge.tailoring_hints.tech_swaps is non-empty, apply those swaps when referencing
-technologies. Replace each `from` skill with the corresponding `to` skill everywhere
+technologies. Replace each "from" skill with the corresponding "to" skill everywhere
 it appears. This is a Mode B substitution — no surrounding word changes.
 
 STYLE:
