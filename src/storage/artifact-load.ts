@@ -3,7 +3,7 @@
  */
 
 import type { Job, JobMeta, JobLocation } from "@/filter/types";
-import type { JudgeResult, JudgeVerdict, JudgeFields } from "@/judge/types";
+import type { JudgeResult, JudgeVerdict, JudgeFields, GapDirective, TailoringHints } from "@/judge/types";
 import type { ScoreResult } from "@/scorer/types";
 import { DEFAULT_THRESHOLD, DEFAULT_WEIGHTS } from "@/scorer/score";
 
@@ -119,6 +119,12 @@ export async function fetchLatestJobSnapshotForArtifacts(
       : [];
 
     const verdict = (row.jv_verdict ?? null) as JudgeVerdict | null;
+    const tailoringHints = row.jv_tailoring_hints && typeof row.jv_tailoring_hints === "object"
+      ? (row.jv_tailoring_hints as TailoringHints)
+      : undefined;
+    const gapDirectives = Array.isArray(tailoringHints?.gap_directives)
+      ? (tailoringHints.gap_directives as GapDirective[])
+      : undefined;
     const fields: JudgeFields | null = verdict
       ? {
           verdict,
@@ -127,11 +133,9 @@ export async function fetchLatestJobSnapshotForArtifacts(
           confidence: row.jv_confidence != null ? Number(row.jv_confidence) : undefined,
           key_matches: Array.isArray(row.jv_key_matches) ? (row.jv_key_matches as string[]) : undefined,
           gaps: Array.isArray(row.jv_gaps) ? (row.jv_gaps as JudgeFields["gaps"]) : undefined,
+          gap_directives: gapDirectives,
           why_apply: row.jv_why_apply ?? undefined,
-          tailoring_hints:
-            row.jv_tailoring_hints && typeof row.jv_tailoring_hints === "object"
-              ? (row.jv_tailoring_hints as JudgeFields["tailoring_hints"])
-              : undefined,
+          tailoring_hints: tailoringHints,
         }
       : null;
 

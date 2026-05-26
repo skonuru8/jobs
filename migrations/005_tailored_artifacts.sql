@@ -1,5 +1,7 @@
--- 005_tailored_artifacts.sql — tailored resumes + versioned cover letters
--- Idempotent where possible.
+-- 005_tailored_artifacts.sql — tailored_resumes table.
+-- Note: cover_letters versioning was originally added here but was superseded
+-- by 006_consolidate_artifacts.sql (surrogate id PK, no version column).
+-- The cover_letters block was removed to make this file replay-safe.
 
 -- -------------------------------------------------------------------------
 -- tailored_resumes — one row per (job_id, version)
@@ -28,39 +30,3 @@ CREATE TABLE IF NOT EXISTS tailored_resumes (
 
 CREATE INDEX IF NOT EXISTS idx_tailored_resumes_job ON tailored_resumes(job_id);
 CREATE INDEX IF NOT EXISTS idx_tailored_resumes_run ON tailored_resumes(run_id);
-
--- -------------------------------------------------------------------------
--- cover_letters — add versioning + artifact paths
--- -------------------------------------------------------------------------
-ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS version          INT;
-ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS tex_path         TEXT;
-ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS pdf_path         TEXT;
-ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS meta_path        TEXT;
-ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS prompt_sha       TEXT;
-ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS canonical_sha    TEXT;
-ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS input_tokens     INT;
-ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS output_tokens    INT;
-ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS compile_status   TEXT NOT NULL DEFAULT 'ok';
-ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS generated_by     TEXT NOT NULL DEFAULT 'pipeline';
-ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS flags            TEXT[] DEFAULT '{}';
-
-UPDATE cover_letters cl
-SET version = sub.v
-FROM (
-  SELECT job_id, run_id,
-         ROW_NUMBER() OVER (
-           PARTITION BY job_id
-           ORDER BY generated_at NULLS LAST, run_id
-         )::INT AS v
-  FROM cover_letters
-  WHERE version IS NULL
-) sub
-WHERE cl.job_id = sub.job_id AND cl.run_id = sub.run_id AND cl.version IS NULL;
-
-UPDATE cover_letters SET version = 1 WHERE version IS NULL;
-
-ALTER TABLE cover_letters DROP CONSTRAINT IF EXISTS cover_letters_pkey;
-
-ALTER TABLE cover_letters ADD CONSTRAINT cover_letters_pkey PRIMARY KEY (job_id, version);
-
-CREATE INDEX IF NOT EXISTS idx_cover_letters_job ON cover_letters(job_id);

@@ -53,6 +53,7 @@ export function writeCombinedMeta(
       concerns,
       key_matches: judge.key_matches ?? [],
       gaps:        judge.gaps ?? [],
+      gap_directives: judge.gap_directives ?? [],
       why_apply:   judge.why_apply ?? null,
       tailoring_hints: judge.tailoring_hints ?? {},
     },

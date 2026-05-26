@@ -29,6 +29,8 @@ function toResumeInput(bundle: ArtifactBundleOk): ResumeGenInput {
     judge_json: bundle.judge_json,
     score: bundle.score,
     canonical_sha: bundle.canonical_sha,
+    gap_directives: bundle.judge_json.gap_directives,
+    tech_swaps: bundle.judge_json.tailoring_hints?.tech_swaps,
   };
 }
 

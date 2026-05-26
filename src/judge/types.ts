@@ -56,11 +56,39 @@ export interface JudgeInput {
 // ---------------------------------------------------------------------------
 
 export type JudgeVerdict = "STRONG" | "MAYBE" | "WEAK";
+export type GapHandling = "fabricate" | "reframe" | "acknowledge" | "ignore" | "forbid";
 
 export interface JudgeGap {
   requirement:   string;
   severity:        "minor" | "moderate" | "major";
   reframe_angle:   string;
+}
+
+export interface GapDirective {
+  jd_requirement: string;
+  handling: GapHandling;
+  target_role: string | null;
+  frame_as: string | null;
+}
+
+export interface TechSwap {
+  from: string;
+  to: string;
+  confidence: number;
+  target_role?: string | null;
+}
+
+export interface TailoringHints {
+  emphasize_roles?:      string[];
+  emphasize_skills?:     string[];
+  downplay_skills?:      string[];
+  domain_reframe_angle?: string;
+  tech_swaps?:           TechSwap[];
+  /**
+   * Storage mirror for v5 gap directives so DB round-trips stay additive
+   * without needing a new judge_verdicts column.
+   */
+  gap_directives?:       GapDirective[];
 }
 
 export interface JudgeFields {
@@ -71,14 +99,9 @@ export interface JudgeFields {
   confidence?:      number;
   key_matches?:     string[];
   gaps?:            JudgeGap[];
+  gap_directives?:  GapDirective[];
   why_apply?:       string;
-  tailoring_hints?: {
-    emphasize_roles?:      string[];
-    emphasize_skills?:     string[];
-    downplay_skills?:      string[];
-    domain_reframe_angle?: string;
-    tech_swaps?: Array<{ from: string; to: string; confidence: number }>;
-  };
+  tailoring_hints?: TailoringHints;
 }
 
 export interface JudgeResult {

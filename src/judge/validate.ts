@@ -10,6 +10,20 @@ const judgeGap = z.object({
   reframe_angle:   z.string(),
 });
 
+const gapDirective = z.object({
+  jd_requirement: z.string().min(1),
+  handling: z.enum(["fabricate", "reframe", "acknowledge", "ignore", "forbid"]),
+  target_role: z.string().min(1).nullable(),
+  frame_as: z.string().min(1).nullable(),
+});
+
+const techSwap = z.object({
+  from: z.string(),
+  to: z.string(),
+  confidence: z.number(),
+  target_role: z.string().min(1).nullable().optional(),
+});
+
 export const JudgeFieldsSchema = z.object({
   verdict:   z.enum(["STRONG", "MAYBE", "WEAK"]),
   reasoning: z.string().min(1),
@@ -18,17 +32,15 @@ export const JudgeFieldsSchema = z.object({
   confidence:      z.number().min(0).max(1).optional(),
   key_matches:     z.array(z.string()).optional(),
   gaps:            z.array(judgeGap).optional(),
+  gap_directives:  z.array(gapDirective).optional(),
   why_apply:       z.string().optional(),
   tailoring_hints: z.object({
     emphasize_roles:      z.array(z.string()).optional(),
     emphasize_skills:     z.array(z.string()).optional(),
     downplay_skills:      z.array(z.string()).optional(),
     domain_reframe_angle: z.string().optional(),
-    tech_swaps: z.array(z.object({
-      from:       z.string(),
-      to:         z.string(),
-      confidence: z.number(),
-    })).optional(),
+    tech_swaps: z.array(techSwap).optional(),
+    gap_directives: z.array(gapDirective).optional(),
   }).optional(),
 });
 

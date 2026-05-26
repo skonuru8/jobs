@@ -1,79 +1,12 @@
-# THE BIBLE — v9 (2026-05-26)
+# THE BIBLE — v8 (2026-05-14)
 
 > Project: **job-hunter** — automated job discovery + filter + score + judge + cover letter pipeline for Sarath Konuru.
 >
-> This is the authoritative document. Supersedes v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
+> This is the authoritative document. Supersedes v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
 >
 > Read this before writing code. Update this file when module status changes.
 >
-> Historical archive: `THE-BIBLE-v1.md` through `THE-BIBLE-v8.md` and `THE_BIBLE_V8_UPDATES.md` are immutable references. Do NOT edit them. Only this file rolls forward.
-
----
-
-## What changed since v8
-
-Ten waves of work landed between v8 and v9.
-
-**Wave 1 — Bug 1 (session 3, locked decision): cover_letters FK ordering fixed.**
-`scripts/run-pipeline.ts` stage 16 now inserts artifact rows only after `saveJob`
-has created the parent `jobs` row. This preserves the intended "mid-run crash →
-retry" semantics while removing the FK-ordering failure that could strand a run
-half-persisted.
-
-**Wave 2 — Resume generator simplification.**
-`src/resume-generator/index.ts` no longer retries generation solely because the
-word count is below 1900. The generator still emits the `resume_too_short` flag
-for visibility. The TECH SWAPS prompt block was also trimmed and clarified.
-
-**Wave 3 — Canonical resume header fix (Bug A).**
-`config/resume_master.tex` no longer contains the placeholder
-`mailto:your@email.com`; the canonical resume now carries the real address.
-
-**Wave 4 — Cover letter LaTeX location-line fix (Bug B).**
-`formatProfileLocationLine` in `src/shared/artifact-bundle.ts` no longer feeds
-`\quad` through `escapeLatexPlain`, eliminating the literalized spacing bug in
-cover letter headers.
-
-**Wave 5 — Cover letter role-attribution fabrication fix (Bug E).**
-`src/cover-letter/resume-brief.ts` now uses
-`buildExperienceBlockFromCanonicalTex()` to slice the EXPERIENCE section
-verbatim from `config/resume_master.tex`. The old flattened
-`summary_metrics[]` / `recent_roles[]` / `flagship_projects[]` path is gone.
-`src/cover-letter/prompt.ts` now carries a non-negotiable employer-attribution
-rules block plus a paragraph-scope employer rule. Related wiring touched
-`src/cover-letter/types.ts`, `src/shared/artifact-bundle.ts`,
-`scripts/run-pipeline.ts`, and `src/artifacts/manual-generate.ts`.
-
-**Wave 6 — Audit role-attribution blind-spot fix (Bug F).**
-`src/risk-map/audit.ts` now includes `auditRoleAttribution()`, which diffs
-generated `\item` strings against canonical bullets per role and flags tech in
-new unmatched bullets. Bold-text token extraction was added as a fallback when
-registry matching misses. New ledger row type:
-`fabricated_role_attribution`. New counter:
-`risk_summary.counts.fabricated_role_attribution`. The
-`fabrication_ledger` table schema did not change.
-
-**Wave 7 — Migration cleanup.**
-`migrations/005_tailored_artifacts.sql` was cleaned up so it creates only
-`tailored_resumes` plus its two indexes. The old `cover_letters` block was
-removed because `006_consolidate_artifacts.sql` supersedes it, and the transient
-`version` column plus `UNIQUE(job_id, version)` were removed because 006 drops
-them immediately. Replay safety against the current 006-shaped DB is preserved.
-
-**Wave 8 — Orchestrator log filenames.**
-`src/orchestrator/monitor.ts` and `src/orchestrator/runner.ts` now write
-timestamped, source-labeled filenames such as
-`log_2026-05-26T02-45-00_linkedin_12345678.log`.
-
-**Wave 9 — Repo hygiene.**
-The caveman skill files were removed from git tracking and added to `.gitignore`.
-
-**Wave 10 — Judge v5 additive planner.**
-Judge output now supports employer-scoped fabrication planning without adding
-new modules, new tables, or new LLM calls. v5 adds optional
-`gap_directives[]` plus optional `target_role` on
-`tailoring_hints.tech_swaps[]`. Resume and cover-letter generators consume these
-fields additively and fall back to v4 behavior when they are absent.
+> Historical archive: `THE-BIBLE-v1.md` through `THE-BIBLE-v7.md` and `THE_BIBLE_V8_UPDATES.md` are immutable references. Do NOT edit them. Only this file rolls forward.
 
 ---
 
@@ -229,7 +162,7 @@ The pipeline is a 19-stage flow inside one `main()` function in `scripts/run-pip
 | 12 | Score (5 components: skills 0.35, semantic 0.25, yoe 0.15, seniority 0.15, location 0.10) | scoring disabled |
 | 12.5 | **Cross-site semantic dedup (pgvector)** — only on GATE_PASS jobs with embedding | `SKIP_DEDUP=1` or DB down |
 | 13 | Threshold gate: score ≥ 0.50 → GATE_PASS, else ARCHIVE | scoring disabled |
-| 14 | LLM judge — STRONG / MAYBE / WEAK + reasoning + concerns + optional v5 `gap_directives[]` + scoped `tailoring_hints.tech_swaps[]` | judge disabled |
+| 14 | LLM judge — STRONG / MAYBE / WEAK + reasoning + concerns | judge disabled |
 | 15 | Bucket routing: STRONG+score≥0.70→COVER_LETTER, STRONG+score<0.70→RESULTS, MAYBE→REVIEW_QUEUE, WEAK→ARCHIVE | — |
 | 16 | Cover letter (COVER_LETTER bucket always; REVIEW_QUEUE if score ≥ review_queue_threshold) → write `.md` to `output/cover-letters/{run_id}/{bucket}/` | cover disabled |
 | 17 | Persist all of the above to Postgres in one transaction; mark seen in Redis | `SKIP_PERSIST=1` / `SKIP_DEDUP=1` |
@@ -317,10 +250,8 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 | JD fetcher | ✅ Green | 16 tests |
 | Extractor | ✅ Green | 21 tests + 5 real-data fixtures (jd-real-001..005) |
 | Scorer (5 components + bge embeddings) | ✅ Green | 44 tests |
-| LLM judge | ✅ Green (v5 additive planner) | 30 tests + v5 schema coverage |
-| Resume generator | ✅ Green (v5 prompt consumer) | wired in pipeline + v5 prompt coverage |
-| Cover letter generator | ✅ Green (v5 prompt consumer) | wired in pipeline + v5 prompt coverage |
-| Risk map / audit | ✅ Green (role-attribution audit shipped) | fabrication ledger + Bug F coverage |
+| LLM judge | ✅ Green | 30 tests (10 fixtures + bucket logic) |
+| Cover letter generator | ✅ Green | wired in pipeline |
 | Dedup module (Redis + pgvector) | ✅ Green | 7 tests |
 | Storage (Postgres + pgvector) | ✅ Green | 14 tests |
 | Storage v4.1 hardening | ✅ Applied | saveJob crash fixed, formatErr, markStorageDisabled |
@@ -392,58 +323,17 @@ OpenRouter client (no SDK dependency, raw fetch).
 
 Real-data validation confirmed (2026-04-25): scores 0.777–0.790 across 4 Dice jobs. Components behave as designed — `seniority=1.00` and `location=1.00` for senior roles in Sarath's market, `semantic=0.57–0.66` reflecting embedding quality.
 
-### `judge/` — BUILT (v5)
+### `judge/` — BUILT
 
-LLM judge stage. Inputs: structured job fields + score breakdown (NOT raw JD text). Output is still additive JSON with `{verdict, reasoning, concerns[]}` at the core, plus optional v4/v5 context fields. v5 adds:
-
-- top-level optional `gap_directives[]`
-- optional `target_role` on each `tailoring_hints.tech_swaps[]`
-
-`gap_directives[]` entries are:
-
-- `jd_requirement`
-- `handling`: `fabricate | reframe | acknowledge | ignore | forbid`
-- `target_role`: exact employer header from the canonical experience block, or `null`
-- `frame_as`: generator-facing framing string, or `null`
-
-Backward-compat rule: if `gap_directives` is missing or empty, generators behave exactly like v4. If a tech swap omits `target_role`, the swap remains unscoped.
-
-Two retry layers remain: HTTP-level (1 retry on network error, 2s backoff) and validation-level (1 retry on Zod failure, 2s backoff). `getBucket(judgeResult, totalScore)` still routes STRONG+score≥0.70 → COVER_LETTER, STRONG+score<0.70 → RESULTS, MAYBE → REVIEW_QUEUE, WEAK or judge error → ARCHIVE.
+LLM judge stage. Inputs: structured job fields + score breakdown (NOT raw JD text). Output: `{verdict: STRONG|MAYBE|WEAK, reasoning, concerns[]}`. Two retry layers: HTTP-level (1 retry on network error, 2s backoff) and validation-level (1 retry on Zod failure, 2s backoff). `getBucket(judgeResult, totalScore)` does the routing — STRONG+score≥0.70 → COVER_LETTER, STRONG+score<0.70 → RESULTS, MAYBE → REVIEW_QUEUE, WEAK or judge error → ARCHIVE.
 
 Real-data validation confirmed (2026-04-25): judge correctly identified Citi (named enterprise, fintech domain) and TD Bank (major bank, fintech domain) as STRONG; correctly flagged KeyCorp as MAYBE for React gap; correctly flagged staffing agency role as MAYBE for unnamed end client.
 
-### `cover-letter/` — BUILT (v5 consumer)
+### `cover-letter/` — BUILT
 
 Model switched from `google/gemma-4-31b-it` to `deepseek/deepseek-v4-flash` since v5. Run-scoped output dirs (`output/cover-letters/{run_id}/{bucket}/`). Bucket subfolders separate `COVER_LETTER` from `REVIEW_QUEUE` for triage. Retry-once on timeout with 2s backoff.
 
-Current brief source is the verbatim EXPERIENCE slice built by
-`src/cover-letter/resume-brief.ts::buildExperienceBlockFromCanonicalTex()`.
-The prompt includes a non-negotiable employer-attribution rules block and a
-paragraph-scope employer rule to stop cross-employer fabrication (Bug E).
-v5 gap-directive consumption is additive:
-
-- `acknowledge` directives are surfaced explicitly for honest body coverage
-- `fabricate` directives are surfaced as silent claim guidance
-- `forbid` directives are listed as never-claim constraints
-- if directives are absent, the prompt stays at v4 behavior
-
 Real-data validation confirmed (2026-04-25): 4 cover letters generated, 206–243 words each. COVER_LETTER and REVIEW_QUEUE subfolders populated correctly.
-
-### `resume-generator/` — BUILT (v5 consumer)
-
-Total-mode LaTeX tailoring remains the only execution path. The old
-word-count-based retry path (`word_count < 1900`) was removed from
-`src/resume-generator/index.ts`; short outputs are now flagged with
-`resume_too_short` but not regenerated automatically.
-
-v5 prompt consumption is additive:
-
-- scoped `tailoring_hints.tech_swaps[]` now honor `target_role` when present
-- optional `gap_directives[]` drive fabricate/reframe/forbid guidance
-- absent fields fall back to the exact v4 behavior
-
-No new LLM call was added; the same single resume-generation call now receives
-more structured judge context.
 
 ### `dedup/` — BUILT
 
@@ -461,27 +351,12 @@ Postgres + pgvector persistence.
 
 - `src/storage/db.ts` — `pg.Pool` singleton with `describeErr` formatting on the error listener.
 - `src/storage/persist.ts` — `saveRun`, `finishRun`, `saveJob`, `isSeenInDB`. All non-throwing. v4.1: `pool.connect()` inside try block, `markStorageDisabled`, `formatErr`. v5.1 additions: `updateHeartbeat` (Postgres helper — available for callers; the orchestrator runner writes heartbeats via its own inline SQL rather than calling this function), `markRunExitCode` (same — available but runner writes exit code via its own SQL; ghost reaper calls this directly), `getUnfinishedRuns` (ghost reaper query — hits partial index), `getRunStats` (monitor post-run check).
-- Persistence note: the silent-error swallow / `markStorageDisabled` / "continuing without persistence" behavior remains in place by locked decision. The `005_tailored_artifacts.sql` cleanup removed the most common migration-replay cascade, but the gating model itself is unchanged.
 - `src/storage/migrate.ts` — runs SQL files in `migrations/` in alphabetical order.
 - `src/storage/integrity.ts` — `verifyIntegrity`. Gated on `VERIFY=1`.
 - `src/storage/types.ts` — `RunRecord`, `RunStats` (gains `extractions_attempted`, `extractions_succeeded` in v5.1), `JobRecord`.
 - `migrations/001_initial.sql` — full schema (unchanged from v5).
 - `migrations/002_orchestrator.sql` — new in v5.1: 4 columns + partial index on `runs`.
-- `migrations/005_tailored_artifacts.sql` — cleaned up to create only `tailored_resumes` + two indexes. The stale `cover_letters` block and transient `version` column were removed to stay replay-safe with `006_consolidate_artifacts.sql`.
 - `test/persist.test.ts` — 14 tests. All pass against updated `finishRun` — disabled-state tests don't touch SQL, compile-time enforcement handles the new fields at the call site.
-
-### `risk-map/` — BUILT (v2 / Bug F hardening)
-
-`src/risk-map/` now does two distinct jobs:
-
-- pre-judge risk enrichment for JD skills
-- post-generation audit of tailored artifacts
-
-`src/risk-map/audit.ts` includes `auditRoleAttribution()`, which compares
-generated bullets to canonical bullets per employer and flags role-mixing tech
-claims. New ledger change type: `fabricated_role_attribution`. New summary
-counter: `risk_summary.counts.fabricated_role_attribution`. The underlying
-`fabrication_ledger` table schema is unchanged.
 
 ### `ui-server` + `ui/` — BUILT (new in v7)
 
@@ -518,7 +393,7 @@ cd ui && npm run dev                 # → http://localhost:5173 (proxies /api �
 cd ui && npm run build               # → ui/dist/
 ```
 
-### `orchestrator/` — BUILT (new in v6, log naming refreshed in v9)
+### `orchestrator/` — BUILT (new in v6)
 
 Run-level orchestration. Schedules `run-pipeline.ts` via node-cron, prevents overlapping runs with a Redis lock, captures failures, and emits warnings on degraded conditions. Zero changes to `run-pipeline.ts` beyond the `RUN_ID` env var and the two `finishRun` fields.
 
@@ -526,9 +401,9 @@ Run-level orchestration. Schedules `run-pipeline.ts` via node-cron, prevents ove
 
 - `src/orchestrator/index.ts` — entry point. Boots cron schedules, handles SIGTERM/SIGINT (stops new ticks, allows in-flight runs to finish via runner's own SIGTERM forwarding). Unhandled rejection safety net logs and continues rather than crashing the scheduler.
 - `src/orchestrator/scheduler.ts` — cron definitions per source + ghost reaper tick. Uses a per-schedule `running` flag to guard against slow ticks overlapping with the next fire of the same expression.
-- `src/orchestrator/runner.ts` — acquires lock, spawns `run-pipeline.ts` as a child process, pipes stdout/stderr to both the terminal and timestamped source-labeled run logs, sends heartbeat `UPDATE` to Postgres every 60s via its own inline SQL (not via `src/storage/persist.ts`), writes `exit_code` on child exit via its own inline SQL, calls monitor, releases lock. SIGTERM forwarding: sends SIGTERM to child, waits 30s for clean exit, SIGKILLs if still running. `pLimit(5)` in the pipeline means in-flight jobs complete and `finishRun` runs cleanly before the process exits.
+- `src/orchestrator/runner.ts` — acquires lock, spawns `run-pipeline.ts` as a child process, pipes stdout/stderr to both the terminal and `output/logs/runs/{run_id}.log`, sends heartbeat `UPDATE` to Postgres every 60s via its own inline SQL (not via `src/storage/persist.ts`), writes `exit_code` on child exit via its own inline SQL, calls monitor, releases lock. SIGTERM forwarding: sends SIGTERM to child, waits 30s for clean exit, SIGKILLs if still running. `pLimit(5)` in the pipeline means in-flight jobs complete and `finishRun` runs cleanly before the process exits.
 - `src/orchestrator/lock.ts` — Redis `SET NX EX` wrapper. `acquireLock` returns `run_id` on success, `null` if held or Redis down. `releaseLock` uses `DEL` — idempotent, safe to call on missing or expired key. `REDIS_URL` read inside `getClient()` on each new client creation (not at module load), so tests can override the env var.
-- `src/orchestrator/monitor.ts` — post-run stats check. Three warning conditions: (1) `jobs_total === 0` — scraper produced nothing (broken selectors, auth expired, IP blocked); (2) `extractRate < 0.5 && attempted > 5` — extraction degraded (OpenRouter credits, rate limit); (3) `jobs_passed > 10 && jobs_covered === 0` — pipeline degraded end-to-end. Writes success line on clean runs. Run logs now include timestamp + source labels for easier triage. The `> 5` guard on condition 2 correctly suppresses the warning when all jobs were deduped before extraction ran (`attempted = 0`).
+- `src/orchestrator/monitor.ts` — post-run stats check. Three warning conditions: (1) `jobs_total === 0` — scraper produced nothing (broken selectors, auth expired, IP blocked); (2) `extractRate < 0.5 && attempted > 5` — extraction degraded (OpenRouter credits, rate limit); (3) `jobs_passed > 10 && jobs_covered === 0` — pipeline degraded end-to-end. Writes success line on clean runs. All output goes to `output/logs/orchestrator.log`. The `> 5` guard on condition 2 correctly suppresses the warning when all jobs were deduped before extraction ran (`attempted = 0`).
 
 **Cron schedule:**
 
@@ -874,8 +749,7 @@ redis-cli --scan --pattern 'orchestrator:lock:*'
 - `THE-BIBLE-v4.md` — v4 (2026-04-23) — milestones 4–6 shipped, real-data validation
 - `THE-BIBLE-v5.md` — v5 (2026-04-25) — milestone 7 shipped, dedup + storage + integrity + POSTED_WITHIN
 - `THE-BIBLE-v6.md` — v6 (2026-04-25) — milestone 8 shipped, orchestrator + storage v5.1 + end-to-end validation
-- `THE-BIBLE-LATEST.md` — v9 (2026-05-26) — current living document
-- `THE-BIBLE-v8.md` — v8 (2026-05-14) — immutable archive before the v9 refresh
+- `THE-BIBLE-v6.md` — v7 (2026-04-29) — **this document** — milestone 9 shipped, Review UI + migration 004 + UI Delta 2
 - `UI-BUILD-INSTRUCTIONS.md` — full spec for the Review UI (v1 base + Delta 2 changes)
 - `design-v4.md` — design doc covering scoring/judge contracts
 - `STORAGE-CHANGES.md` — v4.1 changeset detail (saveJob fix, formatErr, markStorageDisabled)
@@ -915,7 +789,7 @@ After v4 fixes, added the tech equivalence risk map at
 `config/tech-equivalence-risk-map.json` and wired it into the pipeline as follows:
 
 - `src/risk-map/` module loads the map at startup and exposes lookups + audit
-- Judge prompt v4/v5 attaches risk entries to JD skills and emits `tech_swaps`
+- Judge prompt v4 attaches risk entries to JD skills and emits `tech_swaps`
 - Resume + cover letter generators apply `tech_swaps` (Mode B substitution)
 - Post-generation audit grades every claim and writes ledger rows
 - `meta.json` per artifact has `risk_summary` + `export_status`
@@ -944,21 +818,6 @@ the system, modes return as a per-user setting.
 117 exact / 33 direct_equivalent / 20 adjacent / 0 high-risk. 35 human_review_items
 surfaced via yellow badge. `tech_swaps` key present in every artifact's
 `tailoring_hints` (empty array when no swap applies, which is correct).
-
-### 18.4 — Judge v5 additive planner
-
-Judge v5 extends the v4 risk-aware output without changing the number of model
-calls and without adding a new persistence column. Publicly, the schema adds:
-
-- top-level optional `gap_directives[]`
-- optional `target_role` on each `tailoring_hints.tech_swaps[]`
-
-`gap_directives[]` drive employer-scoped fabrication/reframe/acknowledge/ignore/
-forbid behavior in downstream generators. Storage remains additive by mirroring
-`gap_directives` into the persisted `tailoring_hints` JSONB blob for round-trip
-manual regeneration, while the in-memory generator contracts still expose
-`gap_directives` as a top-level field. If the judge omits the new fields, resume
-and cover-letter generation behave exactly as v4.
 
 **Ledger query for periodic audit:**
 ```sql

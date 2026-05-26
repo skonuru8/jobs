@@ -2,6 +2,8 @@
  * types.ts — input/output types for cover letter generation.
  */
 
+import type { GapDirective, TechSwap } from "@/judge/types";
+
 // ---------------------------------------------------------------------------
 // Job context passed to the generator
 // ---------------------------------------------------------------------------
@@ -66,6 +68,8 @@ export interface CoverLetterInput {
   resume: string | null;
   /** Verbatim EXPERIENCE slice from canonical resume (preferred over full resume). */
   experience_block?: string | null;
+  gap_directives?: GapDirective[];
+  tech_swaps?: TechSwap[];
 }
 
 // ---------------------------------------------------------------------------

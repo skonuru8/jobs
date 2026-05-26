@@ -5,7 +5,7 @@
 import * as crypto from "crypto";
 
 import type { Job, Profile } from "@/filter/types";
-import type { JudgeResult, JudgeFields, JudgeGap } from "@/judge/types";
+import type { JudgeResult, JudgeFields, JudgeGap, GapDirective, TechSwap } from "@/judge/types";
 import type { ScoreResult } from "@/scorer/types";
 import type { CoverLetterInput } from "@/cover-letter/types";
 import { lookupJdSkill } from "@/risk-map";
@@ -20,6 +20,7 @@ export type ArtifactJudgeJson = {
   confidence?: number;
   key_matches?: string[];
   gaps?:       JudgeGap[];
+  gap_directives?: GapDirective[];
   why_apply?:  string | null;
   tailoring_hints?: JudgeFields["tailoring_hints"];
 };
@@ -40,7 +41,7 @@ export interface ArtifactBundleOk {
 export type ArtifactBundle = ArtifactBundleOk | { ok: false; reason: string };
 
 export function hasExtendedJudgeContext(j: ArtifactJudgeJson): boolean {
-  return Boolean(j.key_matches?.length || j.gaps?.length || j.tailoring_hints);
+  return Boolean(j.key_matches?.length || j.gaps?.length || j.gap_directives?.length || j.tailoring_hints);
 }
 
 export function buildSlimJdForPrompts(jd: Record<string, unknown>): Record<string, unknown> {
@@ -147,6 +148,7 @@ function judgeJsonFromResult(judgeResult: JudgeResult | null): ArtifactJudgeJson
     confidence:        f.confidence,
     key_matches:       f.key_matches,
     gaps:              f.gaps,
+    gap_directives:    f.gap_directives,
     why_apply:         f.why_apply ?? null,
     tailoring_hints: f.tailoring_hints,
   };
@@ -208,6 +210,8 @@ export function coverLetterInputFromBundle(bundle: ArtifactBundleOk): CoverLette
     },
     resume:           null,
     experience_block: bundle.experience_block,
+    gap_directives:   bundle.judge_json.gap_directives,
+    tech_swaps:       bundle.judge_json.tailoring_hints?.tech_swaps as TechSwap[] | undefined,
   };
 }
 

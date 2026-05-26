@@ -7,7 +7,7 @@ import * as crypto from "crypto";
 import type { Profile } from "@/filter/types";
 import type { JudgeInput } from "./types";
 
-export const PROMPT_VERSION = "v4";
+export const PROMPT_VERSION = "v5";
 
 export function buildCandidateProfileSection(profile: Profile): string {
   const expert = profile.skills
@@ -102,13 +102,21 @@ Return JSON with exactly this shape:
       "reframe_angle": "honest adjacent experience the candidate can surface — never fabrication"
     }
   ],
+  "gap_directives": [
+    {
+      "jd_requirement": "Cassandra",
+      "handling": "fabricate" | "reframe" | "acknowledge" | "ignore" | "forbid",
+      "target_role": "Hitachi Vantara / Nokia" | null,
+      "frame_as": "NoSQL stores for high-throughput contract data alongside Cosmos DB" | null
+    }
+  ],
   "why_apply": "1-2 sentences naming a specific reason this company/role fits the candidate, derived from JD and profile.",
   "tailoring_hints": {
     "emphasize_roles": ["role names from work history that should lead the resume"],
     "emphasize_skills": ["skills from candidate profile that should appear prominently"],
     "downplay_skills": ["skills present in canonical but not relevant to this JD"],
     "domain_reframe_angle": "If JD requires a domain the candidate hasn't directly worked in, the honest reframe — else empty string",
-    "tech_swaps": [{"from": "Camunda BPMN", "to": "Flowable", "confidence": 0.9}]
+    "tech_swaps": [{"from": "Camunda BPMN", "to": "Flowable", "confidence": 0.9, "target_role": "PHIA Group" | null}]
   }
 }
 
@@ -116,10 +124,40 @@ GUIDANCE FOR THE NEW FIELDS:
 - key_matches: 3-5 entries. Each must name a SPECIFIC role and a SPECIFIC JD requirement. Generic statements ("strong Java skills") are not acceptable.
 - gaps: every JD requirement the candidate genuinely lacks. severity: minor (1 missing tool/lib), moderate (missing methodology or years), major (missing domain or core stack). reframe_angle MUST be honest — adjacent experience the candidate can truthfully claim.
 - why_apply: NOT generic. Name a domain, project, team, or stated company value from the JD that intersects the candidate's history.
+- gap_directives: REQUIRED. Emit this array even when empty.
 - tailoring_hints.emphasize_roles: pull from CANDIDATE WORK HISTORY block above by exact role string.
 - tailoring_hints.emphasize_skills / downplay_skills: pull from the candidate profile skills, NOT invent new ones.
-- tailoring_hints.tech_swaps: emit ONLY when a JD required_skill has risk_entry.relationship === "direct_equivalent" AND risk_entry.swap_allowed === true. from = risk_entry.candidate_source_skill, to = risk_entry.target_skill, confidence = risk_entry.confidence. Empty array when no swaps apply.
+- tailoring_hints.tech_swaps: emit ONLY when a JD required_skill has risk_entry.relationship === "direct_equivalent" AND risk_entry.swap_allowed === true. from = risk_entry.candidate_source_skill, to = risk_entry.target_skill, confidence = risk_entry.confidence. Also emit target_role to scope the swap to one exact employer header when appropriate; set target_role: null when it genuinely applies everywhere. Empty array when no swaps apply.
 - Empty arrays/strings are fine when nothing applies. Do not invent.
+
+GAP DIRECTIVES (REQUIRED — emit this array even if empty)
+
+For every JD requirement not directly present in the candidate's canonical resume,
+emit a gap_directives entry with:
+
+  - jd_requirement: the requirement text from the JD
+  - handling: one of [fabricate, reframe, acknowledge, ignore, forbid]
+  - target_role: the exact employer/role string from the candidate's experience
+    where the directive applies (null for handling=ignore or forbid)
+  - frame_as: a 1-sentence concrete framing the generators should use
+    (null for handling=ignore or forbid)
+
+Handling guide:
+  - fabricate: candidate has no real adjacent experience; produce a new bullet
+    at target_role using frame_as. Use this when total mode applies.
+  - reframe: candidate has adjacent honest experience at target_role that can
+    be rewritten to surface the requirement honestly.
+  - acknowledge: cover letter should mention the gap honestly using frame_as
+    as the adjacent-experience hook. Resume does not change.
+  - ignore: not worth addressing.
+  - forbid: the candidate must not claim this in either artifact.
+
+target_role must EXACTLY match an employer header from the candidate's experience.
+Valid examples: "Hitachi Vantara", "Hitachi Vantara / Nokia", "AquilaEdge LLC",
+"PHIA Group", "Persistent Systems".
+
+TECH_SWAPS: for each swap, also emit target_role to scope the swap to a specific
+role. If a swap genuinely applies everywhere, set target_role: null.
 
 RISK MAP USAGE (CRITICAL):
 Every JD required_skill now has an attached \`risk_entry\`. Use it to set verdict honestly.

@@ -7,6 +7,8 @@ import * as fs     from "fs";
 import * as path   from "path";
 import { fileURLToPath } from "url";
 
+import type { GapDirective, TechSwap } from "@/judge/types";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../..");
 const SKILL_PATH = path.join(REPO_ROOT, "skills", "resume-tailor", "SKILL.md");
@@ -74,6 +76,8 @@ this message is the sole and authoritative source.
 --- TECH SWAPS ---
 For each entry in JUDGE_JSON.tailoring_hints.tech_swaps, replace "from" with "to"
 everywhere in the resume (skills, bullets, summary). Replace the technology name only.
+If target_role is present, apply that swap ONLY inside the matching employer section.
+If target_role is null or missing, apply it unscoped (current behavior).
 
 --- LENGTH CONSTRAINT ---
 Word count of the rendered text (ignoring LaTeX commands): between 1900 and 2500.
@@ -105,3 +109,51 @@ export const PROMPT_SHA = crypto
   .update(TOTAL_MODE_PROMPT, "utf8")
   .digest("hex")
   .slice(0, 12);
+
+export function renderResumeGapDirectives(directives: GapDirective[] | undefined): string {
+  if (!directives || directives.length === 0) return "";
+
+  const fabricateOrReframe = directives.filter(d =>
+    d.handling === "fabricate" || d.handling === "reframe",
+  );
+  const forbid = directives.filter(d => d.handling === "forbid");
+
+  if (fabricateOrReframe.length === 0 && forbid.length === 0) return "";
+
+  let out = "\n=== JUDGE GAP DIRECTIVES (apply to the resume) ===\n";
+
+  for (const d of fabricateOrReframe) {
+    out += `\n[${d.handling.toUpperCase()}] ${d.jd_requirement}`;
+    if (d.target_role) out += `\n  -> at role: ${d.target_role}`;
+    if (d.frame_as) out += `\n  -> frame as: ${d.frame_as}`;
+  }
+
+  if (forbid.length > 0) {
+    out += "\n\n[FORBIDDEN -- never claim these in any bullet]\n";
+    for (const d of forbid) out += `  - ${d.jd_requirement}\n`;
+  }
+
+  return out;
+}
+
+export function renderResumeScopedTechSwaps(swaps: TechSwap[] | undefined): string {
+  if (!swaps || swaps.length === 0) return "";
+
+  let out = "\n=== JUDGE TECH SWAPS (resume scope) ===\n";
+  for (const swap of swaps) {
+    out += `\n- ${swap.from} -> ${swap.to}`;
+    if (swap.target_role) {
+      out += ` (apply only at role: ${swap.target_role})`;
+    } else {
+      out += " (apply anywhere if relevant)";
+    }
+  }
+  return out;
+}
+
+export function renderResumeJudgeAddendum(
+  directives: GapDirective[] | undefined,
+  swaps: TechSwap[] | undefined,
+): string {
+  return `${renderResumeScopedTechSwaps(swaps)}${renderResumeGapDirectives(directives)}`.trim();
+}

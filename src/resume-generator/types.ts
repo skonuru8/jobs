@@ -5,6 +5,7 @@
 import type { Job, Profile } from "@/filter/types";
 import type { ScoreResult } from "@/scorer/types";
 import type { ArtifactJudgeJson } from "@/shared/artifact-bundle";
+import type { GapDirective, TechSwap } from "@/judge/types";
 
 export interface ResumeGenInput {
   job: Job;
@@ -14,6 +15,8 @@ export interface ResumeGenInput {
   judge_json: ArtifactJudgeJson;
   score: { total: number; components: ScoreResult["components"] };
   canonical_sha: string;
+  gap_directives?: GapDirective[];
+  tech_swaps?: TechSwap[];
 }
 
 export interface ResumeGenResult {

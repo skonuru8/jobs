@@ -4,3 +4,6 @@ args = [
     "serve",
 ]
 command = "uvx"
+
+[mcp_servers.code-review-graph.tools.get_minimal_context_tool]
+approval_mode = "approve"

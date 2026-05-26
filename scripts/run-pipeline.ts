@@ -1002,7 +1002,14 @@ async function processJobs(
         judge_key_matches:         judgeResult?.fields?.key_matches ?? null,
         judge_gaps:                judgeResult?.fields?.gaps ?? null,
         judge_why_apply:           judgeResult?.fields?.why_apply ?? null,
-        judge_tailoring_hints:     judgeResult?.fields?.tailoring_hints ?? null,
+        judge_tailoring_hints:     judgeResult?.fields
+          ? {
+              ...(judgeResult.fields.tailoring_hints ?? {}),
+              ...(judgeResult.fields.gap_directives?.length
+                ? { gap_directives: judgeResult.fields.gap_directives }
+                : {}),
+            }
+          : null,
         judge_system_prompt_sha:   judgeResult?.system_prompt_sha ?? null,
         cover_letter_path:  coverLetterPath,
         cover_letter_words: coverLetterWords,

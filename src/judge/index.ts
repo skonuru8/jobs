@@ -6,4 +6,16 @@ export {
   computeSystemPromptSha,
   PROMPT_VERSION,
 } from "./prompt";
-export type { JudgeInput, JudgeJobInput, JudgeScoreInput, JudgeFields, JudgeResult, JudgeVerdict, FinalBucket } from "./types";
+export type {
+  JudgeInput,
+  JudgeJobInput,
+  JudgeScoreInput,
+  JudgeFields,
+  JudgeResult,
+  JudgeVerdict,
+  FinalBucket,
+  GapDirective,
+  GapHandling,
+  TailoringHints,
+  TechSwap,
+} from "./types";

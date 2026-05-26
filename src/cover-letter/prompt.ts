@@ -4,6 +4,7 @@
 
 import * as crypto from "crypto";
 
+import type { GapDirective } from "@/judge/types";
 import type { CoverLetterInput } from "./types";
 
 export const PROMPT_VERSION = "pipeline-tex-v2";
@@ -33,7 +34,8 @@ Do not pad with generic filler. Do not repeat earlier paragraphs.
 TECH SWAPS:
 If judge.tailoring_hints.tech_swaps is non-empty, apply those swaps when referencing
 technologies. Replace each "from" skill with the corresponding "to" skill everywhere
-it appears. This is a Mode B substitution — no surrounding word changes.
+it appears. This is a Mode B substitution — no surrounding word changes. If a swap
+has target_role, keep that substitution scoped to the matching employer only.
 
 STYLE:
 - Confident, direct, specific numbers — never vague
@@ -159,6 +161,8 @@ Assert competence through closest analogous experience from the resume — never
     ? `Judge concerns (context only — never quote as metadata in the letter body):\n${job.judge_concerns.map(c => `  - ${c}`).join("\n")}`
     : "Concerns: none";
 
+  const gapDirectivesSection = renderCoverLetterGapDirectives(input.gap_directives);
+
   return `Write the cover letter BODY for the following application (no greeting or sign-off).
 
 TARGET JOB:
@@ -189,12 +193,53 @@ CANDIDATE PROFILE:
 
 ${resumeSection}
 
+${gapDirectivesSection}
+
 JUDGE REASONING (themes to echo, not to paste verbatim):
 ${job.judge_reasoning ?? "Strong skill and seniority alignment."}
 
 ${concernsNote}
 
 VISA INSTRUCTION: ${visaNote}`;
+}
+
+export function renderCoverLetterGapDirectives(directives: GapDirective[] | undefined): string {
+  if (!directives || directives.length === 0) return "";
+
+  const acknowledge = directives.filter(d => d.handling === "acknowledge");
+  const fabricate = directives.filter(d => d.handling === "fabricate");
+  const forbid = directives.filter(d => d.handling === "forbid");
+
+  if (acknowledge.length === 0 && fabricate.length === 0 && forbid.length === 0) return "";
+
+  const lines = ["=== JUDGE GAP DIRECTIVES (apply to the cover letter) ===", ""];
+
+  if (acknowledge.length > 0) {
+    lines.push("[ACKNOWLEDGE -- address these honestly in the body]");
+    for (const d of acknowledge) {
+      lines.push(`- ${d.jd_requirement} -> frame as: ${d.frame_as ?? ""}`.trimEnd());
+    }
+    lines.push("");
+  }
+
+  if (fabricate.length > 0) {
+    lines.push("[SILENTLY FABRICATE -- incorporate into claims without flagging the gap]");
+    for (const d of fabricate) {
+      const at = d.target_role ? `, at: ${d.target_role}` : "";
+      lines.push(`- ${d.jd_requirement}${at}, frame as: ${d.frame_as ?? ""}`);
+    }
+    lines.push("");
+  }
+
+  if (forbid.length > 0) {
+    lines.push("[FORBIDDEN -- never claim these]");
+    for (const d of forbid) {
+      lines.push(`- ${d.jd_requirement}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trim();
 }
 
 export function extractTitleKeywords(title: string): string[] {

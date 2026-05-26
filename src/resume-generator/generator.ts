@@ -11,7 +11,7 @@ import {
   buildSlimProfileForPrompts,
 } from "@/shared/artifact-bundle";
 
-import { PROMPT_SHA, TOTAL_MODE_PROMPT } from "./prompt";
+import { PROMPT_SHA, TOTAL_MODE_PROMPT, renderResumeJudgeAddendum } from "./prompt";
 import type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "./types";
 
 export async function generateResumeTex(
@@ -113,6 +113,13 @@ function buildUserMessage(input: ResumeGenInput, shortHint?: string): string {
     "SCORE_JSON:",
     JSON.stringify(input.score, null, 2),
   ];
+  const judgeAddendum = renderResumeJudgeAddendum(
+    input.gap_directives ?? input.judge_json.gap_directives,
+    input.tech_swaps ?? input.judge_json.tailoring_hints?.tech_swaps,
+  );
+  if (judgeAddendum) {
+    parts.push("", judgeAddendum);
+  }
   if (shortHint) {
     parts.push("", "CRITICAL_ADDENDUM:", shortHint);
   }
