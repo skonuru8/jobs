@@ -56,12 +56,11 @@ import { generateAndSaveCoverLetter } from "@/cover-letter/saver";
 import { loadCanonicalResumeMaster, loadResume } from "@/cover-letter/resume";
 import type { CoverLetterConfig } from "@/cover-letter/types";
 import type { Profile } from "@/filter/types";
-import type { ResumeBrief } from "@/cover-letter/resume-brief";
 
 import { generateAndSaveResume } from "@/resume-generator/index";
 import type { ResumeGenConfig } from "@/resume-generator/types";
 
-import { buildResumeBriefFromCanonicalTex } from "@/cover-letter/resume-brief";
+import { buildExperienceBlockFromCanonicalTex } from "@/cover-letter/resume-brief";
 import { extractRolesFromCanonicalResume, extractSkillsSectionFromCanonical } from "@/judge/roles-extractor";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
@@ -293,9 +292,9 @@ async function main(): Promise<void> {
   const nowIso  = new Date().toISOString();
   const runStartedAt = new Date(nowIso);
   const runFolderName = makeRunFolderName(runStartedAt, RUN_ID);
-  const resumeBrief = canonicalResumeTex
-    ? buildResumeBriefFromCanonicalTex(canonicalResumeTex)
-    : { summary_metrics: [] as string[], recent_roles: [] as string[], flagship_projects: [] as string[] };
+  const experienceBlock = canonicalResumeTex
+    ? buildExperienceBlockFromCanonicalTex(canonicalResumeTex)
+    : "";
   const canonicalTexPath = path.join(REPO_ROOT, "config", "resume_master.tex");
   const rolesList = canonicalResumeTex
     ? extractRolesFromCanonicalResume(canonicalTexPath)
@@ -308,7 +307,7 @@ async function main(): Promise<void> {
     jsonlPath, profile, aliases,
     extractorConfig, judgeConfig, coverLetterConfig, resumeGeneratorConfig,
     scoringWeights, scoringThreshold,
-    profileEmbedding, resumeText, canonicalResumeTex, resumeBrief, rolesList, canonicalSkillsText, nowIso,
+    profileEmbedding, resumeText, canonicalResumeTex, experienceBlock, rolesList, canonicalSkillsText, nowIso,
     REPO_ROOT, RUN_ID, runFolderName, DO_RESUME_ARTIFACT, DO_COVER_ARTIFACT,
   );
 
@@ -450,7 +449,7 @@ async function processJobs(
   profileEmbedding:    Float32Array | null,
   resumeText:          string | null,
   canonicalResumeTex:  string | null,
-  resumeBrief:         ResumeBrief,
+  experienceBlock:     string,
   rolesList:           string,
   canonicalSkillsText: string,
   nowIso:              string,
@@ -847,7 +846,7 @@ async function processJobs(
         judgeResult: judgeResult ?? null,
         profile: profile as Profile,
         canonical_resume_tex: canonicalResumeTex!,
-        resume_brief: resumeBrief,
+        experience_block: experienceBlock,
       });
 
       if (!bundle.ok) {

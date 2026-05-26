@@ -89,6 +89,7 @@ export interface RunConfig {
  */
 export async function spawnRun(config: RunConfig): Promise<number> {
   const { source, postedWithin, max, runId, lockTtlSecs } = config;
+  const startedAt = new Date();
 
   // Ensure log directories exist
   ensureLogDirs();
@@ -120,7 +121,7 @@ export async function spawnRun(config: RunConfig): Promise<number> {
   }
 
   // Open per-run log file
-  const logPath = runLogPath(runId);
+  const logPath = runLogPath(source, runId, startedAt);
   const logStream = fs.createWriteStream(logPath, { flags: "a" });
 
   // Spawn child

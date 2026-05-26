@@ -20,12 +20,6 @@ OUTPUT FORMAT:
 - Separate paragraphs with a single blank line
 - Output must be safe for LaTeX: avoid %, &, $, _, #, ~, ^, \\ — use plain text alternatives
 
-ROLE TITLE REFERENCES:
-When you write phrases like "In my most recent role as X" or "As a Y at Company", X/Y must be the EXACT role title from resume_brief.recent_roles for that specific role, NOT the headline title from PROFILE_JSON.title.
-- profile.title is a marketing headline (e.g., "Senior Software Engineer") — use it ONLY in the opening positioning sentence, never as a past-role title.
-- resume_brief.recent_roles lists each role with its actual title (e.g., "Full-Stack Engineer  January 2025 - June 2025"). Use these verbatim when referring to specific past roles.
-- If unsure which role title applies, default to the first entry in recent_roles.
-
 STRUCTURE (4 paragraphs, 400-550 words total. UNDER 400 WORDS IS A FAILURE):
 Count words before output. If the body is under 400 words, add a fourth paragraph that either:
   - addresses the strongest judge.gaps[].reframe_angle in depth, OR
@@ -116,8 +110,36 @@ export function buildCoverLetterPrompt(input: CoverLetterInput): string {
     ? "solid partial match"
     : "semantic match — some gaps";
 
-  const resumeSection = input.resume_brief
-    ? `RESUME_BRIEF (metrics must match canonical history — use only these facts, do not invent):\n${JSON.stringify(input.resume_brief, null, 2)}`
+  const resumeSection = input.experience_block?.trim()
+    ? `=== CANDIDATE EXPERIENCE (verbatim from resume — do not reorganize) ===
+
+${input.experience_block.trim()}
+
+=== EMPLOYER ATTRIBUTION RULES (NON-NEGOTIABLE) ===
+
+1. When you describe work done at a specific employer (e.g., "at AquilaEdge",
+   "at Hitachi Vantara", "in my Nokia CPQ engagement"), every technology, metric,
+   and outcome in that sentence must come from THAT employer's bullets above.
+
+2. NEVER attribute work from one employer to another. Examples of forbidden mixing:
+   - Saying "at AquilaEdge I led the decomposition" when the decomposition is
+     under Hitachi Vantara / Nokia CPQ.
+   - Saying "at AquilaEdge I used Java and Spring Boot" when AquilaEdge's bullets
+     show only Node.js, Flutter, and GCP.
+   - Saying "most recent role as Consultant (Jul 2019 – Mar 2024)" when the most
+     recent role above is at AquilaEdge (Jan 2025 – Jun 2025).
+
+3. If you don't name an employer, use neutral framing like "in a prior role" or
+   "in a recent engagement" — but the metrics and tech in that sentence must still
+   come from a single real role above.
+
+4. AquilaEdge's stack is Node.js + Flutter + GCP + Google Cloud SQL. Period.
+   Nokia/Hitachi's stack is Java + Spring Boot + Azure (Service Bus, Cosmos DB)
+   + Redis. Period. Do not blur these.
+
+5. Do NOT switch employers inside the same paragraph after naming one. If you
+   want to discuss a different employer, start a new paragraph for that employer
+   or use neutral framing with no employer name.`
     : resume?.trim()
     ? `CANONICAL RESUME (LaTeX or text — metrics must match this source only):\n${resume.trim()}`
     : `CANONICAL RESUME: Not provided. Use profile skills only; do not invent metrics.`;

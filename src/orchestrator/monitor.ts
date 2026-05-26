@@ -82,8 +82,19 @@ export function appendReaperLog(line: string): void {
   process.stdout.write(entry);
 }
 
-export function runLogPath(runId: string): string {
-  return path.join(OUTPUT_LOGS_DIR, "runs", `${runId}.log`);
+function formatLogTimestamp(date: Date): string {
+  return date.toISOString().slice(0, 19).replace(/:/g, "-");
+}
+
+function sanitizeLogSegment(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+export function runLogPath(source: string, runId: string, startedAt: Date): string {
+  const ts = formatLogTimestamp(startedAt);
+  const safeSource = sanitizeLogSegment(source) || "run";
+  const shortRunId = runId.slice(0, 8);
+  return path.join(OUTPUT_LOGS_DIR, "runs", `log_${ts}_${safeSource}_${shortRunId}.log`);
 }
 
 // ---------------------------------------------------------------------------

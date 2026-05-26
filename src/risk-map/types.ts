@@ -4,7 +4,8 @@ export type Relationship =
   | "direct_equivalent"
   | "adjacent"
   | "unsupported_inference"
-  | "fabricated";
+  | "fabricated"
+  | "fabricated_role_attribution";
 
 export type FabricationRisk =
   | "none"
@@ -39,6 +40,7 @@ export interface RiskSummary {
     adjacent:              number;
     unsupported_inference: number;
     fabricated:            number;
+    fabricated_role_attribution: number;
   };
   human_review_items: Array<{
     text:         string;

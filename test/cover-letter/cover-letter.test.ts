@@ -92,7 +92,7 @@ describe("SYSTEM_PROMPT", () => {
     expect(SYSTEM_PROMPT.length).toBeGreaterThan(200);
     expect(SYSTEM_PROMPT).toContain("OUTPUT FORMAT");
     expect(SYSTEM_PROMPT).toContain("LaTeX");
-    expect(SYSTEM_PROMPT).toContain("350-600");
+    expect(SYSTEM_PROMPT).toContain("400-550");
   });
 
   it("bans specific cliché phrases", () => {

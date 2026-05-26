@@ -2,8 +2,6 @@
  * types.ts — input/output types for cover letter generation.
  */
 
-import type { ResumeBrief } from "./resume-brief";
-
 // ---------------------------------------------------------------------------
 // Job context passed to the generator
 // ---------------------------------------------------------------------------
@@ -64,10 +62,10 @@ export interface CandidateProfile {
 export interface CoverLetterInput {
   job:    CoverLetterJobInput;
   profile: CandidateProfile;
-  /** Legacy: full resume TeX/text; omit when resume_brief is set. */
+  /** Legacy: full resume TeX/text; omit when experience_block is set. */
   resume: string | null;
-  /** Compact metrics + roles for the LLM (preferred over resume). */
-  resume_brief?: ResumeBrief | null;
+  /** Verbatim EXPERIENCE slice from canonical resume (preferred over full resume). */
+  experience_block?: string | null;
 }
 
 // ---------------------------------------------------------------------------

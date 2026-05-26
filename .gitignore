@@ -72,3 +72,10 @@ CLAUDE.md
 .claude/
 .cursor/
 .cursorrules
+
+# Local Codex skills installed for this machine only
+.agents/skills/cavecrew/
+.agents/skills/caveman*/
+skills/cavecrew
+skills/caveman*
+skills-lock.json

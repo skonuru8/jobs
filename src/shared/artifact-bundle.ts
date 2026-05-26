@@ -8,7 +8,6 @@ import type { Job, Profile } from "@/filter/types";
 import type { JudgeResult, JudgeFields, JudgeGap } from "@/judge/types";
 import type { ScoreResult } from "@/scorer/types";
 import type { CoverLetterInput } from "@/cover-letter/types";
-import type { ResumeBrief } from "@/cover-letter/resume-brief";
 import { lookupJdSkill } from "@/risk-map";
 
 export { makeJobSlug, slugify } from "./slug";
@@ -34,8 +33,8 @@ export interface ArtifactBundleOk {
   jd_json: Record<string, unknown>;
   judge_json: ArtifactJudgeJson;
   score: { total: number; components: ScoreResult["components"] };
-  /** Structured resume summary for cover letter LLM (token savings). */
-  resume_brief: ResumeBrief;
+  /** Verbatim EXPERIENCE slice for cover letter attribution safety. */
+  experience_block: string;
 }
 
 export type ArtifactBundle = ArtifactBundleOk | { ok: false; reason: string };
@@ -79,9 +78,9 @@ export function buildArtifactBundle(args: {
   judgeResult: JudgeResult | null;
   profile: Profile;
   canonical_resume_tex: string;
-  resume_brief: ResumeBrief;
+  experience_block: string;
 }): ArtifactBundle {
-  const { sanitized, scoreResult, judgeResult, profile, canonical_resume_tex, resume_brief } = args;
+  const { sanitized, scoreResult, judgeResult, profile, canonical_resume_tex, experience_block } = args;
 
   if (!canonical_resume_tex.trim()) {
     return { ok: false, reason: "canonical resume empty" };
@@ -132,7 +131,7 @@ export function buildArtifactBundle(args: {
     jd_json,
     judge_json,
     score: { total: scoreResult.score, components: scoreResult.components },
-    resume_brief,
+    experience_block,
   };
 }
 
@@ -207,8 +206,8 @@ export function coverLetterInputFromBundle(bundle: ArtifactBundleOk): CoverLette
         ?? "Senior Software Engineer",
       location_line: formatProfileLocationLine(bundle.profile),
     },
-    resume:        null,
-    resume_brief:  bundle.resume_brief,
+    resume:           null,
+    experience_block: bundle.experience_block,
   };
 }
 

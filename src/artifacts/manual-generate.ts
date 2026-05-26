@@ -10,7 +10,7 @@ import { validateProfile } from "@/filter/validate";
 import { generateAndSaveCoverLetter } from "@/cover-letter/saver";
 import type { CoverLetterConfig } from "@/cover-letter/types";
 import { loadCanonicalResumeMaster } from "@/cover-letter/resume";
-import { buildResumeBriefFromCanonicalTex } from "@/cover-letter/resume-brief";
+import { buildExperienceBlockFromCanonicalTex } from "@/cover-letter/resume-brief";
 import { generateAndSaveResume } from "@/resume-generator/index";
 import type { ResumeGenConfig } from "@/resume-generator/types";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
@@ -25,7 +25,7 @@ import {
 } from "@/storage/persist";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
-import { auditTailoredArtifact } from "@/risk-map";
+import { auditTailoredArtifact, isRiskMapLoaded, loadRiskMap } from "@/risk-map";
 
 export interface ManualGenerateResult {
   ok: boolean;
@@ -41,6 +41,10 @@ export async function manualGenerateArtifacts(
   jobId: string,
   options?: { force?: boolean },
 ): Promise<ManualGenerateResult> {
+  if (!isRiskMapLoaded()) {
+    loadRiskMap(repoRoot);
+  }
+
   if (options?.force === false && (await jobHasAnyArtifacts(jobId))) {
     return {
       ok: false,
@@ -76,7 +80,7 @@ export async function manualGenerateArtifacts(
     return { ok: false, error: "config/resume_master.tex missing" };
   }
 
-  const resumeBrief = buildResumeBriefFromCanonicalTex(canonicalResumeTex);
+  const experienceBlock = buildExperienceBlockFromCanonicalTex(canonicalResumeTex);
 
   const bundle = buildArtifactBundle({
     sanitized: snapshot.job,
@@ -84,7 +88,7 @@ export async function manualGenerateArtifacts(
     judgeResult: snapshot.judgeResult,
     profile,
     canonical_resume_tex: canonicalResumeTex,
-    resume_brief: resumeBrief,
+    experience_block: experienceBlock,
   });
   if (!bundle.ok) {
     return { ok: false, error: bundle.reason };

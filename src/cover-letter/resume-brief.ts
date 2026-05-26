@@ -1,69 +1,40 @@
-import { stripLatex } from "./resume";
-
-export interface ResumeBrief {
-  summary_metrics: string[];
-  recent_roles: string[];
-  flagship_projects: string[];
-}
-
 /**
- * Compact structured summary for cover-letter LLM (replaces full canonical TeX).
+ * Slice the EXPERIENCE section verbatim from canonical tex.
+ * Preserves employer headers, role titles, dates, and per-role bullets exactly
+ * as written — no extraction, no flattening — so the cover letter LLM cannot
+ * mix employers, stacks, or metrics across roles.
+ *
+ * Returns the EXPERIENCE section as a plain-text block with LaTeX commands
+ * stripped (but employer headers and bullet structure preserved as line breaks).
  */
-export function buildResumeBriefFromCanonicalTex(tex: string): ResumeBrief {
-  const plain = stripLatex(tex);
+export function buildExperienceBlockFromCanonicalTex(tex: string): string {
+  const startMarker = /\\section\*?\{EXPERIENCE\}/;
+  const endMarker = /\\section\*?\{(PROJECTS|EDUCATION|AWARDS)\}/;
 
-  const summaryMetrics: string[] = [];
-  const sumMatch = plain.match(/SUMMARY([\s\S]*?)(?=SKILLS|EXPERIENCE|PROJECTS|$)/i);
-  if (sumMatch) {
-    const bullets = sumMatch[1].split(/\n/).map(l => l.replace(/^[\s•·\-–]+/, "").trim()).filter(Boolean);
-    for (const b of bullets) {
-      if (/\d|%|reduction|latency|GB|microservices|deployment/i.test(b) && b.length < 220) {
-        summaryMetrics.push(b);
-      }
-      if (summaryMetrics.length >= 5) break;
-    }
+  const startMatch = tex.match(startMarker);
+  if (!startMatch || startMatch.index === undefined) {
+    throw new Error("[resume-brief] EXPERIENCE section not found in canonical tex");
   }
+  const afterStart = tex.slice(startMatch.index + startMatch[0].length);
 
-  const recentRoles: string[] = [];
-  const expMatch = plain.match(/EXPERIENCE([\s\S]*?)(?=PROJECTS|EDUCATION|AWARDS|$)/i);
-  if (expMatch) {
-    const lines = expMatch[1].split(/\n/).map(l => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      if (line.length < 8 || line.length > 160) continue;
-      if (/project:/i.test(line)) continue;
-      if (/\d{4}/.test(line) && /engineer|consultant|apprentice/i.test(line)) {
-        recentRoles.push(line);
-      }
-      if (recentRoles.length >= 6) break;
-    }
-  }
+  const endMatch = afterStart.match(endMarker);
+  const expRaw = endMatch && endMatch.index !== undefined
+    ? afterStart.slice(0, endMatch.index)
+    : afterStart;
 
-  const flagshipProjects: string[] = [];
-  const projMatch = plain.match(/PROJECTS([\s\S]*?)(?=EDUCATION|AWARDS|$)/i);
-  if (projMatch) {
-    const chunk = projMatch[1];
-    const names = chunk.match(/(?:^|\n)\s*([A-Za-z0-9][A-Za-z0-9 \-]{2,40})\s*(?:\(|,|\n)/g);
-    if (names) {
-      for (const raw of names) {
-        const n = raw.replace(/[\n(,]/g, "").trim();
-        if (n.length > 2 && !/^item$/i.test(n)) flagshipProjects.push(n);
-        if (flagshipProjects.length >= 5) break;
-      }
-    }
-  }
-
-  const brief = {
-    summary_metrics: summaryMetrics.slice(0, 5),
-    recent_roles: recentRoles.slice(0, 6),
-    flagship_projects: flagshipProjects.slice(0, 5),
-  };
-
-  if (brief.summary_metrics.length === 0 && brief.recent_roles.length === 0) {
-    console.warn(
-      "[resume-brief] extraction returned empty — check resume_master.tex structure. " +
-      "Expected sections: SUMMARY, EXPERIENCE, PROJECTS.",
-    );
-  }
-
-  return brief;
+  return expRaw
+    .replace(/\\textbf\{([^}]*)\}/g, "$1")
+    .replace(/\\textit\{([^}]*)\}/g, "$1")
+    .replace(/\\hfill/g, " | ")
+    .replace(/\\hspace\{[^}]*\}/g, "")
+    .replace(/\\vspace\{[^}]*\}/g, "")
+    .replace(/\\begin\{itemize\}/g, "")
+    .replace(/\\end\{itemize\}/g, "")
+    .replace(/\\item\s*/g, "  - ")
+    .replace(/\\\\/g, "")
+    .replace(/\$\|\$/g, "|")
+    .replace(/\\%/g, "%")
+    .replace(/\\&/g, "&")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
