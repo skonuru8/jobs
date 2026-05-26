@@ -61,15 +61,6 @@ export async function generateAndSaveResume(
 
   let wc = gen.word_count;
   if (wc < wMin) {
-    const hint = `Previous output was ${wc} words. Do not summarize. Produce a full-length resume between ${wMin} and ${wMax} words.`;
-    const retry = await generateResumeTex(input, config, hint);
-    if (retry.status === "ok" && retry.tex) {
-      gen = retry;
-      tex = gen.tex!;
-      wc = gen.word_count;
-    }
-  }
-  if (wc < wMin) {
     flags.push("resume_too_short");
   }
 

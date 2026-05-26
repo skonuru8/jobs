@@ -20,6 +20,12 @@ OUTPUT FORMAT:
 - Separate paragraphs with a single blank line
 - Output must be safe for LaTeX: avoid %, &, $, _, #, ~, ^, \\ — use plain text alternatives
 
+ROLE TITLE REFERENCES:
+When you write phrases like "In my most recent role as X" or "As a Y at Company", X/Y must be the EXACT role title from resume_brief.recent_roles for that specific role, NOT the headline title from PROFILE_JSON.title.
+- profile.title is a marketing headline (e.g., "Senior Software Engineer") — use it ONLY in the opening positioning sentence, never as a past-role title.
+- resume_brief.recent_roles lists each role with its actual title (e.g., "Full-Stack Engineer  January 2025 - June 2025"). Use these verbatim when referring to specific past roles.
+- If unsure which role title applies, default to the first entry in recent_roles.
+
 STRUCTURE (4 paragraphs, 400-550 words total. UNDER 400 WORDS IS A FAILURE):
 Count words before output. If the body is under 400 words, add a fourth paragraph that either:
   - addresses the strongest judge.gaps[].reframe_angle in depth, OR

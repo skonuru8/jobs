@@ -58,6 +58,11 @@ this message is the sole and authoritative source.
 - Honor CAR/STAR framework for every new/rewritten bullet.
 - Bold all quantifiable metrics.
 - Never delete skills; only add or reorder.
+- Never delete experience bullets, sub-bullets, or projects. The canonical
+  resume's complete content MUST appear in the output. You may add, reorder,
+  re-emphasize, or rewrite phrasing, but every canonical bullet and every
+  project under PROJECTS must remain in the output. Relevance signaling is done
+  by REORDERING (lead with most JD-relevant), NOT by REMOVING.
 - Honor the "fabrication permitted in total mode" rule — JD-required tools,
   domain claims, and plausible metrics MAY be added when adjacent experience
   doesn't exist. Just do not surface any [FABRICATED] tag in the output text.
@@ -67,16 +72,22 @@ this message is the sole and authoritative source.
 - Reorder roles, sections, and skill categories to lead with JD-relevant content.
 
 --- TECH SWAPS ---
-If JUDGE_JSON contains tailoring_hints.tech_swaps with entries, apply those swaps across
-the canonical resume content. Replace each "from" value with the corresponding "to" value
-everywhere it appears (Skills section, bullets, summary). This is a Mode B substitution —
-no surrounding word changes, replace only the technology name itself.
+For each entry in JUDGE_JSON.tailoring_hints.tech_swaps, replace "from" with "to"
+everywhere in the resume (skills, bullets, summary). Replace the technology name only.
 
 --- LENGTH CONSTRAINT ---
 Word count of the rendered text (ignoring LaTeX commands): between 1900 and 2500.
-Do NOT summarize. Do NOT shorten. If the canonical is at 1959 words, the tailored
-version should stay in the same neighborhood. Adding bullets to incorporate
-JD-required tech is expected; trimming bullets to "tighten" is forbidden.
+Do NOT summarize. Do NOT shorten. Do NOT remove bullets or projects for any
+reason, including:
+- The JD having few required skills (you do not get to decide which canonical
+  content is "less relevant" when the JD is narrow — keep all of it).
+- The JD focusing on a specific domain (e.g., a backend-only role — Flutter
+  bullets and AI tooling still stay; reorder them down, do not remove).
+- A perceived need to "tighten" the resume to look more focused.
+
+If the canonical is at 1959 words, the tailored version should stay in the same
+neighborhood or longer. Adding bullets to incorporate JD-required tech is
+expected. Removing canonical bullets is FORBIDDEN.
 
 --- LATEX SAFETY ---
 - Escape special characters in content correctly: %, &, $, _, #

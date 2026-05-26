@@ -832,6 +832,9 @@ async function processJobs(
       qualifiesArtifacts &&
       (doResumeArtifact || doCoverArtifact) &&
       Boolean(canonicalResumeTex);
+    let resumeOutcome: Awaited<ReturnType<typeof generateAndSaveResume>> | null = null;
+    let coverOutcome: Awaited<ReturnType<typeof generateAndSaveCoverLetter>> | null = null;
+    let metaRel: string | null = null;
 
     if (shouldArtifacts) {
       if (resumeGeneratorConfigArg.throttle_ms > 0) {
@@ -866,7 +869,7 @@ async function processJobs(
 
         writeJobDescription(bundle, jobFolderAbs);
 
-        const [resumeOutcome, coverOutcome] = await Promise.all([
+        [resumeOutcome, coverOutcome] = await Promise.all([
           doResumeArtifact
             ? generateAndSaveResume(bundle, resumeGeneratorConfigArg, repoRoot, jobFolderAbs, {
                 runId: runIdForArtifacts, bucket: bucket ?? "UNKNOWN", generatedBy: "pipeline",
@@ -925,7 +928,7 @@ async function processJobs(
           { runId: runIdForArtifacts, bucket: bucket ?? "UNKNOWN", generatedBy: "pipeline" },
         );
 
-        const metaRel = path.relative(repoRoot, path.join(jobFolderAbs, "meta.json"));
+        metaRel = path.relative(repoRoot, path.join(jobFolderAbs, "meta.json"));
 
         if (resumeOutcome) {
           allFlags.push(...resumeOutcome.flags);
@@ -934,24 +937,6 @@ async function processJobs(
             resumePdfPath = resumeOutcome.pdf_path
               ? path.relative(repoRoot, resumeOutcome.pdf_path)
               : null;
-          }
-          if (!SKIP_PERSIST && resumeOutcome.tex_path) {
-            await insertTailoredResumeArtifact({
-              job_id:          jobId,
-              run_id:          runIdForArtifacts,
-              tex_path:        path.relative(repoRoot, resumeOutcome.tex_path),
-              pdf_path:        resumeOutcome.pdf_path ? path.relative(repoRoot, resumeOutcome.pdf_path) : null,
-              meta_path:       metaRel,
-              word_count:      resumeOutcome.word_count,
-              model:           String(resumeOutcome.meta.model ?? resumeGeneratorConfigArg.model),
-              prompt_sha:      String(resumeOutcome.meta.prompt_sha ?? ""),
-              canonical_sha:   String(resumeOutcome.meta.canonical_sha ?? ""),
-              input_tokens:    (resumeOutcome.meta.input_tokens as number | null) ?? null,
-              output_tokens:   (resumeOutcome.meta.output_tokens as number | null) ?? null,
-              compile_status:  String(resumeOutcome.meta.compile_status ?? "failed"),
-              generated_by:    "pipeline",
-              flags:           resumeOutcome.flags,
-            });
           }
         }
 
@@ -963,26 +948,6 @@ async function processJobs(
               ? path.relative(repoRoot, coverOutcome.pdf_path)
               : path.relative(repoRoot, coverOutcome.tex_path);
             log(`[${n}]  Cover: ${coverOutcome.tex_path} (${coverLetterWords}w)`);
-          }
-          if (!SKIP_PERSIST && coverOutcome.tex_path) {
-            await insertCoverLetterArtifact({
-              job_id:          jobId,
-              run_id:          runIdForArtifacts,
-              content:         null,
-              file_path:       coverLetterPath,
-              tex_path:        path.relative(repoRoot, coverOutcome.tex_path),
-              pdf_path:        coverOutcome.pdf_path ? path.relative(repoRoot, coverOutcome.pdf_path) : null,
-              meta_path:       metaRel,
-              word_count:      coverLetterWords,
-              model:           String(coverOutcome.meta.model ?? coverLetterConfigArg.model),
-              prompt_sha:      String(coverOutcome.meta.prompt_sha ?? ""),
-              canonical_sha:   String(coverOutcome.meta.canonical_sha ?? ""),
-              input_tokens:    (coverOutcome.meta.input_tokens as number | null) ?? null,
-              output_tokens:   (coverOutcome.meta.output_tokens as number | null) ?? null,
-              compile_status:  String(coverOutcome.meta.compile_status ?? "failed"),
-              generated_by:    "pipeline",
-              flags:           coverOutcome.flags,
-            });
           }
         }
 
@@ -1045,6 +1010,46 @@ async function processJobs(
         cover_letter_model: coverLetterPath ? coverLetterConfigArg.model : null,
       };
       await saveJob(jobRecord);
+
+      if (resumeOutcome?.tex_path && metaRel) {
+        await insertTailoredResumeArtifact({
+          job_id:          jobId,
+          run_id:          runIdForArtifacts,
+          tex_path:        path.relative(repoRoot, resumeOutcome.tex_path),
+          pdf_path:        resumeOutcome.pdf_path ? path.relative(repoRoot, resumeOutcome.pdf_path) : null,
+          meta_path:       metaRel,
+          word_count:      resumeOutcome.word_count,
+          model:           String(resumeOutcome.meta.model ?? resumeGeneratorConfigArg.model),
+          prompt_sha:      String(resumeOutcome.meta.prompt_sha ?? ""),
+          canonical_sha:   String(resumeOutcome.meta.canonical_sha ?? ""),
+          input_tokens:    (resumeOutcome.meta.input_tokens as number | null) ?? null,
+          output_tokens:   (resumeOutcome.meta.output_tokens as number | null) ?? null,
+          compile_status:  String(resumeOutcome.meta.compile_status ?? "failed"),
+          generated_by:    "pipeline",
+          flags:           resumeOutcome.flags,
+        });
+      }
+
+      if (coverOutcome?.tex_path && metaRel) {
+        await insertCoverLetterArtifact({
+          job_id:          jobId,
+          run_id:          runIdForArtifacts,
+          content:         null,
+          file_path:       coverLetterPath,
+          tex_path:        path.relative(repoRoot, coverOutcome.tex_path),
+          pdf_path:        coverOutcome.pdf_path ? path.relative(repoRoot, coverOutcome.pdf_path) : null,
+          meta_path:       metaRel,
+          word_count:      coverLetterWords,
+          model:           String(coverOutcome.meta.model ?? coverLetterConfigArg.model),
+          prompt_sha:      String(coverOutcome.meta.prompt_sha ?? ""),
+          canonical_sha:   String(coverOutcome.meta.canonical_sha ?? ""),
+          input_tokens:    (coverOutcome.meta.input_tokens as number | null) ?? null,
+          output_tokens:   (coverOutcome.meta.output_tokens as number | null) ?? null,
+          compile_status:  String(coverOutcome.meta.compile_status ?? "failed"),
+          generated_by:    "pipeline",
+          flags:           coverOutcome.flags,
+        });
+      }
     }
 
     if (!SKIP_DEDUP) {

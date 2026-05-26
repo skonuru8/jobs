@@ -226,14 +226,14 @@ function formatJobLocationLine(job: Job): string | null {
 export function formatProfileLocationLine(profile: Profile): string {
   const c = profile.contact;
   const note = c.work_arrangement_note?.trim();
-  if (note) return `${c.city}, ${c.state} \\quad (${note})`;
+  if (note) return `${c.city}, ${c.state}  (${note})`;
   const types = profile.location.acceptable_types ?? [];
   const fallback = types.includes("onsite")
     ? "Open to Onsite"
     : types.includes("hybrid")
     ? "Open to Hybrid"
     : "Open to Remote";
-  return `${c.city}, ${c.state} \\quad (${fallback})`;
+  return `${c.city}, ${c.state}  (${fallback})`;
 }
 
 function readReqId(meta: Job["meta"]): string | null {
