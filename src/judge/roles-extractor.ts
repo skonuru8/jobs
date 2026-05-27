@@ -24,12 +24,12 @@ export function extractRolesFromCanonicalTex(tex: string): string {
 
   // Primary pattern: \textbf{Company} \hfill dates\\ then \textit{Role} (resume_master.tex)
   const blockIter = block.matchAll(
-    /\\textbf\{([^}]+)\}\s*\\hfill\s*([^\\\n]+)[\s\n]*\\\\?\s*\\textit\{([^}]+)\}/g,
+    /\\textbf\{([^}]+)\}\s*\\hfill\s*([^\\\n]+)[\s\n]*(?:\\\\)?\s*(?:\\vspace\{[^}]+\}\s*)?\\textit\{([^}]+)\}/g,
   );
   for (const m of blockIter) {
     const company = m[1].trim();
     if (/^project:/i.test(company)) continue;
-    roles.push(`${company} — ${m[3].trim()} (${m[2].trim()})`);
+    roles.push(`${company} - ${cleanLatexInline(m[3])} (${m[2].trim()})`);
   }
 
   if (roles.length) return roles.join("\n");
@@ -43,6 +43,15 @@ export function extractRolesFromCanonicalTex(tex: string): string {
   }
 
   return roles.slice(0, 12).join("\n");
+}
+
+function cleanLatexInline(value: string): string {
+  return value
+    .replace(/\$\\?\|\$/g, "|")
+    .replace(/\\[a-zA-Z]+\*?\{([^}]*)\}/g, "$1")
+    .replace(/[{}]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**

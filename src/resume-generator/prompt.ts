@@ -65,9 +65,9 @@ this message is the sole and authoritative source.
   re-emphasize, or rewrite phrasing, but every canonical bullet and every
   project under PROJECTS must remain in the output. Relevance signaling is done
   by REORDERING (lead with most JD-relevant), NOT by REMOVING.
-- Honor the "fabrication permitted in total mode" rule — JD-required tools,
-  domain claims, and plausible metrics MAY be added when adjacent experience
-  doesn't exist. Just do not surface any [FABRICATED] tag in the output text.
+- Fabrication is permitted in total mode. The STYLE GUARD below defines what
+  fabrication is allowed to look like: natural voice, single stack per sentence,
+  no bridging phrases, no JD-targeting tails. Metrics may NOT be invented.
 - All Prohibited Actions remain prohibited EXCEPT the ones the skill explicitly
   unlocks under total mode.
 - Domain reframes for missing JD domains: apply them; do not print the rationale.
@@ -100,6 +100,82 @@ NEVER to the SKILLS section.
 If a JD requires a tool that is not in the candidate's canonical SKILLS, surface
 it through an Experience bullet reframe at the role indicated by the relevant
 gap_directive's target_role — never by adding it to SKILLS.
+
+--- PUNCTUATION RULE (NON-NEGOTIABLE) ---
+
+NEVER use em-dashes or en-dashes anywhere in your output. This covers all forms:
+  - LaTeX "---" (renders as em-dash)
+  - LaTeX "--" (renders as en-dash)
+  - Unicode U+2014
+  - Unicode U+2013
+
+Use commas, periods, parentheses, or rewrite the sentence. Date ranges read
+"January 2025 to June 2025", never "January 2025 -- June 2025".
+
+Single hyphens "-" in hyphenated words (full-stack, role-based, real-time) are
+fine and stay.
+
+--- STYLE GUARD - BULLET WRITING (NON-NEGOTIABLE) ---
+
+Total mode permits Mode B swaps, Mode A rewrites, and Mode C/D additions. The
+constraint is style. Every bullet you emit, canonical, modified, swapped, or
+fully new, must read as if it genuinely happened in the role where it appears.
+If a reader can spot which bullets are AI-added, the tailoring failed.
+
+ALLOWED PATTERNS:
+
+1. Mode B (clean tech swap). Replace one tech name with another in an existing
+   bullet. Leave the rest of the sentence intact.
+     Before: "Designed and built Node.js REST APIs serving four user roles"
+     After:  "Designed and built Spring Boot REST APIs serving four user roles"
+
+2. Mode A/C (existing-bullet integration). Weave a JD-target tech into an
+   existing bullet's natural context.
+     Before: "Deployed Node.js backend services to GCP VMs"
+     After:  "Containerized Node.js backend services with Docker and deployed to GCP VMs"
+
+3. Mode C/D (new bullet in full voice). Add a bullet that uses the JD-target
+   tech in the role's context, written in the same voice and detail level as
+   the role's other bullets.
+     Example for AquilaEdge: "Implemented MongoDB document collections for
+     patient and prescription records on the DaxP platform, supporting flexible
+     schema evolution as clinical workflows expanded."
+
+FORBIDDEN STYLE PATTERNS (these are families, not a closed list; pattern-match
+against the intent):
+
+A. Bridging phrases. Anything that hedges a fabrication or signals an LLM is
+   writing. The pattern family is banned in any form, with any wording:
+     - "demonstrating transferable skills [similar to / to / from / in / across] <X>"
+     - "[analogous / akin / similar / equivalent / parallel] to <X>"
+     - "[whose / which has] syntax [and / or] features [nearly / closely] identical to <X>"
+     - "foundational knowledge of <X>" or "exposure to <X>" when claiming proficiency
+     - "transitional understanding of <X>"
+     - any "<X> -- analogous to <Y>" construction
+   If the bullet contains a hedge that compares the candidate's real tech to a
+   different tech, it falls in this family.
+
+B. Two-stack-in-one-sentence. Naming both a real stack and a JD-target stack
+   in the same sentence, connected by any hedge or transfer language. One stack
+   per sentence. If you want to add a different tech, write a separate bullet
+   or do a clean Mode B swap.
+
+C. JD-targeting tails. A trailing clause whose purpose is "and this matches your
+   JD" is banned. The recruiter knows their own JD.
+
+D. Gap confessions. Acknowledging absent experience is banned, even with humble
+   framing. If you are tempted to confess, drop the bullet entirely.
+
+PER-ROLE PLAUSIBILITY:
+
+Before adding or modifying a bullet at any employer, read that employer's
+canonical bullets to understand the role's context (greenfield vs migration,
+sole-engineer vs team, healthcare vs telecom, etc.). The bullet must read as
+something that role could plausibly have produced.
+
+If judge gap_directives[i] requests a fabrication that cannot be written
+naturally at target_role given that role's context, drop the directive silently.
+One missing ATS keyword is cheaper than a bullet that reads wrong.
 
 --- LENGTH CONSTRAINT ---
 Word count of the rendered text (ignoring LaTeX commands): between 1900 and 2500.

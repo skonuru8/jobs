@@ -67,7 +67,7 @@ import { writeCombinedMeta } from "@/applications/combined-meta";
 import { makeRunFolderName } from "@/applications/run-folder";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
 import { makeJobSlug } from "@/shared/slug";
-import { loadRiskMap, auditTailoredArtifact } from "@/risk-map";
+import { loadRiskMap, auditTailoredArtifact, applyResumeAttributionOverrunFlag } from "@/risk-map";
 
 // Dedup + storage — gracefully disabled via SKIP_DEDUP=1 / SKIP_PERSIST=1
 import {
@@ -758,6 +758,8 @@ async function processJobs(
 
       log(`[${n}]  Judging...`);
       const judgeInput: JudgeInput = {
+        run_id: RUN_ID,
+        job_id: jobId,
         job: {
           title:             sanitized.title          ?? "",
           company:           sanitized.company?.name  ?? "",
@@ -895,6 +897,8 @@ async function processJobs(
               artifactType:  "resume",
             });
             (resumeOutcome.meta as Record<string, unknown>).risk_summary  = summary;
+            applyResumeAttributionOverrunFlag(resumeOutcome.flags, summary);
+            (resumeOutcome.meta as Record<string, unknown>).flags = resumeOutcome.flags;
             (resumeOutcome.meta as Record<string, unknown>).export_status = summary.human_review_items.length > 0 ? "needs_review" : "ok";
             if (!SKIP_PERSIST) await insertLedgerEntries(ledger);
           } catch (e) {

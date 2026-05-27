@@ -7,6 +7,7 @@
     "start": "tsx src/orchestrator/index.ts",
     "migrate": "tsx src/storage/migrate.ts",
     "pipeline": "tsx scripts/run-pipeline.ts",
+    "audit:artifacts": "tsx scripts/audit-artifacts.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:infra": "RUN_INFRA_TESTS=1 vitest run",

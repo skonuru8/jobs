@@ -5,6 +5,7 @@
 import * as path from "path";
 
 import type { ArtifactBundleOk } from "@/shared/artifact-bundle";
+import { stripDashes } from "@/shared/dash-lint";
 
 import { generateResumeTex, latexStructureOk } from "./generator";
 import { PROMPT_SHA } from "./prompt";
@@ -59,7 +60,7 @@ export async function generateAndSaveResume(
     return emptyOutcome(bundle, ctx, flags, gen, combinedMetaRel);
   }
 
-  let tex = gen.tex;
+  let tex = replaceSkillsSection(stripDashes(gen.tex), bundle.canonical_resume_tex);
 
   let wc = gen.word_count;
   if (wc < wMin) {
@@ -191,3 +192,14 @@ function emptyOutcome(
 }
 
 export type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "./types";
+
+export function replaceSkillsSection(tex: string, canonicalTex: string): string {
+  const canonicalSkills = canonicalTex.match(
+    /(\\section\*\{SKILLS\}[\s\S]*?)(?=\\section\*\{EXPERIENCE\})/,
+  )?.[1];
+  if (!canonicalSkills) return tex;
+  return tex.replace(
+    /\\section\*\{SKILLS\}[\s\S]*?(?=\\section\*\{EXPERIENCE\})/,
+    canonicalSkills,
+  );
+}

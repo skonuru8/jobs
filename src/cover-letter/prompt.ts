@@ -4,7 +4,7 @@
 
 import * as crypto from "crypto";
 
-import type { GapDirective } from "@/judge/types";
+import type { GapDirective, TechSwap } from "@/judge/types";
 import type { CoverLetterInput } from "./types";
 
 export const PROMPT_VERSION = "pipeline-tex-v2";
@@ -41,7 +41,14 @@ STYLE:
 - Confident, direct, specific numbers — never vague
 - No hedging: replace "I believe", "I think", "I feel" with "I bring", "I have", "I deliver"
 - Match the JD's vocabulary where natural
-- Do NOT fabricate metrics. Only use metrics that appear in the canonical resume.`;
+- Do NOT fabricate metrics. Only use metrics that appear in the canonical resume.
+
+PUNCTUATION RULE (NON-NEGOTIABLE):
+- NEVER use em-dashes or en-dashes anywhere in your output.
+- Do not output LaTeX "---" or "--".
+- Do not output Unicode U+2014 or U+2013.
+- Use commas, periods, parentheses, or rewrite the sentence.
+- Single hyphens in hyphenated words are fine.`;
 
 export const COVER_PROMPT_SHA = crypto
   .createHash("sha256")
@@ -99,7 +106,7 @@ export function buildCoverLetterPrompt(input: CoverLetterInput): string {
     .map(s => s.name);
 
   const yoe = (job.yoe_min !== null || job.yoe_max !== null)
-    ? `${job.yoe_min ?? "?"}–${job.yoe_max ?? "?"} years`
+    ? `${job.yoe_min ?? "?"} to ${job.yoe_max ?? "?"} years`
     : "not specified";
 
   const respLines = job.responsibilities.length
@@ -110,38 +117,67 @@ export function buildCoverLetterPrompt(input: CoverLetterInput): string {
     ? "strong direct match"
     : job.score_components.skills >= 0.55
     ? "solid partial match"
-    : "semantic match — some gaps";
+    : "semantic match, some gaps";
 
+  const swapsBlock = renderSwapsBlock(input.tech_swaps);
+  const fabricatedClaimsBlock = renderFabricatedClaimsBlock(input.gap_directives);
   const resumeSection = input.experience_block?.trim()
-    ? `=== CANDIDATE EXPERIENCE (verbatim from resume — do not reorganize) ===
+    ? `=== CANDIDATE EXPERIENCE (verbatim from resume, do not reorganize) ===
 
 ${input.experience_block.trim()}
 
 === EMPLOYER ATTRIBUTION RULES (NON-NEGOTIABLE) ===
 
-1. When you describe work done at a specific employer (e.g., "at AquilaEdge",
-   "at Hitachi Vantara", "in my Nokia CPQ engagement"), every technology, metric,
-   and outcome in that sentence must come from THAT employer's bullets above.
+1. The CANDIDATE EXPERIENCE block above lists each employer's bullets verbatim
+   from the canonical resume. That is the baseline truth for what each
+   employer used.
 
-2. NEVER attribute work from one employer to another. Examples of forbidden mixing:
-   - Saying "at AquilaEdge I led the decomposition" when the decomposition is
-     under Hitachi Vantara / Nokia CPQ.
-   - Saying "at AquilaEdge I used Java and Spring Boot" when AquilaEdge's bullets
-     show only Node.js, Flutter, and GCP.
-   - Saying "most recent role as Consultant (Jul 2019 – Mar 2024)" when the most
-     recent role above is at AquilaEdge (Jan 2025 – Jun 2025).
+2. The tailored resume for this job has already been generated and may have
+   applied Mode B tech_swaps to align with the JD. When narrating about an
+   employer, use the post-swap tech names. The cover letter must agree with
+   the tailored resume that the recruiter will read alongside it.
 
-3. If you don't name an employer, use neutral framing like "in a prior role" or
-   "in a recent engagement" — but the metrics and tech in that sentence must still
-   come from a single real role above.
+3. The active tech_swaps for this job are listed below under ACTIVE_TECH_SWAPS.
+   For each swap with target_role = "<Employer>", when you write about that
+   employer's work, use the "to" technology, not the "from" technology. If
+   target_role is null, the swap applies everywhere that tech is mentioned.
 
-4. AquilaEdge's stack is Node.js + Flutter + GCP + Google Cloud SQL. Period.
-   Nokia/Hitachi's stack is Java + Spring Boot + Azure (Service Bus, Cosmos DB)
-   + Redis. Period. Do not blur these.
+4. NEVER attribute work from one employer to another. If a Hitachi bullet
+   describes a decomposition that restored 7 min to 1 min, do not retell that
+   accomplishment under AquilaEdge.
 
-5. Do NOT switch employers inside the same paragraph after naming one. If you
-   want to discuss a different employer, start a new paragraph for that employer
-   or use neutral framing with no employer name.`
+5. If you do not name an employer, use neutral framing ("in a prior role",
+   "in a recent engagement"). Whatever tech you mention must come from a
+   single real role, with active swaps applied.
+
+6. Do not switch employers inside the same paragraph. One employer per
+   paragraph; start a new paragraph for a different employer or use neutral
+   framing.
+
+=== ACTIVE_TECH_SWAPS (apply to narration) ===
+
+${swapsBlock || "(none)"}
+
+=== FABRICATED CLAIMS THE RESUME HAS MADE ===
+
+${fabricatedClaimsBlock || "(none)"}
+
+When the cover letter mentions a fabricated claim's target_role, you MAY
+reference the claim using the framing the resume used. You MAY also choose not
+to mention it. What you MUST NOT do is contradict it.
+
+=== STYLE GUARD (applies to cover letter body) ===
+
+The same style rules that govern the tailored resume apply here:
+  - No bridging phrases ("demonstrating transferable skills", "analogous to",
+    "similar to <JD tech>", "akin to", "whose syntax is nearly identical to",
+    "foundational knowledge of", "exposure to" when claiming proficiency).
+  - No two-stack-in-one-sentence patterns with hedges.
+  - No JD-targeting tails.
+  - No gap confessions.
+
+The cover letter should read as natural professional prose. If a sentence
+reads like an AI-generated tailoring move, rewrite it.`
     : resume?.trim()
     ? `CANONICAL RESUME (LaTeX or text — metrics must match this source only):\n${resume.trim()}`
     : `CANONICAL RESUME: Not provided. Use profile skills only; do not invent metrics.`;
@@ -168,8 +204,8 @@ ${input.experience_block.trim()}
 
   const gapNote = missingRequired.length > 0
     ? `SKILLS NOT EXPLICITLY ON RESUME (required by job): ${missingRequired.join(", ")}
-Assert competence through closest analogous experience from the resume — never confess gaps.`
-    : "All required skills present on resume — no bridging needed.";
+Assert competence only through closest supported experience from the resume. Never confess gaps.`
+    : "All required skills present on resume. No bridging needed.";
 
   const concernsNote = job.judge_concerns?.length
     ? `Judge concerns (context only — never quote as metadata in the letter body):\n${job.judge_concerns.map(c => `  - ${c}`).join("\n")}`
@@ -194,7 +230,7 @@ TARGET JOB:
   Domain:          ${job.domain ?? "not specified"}
   Employment type: ${job.employment_type ?? "not specified"}
   YOE required:    ${yoe}
-  Visa:            ${visaSummary}${job.visa_quote ? ` — quote: "${job.visa_quote}"` : ""}
+  Visa:            ${visaSummary}${job.visa_quote ? `, quote: "${job.visa_quote}"` : ""}
 
 ROLE RESPONSIBILITIES:
 ${respLines}
@@ -202,7 +238,7 @@ ${respLines}
 REQUIRED SKILLS (job):
 ${job.required_skills.map(s => `  ${s.name} (${s.importance}${s.years_required ? `, ${s.years_required}yr` : ""})`).join("\n") || "  not extracted"}
 
-CANDIDATE SKILLS MATCHED TO THIS JOB: ${matchedSkills.join(", ") || "none matched by name — use semantic overlap"}
+CANDIDATE SKILLS MATCHED TO THIS JOB: ${matchedSkills.join(", ") || "none matched by name, use semantic overlap"}
 SKILLS QUALITY SIGNAL: ${skillsQuality}
 
 ${gapNote}
@@ -238,7 +274,7 @@ export function renderCoverLetterGapDirectives(directives: GapDirective[] | unde
   const lines = ["=== JUDGE GAP DIRECTIVES (apply to the cover letter) ===", ""];
 
   if (acknowledge.length > 0) {
-    lines.push("[ACKNOWLEDGE -- address these honestly in the body]");
+    lines.push("[ACKNOWLEDGE, address these honestly in the body]");
     for (const d of acknowledge) {
       lines.push(`- ${d.jd_requirement} -> frame as: ${d.frame_as ?? ""}`.trimEnd());
     }
@@ -246,7 +282,7 @@ export function renderCoverLetterGapDirectives(directives: GapDirective[] | unde
   }
 
   if (fabricate.length > 0) {
-    lines.push("[SILENTLY FABRICATE -- incorporate into claims without flagging the gap]");
+    lines.push("[SILENTLY FABRICATE, incorporate into claims without flagging the gap]");
     for (const d of fabricate) {
       const at = d.target_role ? `, at: ${d.target_role}` : "";
       lines.push(`- ${d.jd_requirement}${at}, frame as: ${d.frame_as ?? ""}`);
@@ -255,7 +291,7 @@ export function renderCoverLetterGapDirectives(directives: GapDirective[] | unde
   }
 
   if (forbid.length > 0) {
-    lines.push("[FORBIDDEN -- never claim these]");
+    lines.push("[FORBIDDEN, never claim these]");
     for (const d of forbid) {
       lines.push(`- ${d.jd_requirement}`);
     }
@@ -263,6 +299,24 @@ export function renderCoverLetterGapDirectives(directives: GapDirective[] | unde
   }
 
   return lines.join("\n").trim();
+}
+
+export function renderSwapsBlock(swaps: TechSwap[] | undefined): string {
+  if (!swaps?.length) return "";
+  return swaps.map(s => {
+    const where = s.target_role ? `at "${s.target_role}"` : "(unscoped)";
+    return `  - "${s.from}" -> "${s.to}" ${where}`;
+  }).join("\n");
+}
+
+export function renderFabricatedClaimsBlock(directives: GapDirective[] | undefined): string {
+  const fabs = (directives ?? []).filter(d => d.handling === "fabricate");
+  if (!fabs.length) return "";
+  return fabs.map(d => {
+    const role = d.target_role ?? "(unscoped)";
+    const frame = d.frame_as ?? d.jd_requirement;
+    return `  - ${role}: "${frame}"`;
+  }).join("\n");
 }
 
 export function extractTitleKeywords(title: string): string[] {

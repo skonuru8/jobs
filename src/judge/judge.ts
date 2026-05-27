@@ -3,6 +3,8 @@
  */
 
 import { complete, ReasoningConfig } from "./client";
+import * as fs from "fs";
+import * as path from "path";
 import {
   buildSystemPrompt,
   buildJudgePrompt,
@@ -123,6 +125,7 @@ export async function judge(
   }
 
   if (!validation.ok) {
+    writeJudgeFailurePayload(input, raw, validation.error);
     return {
       status:            "error",
       fields:            null,
@@ -144,6 +147,33 @@ export async function judge(
     system_prompt_sha: systemPromptSha,
     judged_at,
   };
+}
+
+function writeJudgeFailurePayload(input: JudgeInput, raw: string, error: string): void {
+  try {
+    const runId = sanitizeId(input.run_id ?? "manual");
+    const jobId = sanitizeId(input.job_id ?? input.job.title ?? "unknown-job");
+    const dir = path.join(process.cwd(), "output", "logs", "judge_failures");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, `${runId}_${jobId}.json`),
+      JSON.stringify({
+        run_id: input.run_id ?? null,
+        job_id: input.job_id ?? null,
+        title: input.job.title,
+        company: input.job.company,
+        error,
+        raw,
+      }, null, 2) + "\n",
+      "utf8",
+    );
+  } catch {
+    // Failure capture must never turn a judge validation miss into a pipeline crash.
+  }
+}
+
+function sanitizeId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || "unknown";
 }
 
 async function _withHttpRetry<T>(fn: () => Promise<T>): Promise<T> {

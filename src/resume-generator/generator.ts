@@ -10,6 +10,7 @@ import {
   buildSlimJdForPrompts,
   buildSlimProfileForPrompts,
 } from "@/shared/artifact-bundle";
+import { hasBannedStylePhrase } from "@/shared/style-lint";
 
 import { PROMPT_SHA, TOTAL_MODE_PROMPT, renderResumeJudgeAddendum } from "./prompt";
 import type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "./types";
@@ -49,6 +50,10 @@ export async function generateResumeTex(
         }
         if (!/\end\{document\}\s*$/s.test(tex)) {
           lastErr = "missing end{document}";
+          continue;
+        }
+        if (hasBannedStylePhrase(tex)) {
+          lastErr = "banned style phrase";
           continue;
         }
         const wc = countWordsTex(tex);

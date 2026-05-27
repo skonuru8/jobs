@@ -3,6 +3,8 @@
  */
 
 import { complete } from "./client";
+import { stripDashes } from "@/shared/dash-lint";
+import { hasBannedStylePhrase } from "@/shared/style-lint";
 import {
   COVER_LETTER_SYSTEM,
   COVER_PROMPT_SHA,
@@ -66,12 +68,24 @@ export async function generateCoverLetter(
         temperature: config.temperature,
         ...(config.thinking ? { thinking: config.thinking } : {}),
       });
-      const cleaned = stripMarkdown(result.content);
+      const cleaned = stripDashes(stripMarkdown(result.content));
       const wordCount = countWords(cleaned);
+      const truncated = looksTruncated(cleaned);
+      const bannedStyle = hasBannedStylePhrase(cleaned);
 
-      if (cleaned && wordCount < 350 && attempt < maxAttempts - 1) {
-        const retryAddendum = `\n\nPREVIOUS OUTPUT WAS ${wordCount} WORDS. Minimum 400 required. Generate a longer body. Address the judge's gap reframe angles in more depth. Add a fourth paragraph if needed. Do not return under 400 words.`;
+      if (cleaned && (wordCount < 350 || truncated || bannedStyle) && attempt < maxAttempts - 1) {
+        const retryAddendum = `\n\nPREVIOUS OUTPUT WAS ${wordCount} WORDS${truncated ? " AND LOOKED TRUNCATED" : ""}${bannedStyle ? " AND USED BANNED BRIDGING STYLE" : ""}. Minimum 400 required. Generate a complete longer body. Address the judge's gap reframe angles in more depth. Add a fourth paragraph if needed. Do not return under 400 words. End with a complete sentence. Do not use bridging phrases such as analogous to, demonstrating transferable, similar to, or directly applicable to.`;
         currentUserPrompt = userPrompt + retryAddendum;
+        continue;
+      }
+
+      if (truncated) {
+        lastErr = `cover letter body appears truncated (${wordCount} words)`;
+        continue;
+      }
+
+      if (bannedStyle) {
+        lastErr = "cover letter body contains banned style phrase";
         continue;
       }
 
@@ -107,6 +121,12 @@ export async function generateCoverLetter(
 
 function countWords(s: string): number {
   return s.split(/\s+/).filter(Boolean).length;
+}
+
+export function looksTruncated(body: string): boolean {
+  const t = body.trim();
+  if (!t) return true;
+  return !/[.!?"]$/.test(t);
 }
 
 function stripMarkdown(text: string): string {

@@ -78,7 +78,20 @@ export const JUDGE_JSON_SCHEMA = {
           },
           gap_directives: {
             type: "array",
-            items: { type: "object" },
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["jd_requirement", "handling", "target_role", "frame_as"],
+              properties: {
+                jd_requirement: { type: "string" },
+                handling: {
+                  type: "string",
+                  enum: ["fabricate", "reframe", "acknowledge", "ignore", "forbid"],
+                },
+                target_role: { type: ["string", "null"] },
+                frame_as:    { type: ["string", "null"] },
+              },
+            },
           },
         },
       },

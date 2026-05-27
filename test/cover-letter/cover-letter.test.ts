@@ -144,7 +144,7 @@ describe("buildCoverLetterPrompt", () => {
 
   it("includes YOE requirement", () => {
     const p = buildCoverLetterPrompt(BASE_INPUT);
-    expect(p).toContain("5–8 years");
+    expect(p).toContain("5 to 8 years");
   });
 
   it("includes judge reasoning", () => {

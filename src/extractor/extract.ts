@@ -10,7 +10,8 @@
  */
 
 import { complete, ReasoningConfig }         from "./client";
-import { SYSTEM_PROMPT, buildUserPrompt, PROMPT_VERSION } from "./prompt";
+import { SYSTEM_PROMPT, buildUserPromptWithSegments, PROMPT_VERSION } from "./prompt";
+import { segmentJd } from "./segment";
 import { validateExtraction, ValidatedFields } from "./validate";
 import { ExtractionResult, ExtractedFields }   from "./types";
 
@@ -50,7 +51,8 @@ export async function extract(
     };
   }
 
-  const userPrompt = buildUserPrompt(descriptionRaw);
+  const segments = segmentJd(descriptionRaw);
+  const userPrompt = buildUserPromptWithSegments(segments);
 
   // First attempt
   let result = await _attempt(userPrompt, config);

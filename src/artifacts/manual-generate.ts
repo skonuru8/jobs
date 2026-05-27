@@ -25,7 +25,7 @@ import {
 } from "@/storage/persist";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
-import { auditTailoredArtifact, isRiskMapLoaded, loadRiskMap } from "@/risk-map";
+import { auditTailoredArtifact, applyResumeAttributionOverrunFlag, isRiskMapLoaded, loadRiskMap } from "@/risk-map";
 
 export interface ManualGenerateResult {
   ok: boolean;
@@ -157,6 +157,8 @@ export async function manualGenerateArtifacts(
         artifactType:  "resume",
       });
       (resumeOutcome.meta as Record<string, unknown>).risk_summary  = summary;
+      applyResumeAttributionOverrunFlag(resumeOutcome.flags, summary);
+      (resumeOutcome.meta as Record<string, unknown>).flags = resumeOutcome.flags;
       (resumeOutcome.meta as Record<string, unknown>).export_status = summary.human_review_items.length > 0 ? "needs_review" : "ok";
       await insertLedgerEntries(ledger);
     } catch (e) {

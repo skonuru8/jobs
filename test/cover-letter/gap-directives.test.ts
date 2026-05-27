@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildCoverLetterPrompt, renderCoverLetterGapDirectives } from "@/cover-letter/prompt";
+import {
+  buildCoverLetterPrompt,
+  renderCoverLetterGapDirectives,
+  renderFabricatedClaimsBlock,
+  renderSwapsBlock,
+} from "@/cover-letter/prompt";
+import { looksTruncated } from "@/cover-letter/generator";
 import type { CoverLetterInput } from "@/cover-letter/types";
 
 const BASE_INPUT: CoverLetterInput = {
@@ -94,5 +100,31 @@ describe("cover letter gap directives", () => {
     ]);
     expect(rendered).toContain("ACKNOWLEDGE");
     expect(rendered).toContain("Adjacent regulated-enterprise delivery");
+  });
+
+  it("renders active scoped tech swaps for cover narration", () => {
+    const rendered = renderSwapsBlock([
+      { from: "Node.js", to: "Spring Boot", confidence: 0.9, target_role: "AquilaEdge LLC" },
+    ]);
+    expect(rendered).toContain("\"Node.js\" -> \"Spring Boot\"");
+    expect(rendered).toContain("AquilaEdge LLC");
+  });
+
+  it("renders fabricated claims for resume-cover consistency", () => {
+    const rendered = renderFabricatedClaimsBlock([
+      {
+        jd_requirement: "MongoDB",
+        handling: "fabricate",
+        target_role: "AquilaEdge LLC",
+        frame_as: "Implemented MongoDB document collections for DaxP.",
+      },
+    ]);
+    expect(rendered).toContain("AquilaEdge LLC");
+    expect(rendered).toContain("Implemented MongoDB");
+  });
+
+  it("detects truncated cover letter bodies", () => {
+    expect(looksTruncated("This ends mid sentence")).toBe(true);
+    expect(looksTruncated("This ends cleanly.")).toBe(false);
   });
 });

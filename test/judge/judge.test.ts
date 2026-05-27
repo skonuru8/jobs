@@ -251,6 +251,16 @@ describe("SYSTEM_PROMPT", () => {
   it("contains the no-sponsorship hard rule", () => {
     expect(systemPrompt).toContain(`visa_sponsorship = "denied"`);
   });
+
+  it("contains prior-employer and credential hard blockers", () => {
+    expect(systemPrompt).toContain("Prior-employer restrictions");
+    expect(systemPrompt).toContain("Active credential restrictions");
+  });
+
+  it("tells judge to choose plausible fabrication target roles", () => {
+    expect(systemPrompt).toContain("Plausibility test");
+    expect(systemPrompt).toContain("strongest contextual fit");
+  });
 });
 
 

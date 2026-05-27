@@ -1,12 +1,112 @@
-# THE BIBLE — v9 (2026-05-26)
+# THE BIBLE — v10 (2026-05-27)
 
 > Project: **job-hunter** — automated job discovery + filter + score + judge + cover letter pipeline for Sarath Konuru.
 >
-> This is the authoritative document. Supersedes v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
+> This is the authoritative document. Supersedes v9 (2026-05-26), v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
 >
 > Read this before writing code. Update this file when module status changes.
 >
-> Historical archive: `THE-BIBLE-v1.md` through `THE-BIBLE-v8.md` and `THE_BIBLE_V8_UPDATES.md` are immutable references. Do NOT edit them. Only this file rolls forward.
+> Bible file policy: keep only two Bible files in the repo. `THE-BIBLE-v1.md`
+> is the original architecture snapshot. `THE-BIBLE-LATEST.md` is the single
+> rolling source of truth. Do not create per-version Bible archives.
+
+---
+
+## What changed since v9
+
+Ten waves of Round-2 quality work landed between v9 and v10.
+
+**Wave 1 — Canonical resume intake refreshed.**
+`config/resume_master.tex` was replaced from the uploaded
+`/Users/skonuru/Downloads/resume_fin.tex` after compatibility checks. The new
+canonical keeps all 12 SUMMARY bullets, has valid `SUMMARY`, `SKILLS`,
+`EXPERIENCE`, `PROJECTS`, `EDUCATION`, and `AWARDS` sections, and is cleaned of
+LaTeX/Unicode em/en dash forms while preserving ordinary single hyphens. The
+role extractor was widened to tolerate `\vspace{}` between an employer/date line
+and the following `\textit{Role}` line, so the new Hitachi block is parsed
+without reshaping the canonical resume to fit an old regex.
+
+**Wave 2 — Profile and skills reconciliation.**
+`config/profile.json` and `config/skills.json` were reconciled to the visible
+canonical SKILLS section. Aliases now normalize visible variants such as
+`Javascript` to `JavaScript`, `Typescript` to `TypeScript`, `Golang` to `Go`,
+`ReactJS` to `React`, `Fast API` to `FastAPI`, and `Apache Kafka` to `Kafka`.
+The profile now carries 84 visible canonical skills; the alias registry has 93
+canonical entries and 408 aliases.
+
+**Wave 3 — Dash-free generation hardening.**
+`src/shared/dash-lint.ts` adds `stripDashes()`, which rewrites `--`, `---`,
+U+2013, and U+2014 into safe prose forms while preserving single hyphens.
+`src/resume-generator/index.ts` applies it before resume save/compile, and
+`src/cover-letter/generator.ts` applies it to the generated body before LaTeX
+assembly. Resume and cover-letter prompts now explicitly ban em/en dash output.
+
+**Wave 4 — Resume style guard plus enforceable style lint.**
+`src/resume-generator/prompt.ts` now contains a non-negotiable bullet style
+guard: no bridging phrases, no two-stack hedge sentences, no JD-targeting tails,
+no gap confessions, and no invented metrics. `src/shared/style-lint.ts` makes
+the high-risk phrase family enforceable. Resume generation rejects and retries
+outputs containing banned bridge language instead of relying on the prompt
+alone.
+
+**Wave 5 — SKILLS section atomicity is now hard, not only prompted.**
+The resume prompt still says the SKILLS section is locked to canonical content,
+but `src/resume-generator/index.ts::replaceSkillsSection()` now replaces the
+generated SKILLS block with the canonical SKILLS block before save/compile. This
+prevents model-added Cypress/Playwright/Cucumber-style pollution and also
+prevents harmless-looking reorder/rewrite drift from creating future false
+claims.
+
+**Wave 6 — Cover-letter consistency with tailored resume claims.**
+`src/cover-letter/prompt.ts` no longer hardcodes employer stacks. It now renders
+`ACTIVE_TECH_SWAPS` and `FABRICATED CLAIMS THE RESUME HAS MADE` from the same
+judge JSON consumed by the resume generator. The cover letter must narrate the
+post-swap story that the paired tailored resume presents, without switching
+employers inside a paragraph.
+
+**Wave 7 — Cover-letter truncation handling.**
+`config/config.json` raises cover-letter `max_tokens` to 3000 and restores one
+retry. `src/cover-letter/generator.ts::looksTruncated()` detects bodies that do
+not end in sentence punctuation. If the retry still looks truncated or still
+contains banned bridge language, generation fails cleanly with
+`cover_letter_gen_failed` instead of writing a risky partial cover letter.
+
+**Wave 8 — Extractor preferred-section recall.**
+Extractor model config is now `deepseek/deepseek-v4-flash`. New
+`src/extractor/segment.ts` splits JDs into `tags_chips`, `required`,
+`preferred`, `responsibilities`, and `other`. `buildUserPromptWithSegments()`
+feeds those labeled blocks into the extractor prompt with explicit importance
+hints so Preferred-section technologies are not dropped behind abstract
+Required-section prose.
+
+**Wave 9 — Judge hardening.**
+Judge strict-schema mode remains in place, and
+`src/judge/schema.ts` now mirrors nested `tailoring_hints.gap_directives` shape
+instead of allowing arbitrary objects. `src/judge/judge.ts` captures final
+failed validation payloads to `output/logs/judge_failures/{run_id}_{job_id}.json`
+after the retry, so future schema fixes are driven by real payloads. The judge
+prompt now treats impossible prior-employer restrictions and active credential
+requirements as WEAK blockers, and the fabricate guide now requires choosing
+the most plausible target role rather than defaulting to the newest role.
+
+**Wave 10 — Artifact quality audit and overrun soft gate.**
+`scripts/audit-artifacts.ts` audits the four requested historical run folders
+without mutating them and writes
+`output/audits/round2_artifact_quality_baseline.{json,md}`. Baseline findings:
+53 resumes, 49 cover letters, 48 partial improvements over original, 5 no clear
+improvements, 17 style-issue jobs, 42 dash-issue jobs, 3 truncated covers, 51
+SKILLS-drift jobs, 1 employer-stack mismatch, and 38 attribution overruns.
+`src/risk-map/audit.ts::applyResumeAttributionOverrunFlag()` now adds
+`resume_attribution_overrun` when fabricated role attribution exceeds 3.
+
+**Validation for v10.**
+`npx tsc --noEmit` passed. `npx vitest run` passed with 19 files, 273 tests, and
+8 skipped. A live `SOURCE=jobright_api MAX=10 EXTRACT=true DO_RESUME=true
+DO_COVER=true` run loaded the new config, extracted 7/7 eligible jobs, produced
+5 resume/cover pairs, had `judge_failed=0`, `cover_letter_gen_failed=0`, and
+`cover_letter_length_off=0`. That live run exposed one remaining bridge phrase
+and SKILLS drift, which led directly to the enforced style lint and hard SKILLS
+replacement above.
 
 ---
 
@@ -224,14 +324,14 @@ The pipeline is a 19-stage flow inside one `main()` function in `scripts/run-pip
 | 7 | **Phase 1.5 — Cross-run exact dedup (Redis)** — batch `isSeen()` for every PASS job, drop matches | `SKIP_DEDUP=1` or Redis down |
 | 8 | Fetch full JD HTML, extract to plain text | `EXTRACT=0` |
 | 9 | Post-fetch checks (staleness, education recovery on real text) | — |
-| 10 | LLM extract → structured fields (Zod-validated, citation-verified) | `EXTRACT=0` |
+| 10 | LLM extract → structured fields (Zod-validated, citation-verified). v10 segments JD text into tags/chips, required, preferred, responsibilities, and other before prompting | `EXTRACT=0` |
 | 11 | Skill normalization through alias map | — |
 | 12 | Score (5 components: skills 0.35, semantic 0.25, yoe 0.15, seniority 0.15, location 0.10) | scoring disabled |
 | 12.5 | **Cross-site semantic dedup (pgvector)** — only on GATE_PASS jobs with embedding | `SKIP_DEDUP=1` or DB down |
 | 13 | Threshold gate: score ≥ 0.50 → GATE_PASS, else ARCHIVE | scoring disabled |
-| 14 | LLM judge — STRONG / MAYBE / WEAK + reasoning + concerns + optional v5 `gap_directives[]` + scoped `tailoring_hints.tech_swaps[]` | judge disabled |
+| 14 | LLM judge — STRONG / MAYBE / WEAK + reasoning + concerns + optional v5 `gap_directives[]` + scoped `tailoring_hints.tech_swaps[]`; final validation failures are captured under `output/logs/judge_failures/` | judge disabled |
 | 15 | Bucket routing: STRONG+score≥0.70→COVER_LETTER, STRONG+score<0.70→RESULTS, MAYBE→REVIEW_QUEUE, WEAK→ARCHIVE | — |
-| 16 | Cover letter (COVER_LETTER bucket always; REVIEW_QUEUE if score ≥ review_queue_threshold) → write `.md` to `output/cover-letters/{run_id}/{bucket}/` | cover disabled |
+| 16 | Artifact generation (resume + cover letter) for COVER_LETTER jobs and eligible REVIEW_QUEUE jobs → write `.tex`/`.pdf`/`meta.json` under `output/applications/{run_label}/{slug}/`; resume output is dash-cleaned, style-linted, and canonical-SKILLS-locked before save | artifact flags disabled or bucket below threshold |
 | 17 | Persist all of the above to Postgres in one transaction; mark seen in Redis | `SKIP_PERSIST=1` / `SKIP_DEDUP=1` |
 | 18 | Optional: integrity check comparing Redis seen-set vs Postgres `seen_jobs` | `VERIFY=1` not set |
 | 19 | Finish run record — `jobs_total`, `jobs_passed`, `jobs_gated`, `jobs_covered`, `extractions_attempted`, `extractions_succeeded` derived from results array | `SKIP_PERSIST=1` |
@@ -315,12 +415,12 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 | Scraper (dice + jobright + linkedin) | ✅ Green | 66 tests |
 | Pipeline runner v5 | ✅ Wired all stages 0–19 | — |
 | JD fetcher | ✅ Green | 16 tests |
-| Extractor | ✅ Green | 21 tests + 5 real-data fixtures (jd-real-001..005) |
+| Extractor | ✅ Green (strict schema + segmentation) | validation + segmentation coverage |
 | Scorer (5 components + bge embeddings) | ✅ Green | 44 tests |
-| LLM judge | ✅ Green (v5 additive planner) | 30 tests + v5 schema coverage |
-| Resume generator | ✅ Green (v5 prompt consumer) | wired in pipeline + v5 prompt coverage |
-| Cover letter generator | ✅ Green (v5 prompt consumer) | wired in pipeline + v5 prompt coverage |
-| Risk map / audit | ✅ Green (role-attribution audit shipped) | fabrication ledger + Bug F coverage |
+| LLM judge | ✅ Green (v5 additive planner + v10 hard blockers) | schema + prompt coverage |
+| Resume generator | ✅ Green (v5 consumer + v10 hard guards) | prompt, gap-directive, SKILLS atomicity coverage |
+| Cover letter generator | ✅ Green (v5 consumer + v10 hard guards) | prompt, truncation, style/directive coverage |
+| Risk map / audit | ✅ Green (role-attribution audit + overrun flag) | fabrication ledger + overrun flag coverage |
 | Dedup module (Redis + pgvector) | ✅ Green | 7 tests |
 | Storage (Postgres + pgvector) | ✅ Green | 14 tests |
 | Storage v4.1 hardening | ✅ Applied | saveJob crash fixed, formatErr, markStorageDisabled |
@@ -332,7 +432,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 | Docker Compose (Postgres + Redis) | ✅ Built | `docker compose up -d` |
 | **Review UI (M9)** | ✅ **Built** | **Express API + Vite/React SPA, port 3001** |
 
-**Test totals: ~248 tests green** (66 scraper + 69 job-filter + 16 fetcher + 16 extractor + 44 scorer + ~30 judge + 7 dedup + 14 storage + 16 orchestrator). UI has no automated tests (manual verification only per spec).
+**Test totals: 273 tests green, 8 skipped** across 19 passing test files. UI has no automated tests (manual verification only per spec).
 
 ### Designed but not built
 
@@ -344,7 +444,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 ### Not built, not designed
 
 - Profile-builder (resume → profile.json) — `profile.json` maintained by hand; low priority for single-user
-- Real-data extraction fixtures (target: 5 from Dice) — 1 captured; 4 more needed. Mechanism is wired (`SAVE_FIXTURES=1`); needs real runs and a commit.
+- Real-data extraction fixture expansion — mechanism is wired (`SAVE_FIXTURES=1`), but the main extractor safety work now comes from strict schema mode plus v10 segmentation.
 
 ---
 
@@ -352,9 +452,10 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 
 ### `config/` — BUILT
 
-- `profile.json` — Sarath's structured profile (v2). 53 skills, 7 target titles. **Authoritative.** Min comp confirmed at $110k.
-- `skills.json` — 370 skill alias entries. `buildAliasMap()` flattens to lookup map.
-- `config.json` — locked models (`qwen/qwen3.5-flash-02-23` for extract/judge, `deepseek/deepseek-v4-flash` for cover letters), throttle_ms=100 (extractor + judge), scoring weights (0.35/0.25/0.15/0.15/0.10), gate threshold 0.50 (`scoring.gate_threshold`), review_queue_threshold 0.60 (`llm.cover_letter.review_queue_threshold`). Note: `config.json` also contains a `pipeline.schedule` block (`pipeline.sources`, etc.) — this is **legacy/unused**; the actual cron schedules are hardcoded in `src/orchestrator/scheduler.ts`, which is the single source of truth for when and how the pipeline runs.
+- `resume_master.tex` — canonical resume. v10 refreshed from `resume_fin.tex`; parser-compatible after the role extractor learned optional `\vspace{}` between employer headers and role lines.
+- `profile.json` — Sarath's structured profile (v2). 84 visible canonical skills, 7 target titles. **Authoritative.** Min comp confirmed at $110k.
+- `skills.json` — 93 canonical skill entries, 408 aliases. `buildAliasMap()` flattens to lookup map.
+- `config.json` — locked models (`deepseek/deepseek-v4-flash` for extractor, judge, cover letter, and resume generator primary; resume fallback remains `deepseek/deepseek-v4-pro` unless locally changed), throttle_ms=100 (extractor + judge), scoring weights (0.35/0.25/0.15/0.15/0.10), gate threshold 0.50 (`scoring.gate_threshold`), cover-letter `max_tokens=3000`, cover-letter `retries=1`. Note: `config.json` also contains a `pipeline.schedule` block (`pipeline.sources`, etc.) — this is **legacy/unused**; the actual cron schedules are hardcoded in `src/orchestrator/scheduler.ts`, which is the single source of truth for when and how the pipeline runs.
 - `cookies/` — gitignored. Dice + Jobright browser cookies. Dice is now public-only since the search page needs no auth, but Jobright still requires cookies.
 
 ### `job-filter/` — BUILT
@@ -381,7 +482,8 @@ Single file `src/fetcher/fetch.ts`. `fetchJobPage` is non-throwing, uses per-dom
 OpenRouter client (no SDK dependency, raw fetch).
 
 - `src/extractor/client.ts` — OpenRouter API call. Currently uses strict `json_schema` response_format (with a JSON Schema mirror of the Zod schema), with fallback to `json_object` via `EXTRACTOR_FORCE_JSON_OBJECT=1` for models that reject strict mode.
-- `src/extractor/prompt.ts` — `PROMPT_VERSION = "v1"`. Extract-don't-infer. Exact substring quotes 5–15 words.
+- `src/extractor/segment.ts` — v10 JD pre-pass. Splits text into `tags_chips`, `required`, `preferred`, `responsibilities`, and `other` so preferred-section technologies and tag-chip tech lists are not hidden behind abstract required prose.
+- `src/extractor/prompt.ts` — `PROMPT_VERSION = "v1"`. Extract-don't-infer. Exact substring quotes 5–15 words. `buildUserPromptWithSegments()` feeds labeled segments with importance hints: tags/chips and required default to required, preferred defaults to preferred, responsibilities/other infer from context.
 - `src/extractor/validate.ts` — Zod schema. Strips markdown fences if model ignored JSON mode.
 - `src/extractor/extract.ts` — Never throws. Retries once on Zod failure (1s backoff). `verifyCitations` nulls bad quotes; partial extraction kept rather than rejected. `_callWithRetry` handles HTTP-level errors. `DEBUG_EXTRACT=1` env var triggers raw-response preview on validation failure.
 - 3 synthetic fixtures (`jd-001`, `jd-002`, `jd-003`) plus 1 real-data fixture (`jd-real-002-java-full-stack-developer`). Pipeline supports `SAVE_FIXTURES=1` to capture more.
@@ -408,13 +510,17 @@ LLM judge stage. Inputs: structured job fields + score breakdown (NOT raw JD tex
 
 Backward-compat rule: if `gap_directives` is missing or empty, generators behave exactly like v4. If a tech swap omits `target_role`, the swap remains unscoped.
 
-Two retry layers remain: HTTP-level (1 retry on network error, 2s backoff) and validation-level (1 retry on Zod failure, 2s backoff). `getBucket(judgeResult, totalScore)` still routes STRONG+score≥0.70 → COVER_LETTER, STRONG+score<0.70 → RESULTS, MAYBE → REVIEW_QUEUE, WEAK or judge error → ARCHIVE.
+Two retry layers remain: HTTP-level (1 retry on network error, 2s backoff) and validation-level (1 retry on Zod failure, 2s backoff). After the validation retry fails, v10 writes the raw payload plus schema error to `output/logs/judge_failures/{run_id}_{job_id}.json`; the capture path is best-effort and never crashes the pipeline.
+
+v10 judge hard blockers: prior-employer-only restrictions (for example `Ex-American Express only`) are WEAK unless the employer appears in the work-history block; active credentials the candidate does not have (Top Secret clearance, Series 7, CPA, PE license, etc.) are also WEAK. Fabricate directives must pick the role with strongest contextual fit, not merely the newest role.
+
+`getBucket(judgeResult, totalScore)` still routes STRONG+score≥0.70 → COVER_LETTER, STRONG+score<0.70 → RESULTS, MAYBE → REVIEW_QUEUE, WEAK or judge error → ARCHIVE.
 
 Real-data validation confirmed (2026-04-25): judge correctly identified Citi (named enterprise, fintech domain) and TD Bank (major bank, fintech domain) as STRONG; correctly flagged KeyCorp as MAYBE for React gap; correctly flagged staffing agency role as MAYBE for unnamed end client.
 
 ### `cover-letter/` — BUILT (v5 consumer)
 
-Model switched from `google/gemma-4-31b-it` to `deepseek/deepseek-v4-flash` since v5. Run-scoped output dirs (`output/cover-letters/{run_id}/{bucket}/`). Bucket subfolders separate `COVER_LETTER` from `REVIEW_QUEUE` for triage. Retry-once on timeout with 2s backoff.
+Model switched from `google/gemma-4-31b-it` to `deepseek/deepseek-v4-flash` since v5. Artifact output now lands with the paired resume under `output/applications/{run_label}/{slug}/`. Retry-once remains available; v10 sets `max_tokens=3000` and `retries=1`.
 
 Current brief source is the verbatim EXPERIENCE slice built by
 `src/cover-letter/resume-brief.ts::buildExperienceBlockFromCanonicalTex()`.
@@ -427,7 +533,14 @@ v5 gap-directive consumption is additive:
 - `forbid` directives are listed as never-claim constraints
 - if directives are absent, the prompt stays at v4 behavior
 
-Real-data validation confirmed (2026-04-25): 4 cover letters generated, 206–243 words each. COVER_LETTER and REVIEW_QUEUE subfolders populated correctly.
+v10 consistency and safety additions:
+
+- hardcoded employer-stack assertions were replaced by dynamic `ACTIVE_TECH_SWAPS` and `FABRICATED CLAIMS THE RESUME HAS MADE`
+- `looksTruncated()` retries bodies that do not end in sentence punctuation and fails cleanly if the retry is still truncated
+- `stripDashes()` removes em/en dash forms before LaTeX assembly
+- `hasBannedStylePhrase()` rejects bridge phrases such as "analogous to", "demonstrating transferable", "translate directly to", and "comparable to"
+
+Live v10 validation (2026-05-27, `SOURCE=jobright_api MAX=10`) wrote 5 cover letters, 370–503 words, with `cover_letter_gen_failed=0` and `cover_letter_length_off=0`.
 
 ### `resume-generator/` — BUILT (v5 consumer)
 
@@ -444,6 +557,13 @@ v5 prompt consumption is additive:
 
 No new LLM call was added; the same single resume-generation call now receives
 more structured judge context.
+
+v10 hard guards:
+
+- `stripDashes()` is applied before save/compile
+- `hasBannedStylePhrase()` rejects bridge-style outputs before save
+- `replaceSkillsSection()` replaces the generated SKILLS block with the canonical SKILLS block before save/compile, making SKILLS atomicity enforceable rather than merely prompted
+- short resumes still set `resume_too_short`, but word-count retry remains removed
 
 ### `dedup/` — BUILT
 
@@ -468,6 +588,7 @@ Postgres + pgvector persistence.
 - `migrations/001_initial.sql` — full schema (unchanged from v5).
 - `migrations/002_orchestrator.sql` — new in v5.1: 4 columns + partial index on `runs`.
 - `migrations/005_tailored_artifacts.sql` — cleaned up to create only `tailored_resumes` + two indexes. The stale `cover_letters` block and transient `version` column were removed to stay replay-safe with `006_consolidate_artifacts.sql`.
+- `migrations/008_visa_enum.sql` — migrates `jobs.visa_sponsorship` from boolean-era semantics to the five-state text enum (`offered`, `denied`, `ead_eligible`, `payment_model_only`, `unmentioned`) and adds `jobs.visa_quote`.
 - `test/persist.test.ts` — 14 tests. All pass against updated `finishRun` — disabled-state tests don't touch SQL, compile-time enforcement handles the new fields at the call site.
 
 ### `risk-map/` — BUILT (v2 / Bug F hardening)
@@ -482,6 +603,11 @@ generated bullets to canonical bullets per employer and flags role-mixing tech
 claims. New ledger change type: `fabricated_role_attribution`. New summary
 counter: `risk_summary.counts.fabricated_role_attribution`. The underlying
 `fabrication_ledger` table schema is unchanged.
+
+v10 adds `applyResumeAttributionOverrunFlag()`: if
+`risk_summary.counts.fabricated_role_attribution > 3`, resume artifact flags get
+`resume_attribution_overrun`. The resume still writes to disk; the flag is a
+soft gate for human review before applying.
 
 ### `ui-server` + `ui/` — BUILT (new in v7)
 
@@ -863,19 +989,15 @@ redis-cli --scan --pattern 'orchestrator:lock:*'
 - **Not Applied** — UI term for `application_status = 'skipped'`. DB value kept as `skipped` for backward compatibility.
 - **Note chips** — preset quick-fill buttons on each card in the Review UI (e.g. "Not a good fit"). Clicking a chip for a No-labeled card immediately POSTs and moves the card to Not Applied.
 - **Time-decayed sort** — Apply Queue sort order: jobs bucketed by age (< 24h, 24–72h, > 72h), sorted by score DESC within each bucket. Ensures freshest high-scoring jobs appear first.
+- **Banned bridge phrase** — tailoring language that reveals a fabricated or adjacent claim, such as "analogous to", "demonstrating transferable", "translate directly to", or "comparable to". Runtime style lint rejects these.
+- **SKILLS atomicity** — generated resumes must preserve the canonical SKILLS section exactly. v10 enforces this by replacing the generated SKILLS block with the canonical block before save.
 
 ---
 
 ## 17. Reference documents
 
-- `THE-BIBLE.md` — v1 (2026-04-17) — original architecture
-- `THE-BIBLE-v2-update.md` — v2 (2026-04-18) — milestones 1+2 shipped, 5 patches
-- `THE-BIBLE-v3.md` — v3 (2026-04-20) — milestone 3 shipped, scorer built
-- `THE-BIBLE-v4.md` — v4 (2026-04-23) — milestones 4–6 shipped, real-data validation
-- `THE-BIBLE-v5.md` — v5 (2026-04-25) — milestone 7 shipped, dedup + storage + integrity + POSTED_WITHIN
-- `THE-BIBLE-v6.md` — v6 (2026-04-25) — milestone 8 shipped, orchestrator + storage v5.1 + end-to-end validation
-- `THE-BIBLE-LATEST.md` — v9 (2026-05-26) — current living document
-- `THE-BIBLE-v8.md` — v8 (2026-05-14) — immutable archive before the v9 refresh
+- `THE-BIBLE-v1.md` — original architecture snapshot. Keep as the only Bible archive.
+- `THE-BIBLE-LATEST.md` — current living document. All version history rolls forward here.
 - `UI-BUILD-INSTRUCTIONS.md` — full spec for the Review UI (v1 base + Delta 2 changes)
 - `design-v4.md` — design doc covering scoring/judge contracts
 - `STORAGE-CHANGES.md` — v4.1 changeset detail (saveJob fix, formatErr, markStorageDisabled)
@@ -885,13 +1007,16 @@ redis-cli --scan --pattern 'orchestrator:lock:*'
 - `migrations/002_orchestrator.sql` — orchestrator columns + partial index
 - `migrations/003_labels.sql` — manual labeling table (label, notes, labeled_at)
 - `migrations/004_ui_application_tracking.sql` — application_status + applied_at + apply_later constraint
+- `migrations/007_fabrication_ledger.sql` — fabrication ledger table
+- `migrations/008_visa_enum.sql` — five-state visa enum migration
 - `docker-compose.yml` — local services
 
 ---
 
-## 18. v8 changes
+## 18. Artifact-generation change log
 
-Two patches landed after v7 shipped. Recorded here, not woven into earlier sections, to preserve v7's authoring intent and let future readers trace what changed when.
+Recorded here to make artifact-generation changes traceable without requiring
+multiple Bible archive files.
 
 ### 18.1 — Run-folder layout
 
@@ -978,3 +1103,59 @@ execution rules + fabrication-permitted clause) + hardcoded
 The `tech_swaps` mechanism added in §18.2 is a Mode B augmentation layered on top
 of total mode, not a replacement. Generator still fabricates per skill rules
 when no adjacent experience exists for a missing JD requirement.
+
+### 18.5 — Round-2 quality audit and hard guards
+
+Round-2 added two ideas that should remain paired:
+
+1. audit the generated artifacts against the canonical resume, JD, and paired
+   artifact
+2. convert recurring prompt misses into deterministic guards where possible
+
+`scripts/audit-artifacts.ts` is the historical scanner. It reads the four
+requested run folders from 2026-05-26/27, does not mutate them, and writes:
+
+- `output/audits/round2_artifact_quality_baseline.json`
+- `output/audits/round2_artifact_quality_baseline.md`
+
+The audit scores each job with:
+
+- `better_than_original`
+- concrete `why_better`
+- `risk_issues`
+- `fix_category`
+
+It checks JD skill coverage, SKILLS equality, dropped canonical evidence,
+generated claim volume, role-attribution risk, cover/resume stack agreement,
+banned bridge phrases, dash forms, truncation, unsafe visa wording, and cover
+length.
+
+Important baseline counts from the 53-resume / 49-cover historical corpus:
+
+- 48 partial improvements over the original resume
+- 5 no-clear-improvement cases
+- 17 style-issue jobs after expanding the banned phrase family
+- 42 dash-issue jobs
+- 3 truncated covers
+- 51 SKILLS-drift jobs
+- 1 employer-stack mismatch
+- 38 fabricated-attribution overruns
+
+Code responses to those findings:
+
+- prompt-level punctuation rule in resume + cover generators
+- `stripDashes()` runtime sanitizer
+- prompt-level resume and cover STYLE GUARD
+- `hasBannedStylePhrase()` runtime style gate
+- cover-letter retry/fail on truncation
+- dynamic cover-letter narration from active `tech_swaps` and fabricated claims
+- hard SKILLS block replacement from canonical resume
+- `resume_attribution_overrun` soft-gate flag when fabricated role attribution
+  count exceeds 3
+
+The live MAX=10 validation run on 2026-05-27 confirmed the config and migration
+path were loaded: extractor and judge both used `deepseek/deepseek-v4-flash`,
+migration 008 applied, 7/7 eligible jobs extracted, no judge failures occurred,
+and 5 resume/cover pairs were generated. That run exposed the final two hard
+guards (style lint expansion and SKILLS replacement), which were added
+immediately afterward.

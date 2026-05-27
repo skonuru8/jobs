@@ -245,6 +245,16 @@ export function auditTailoredArtifact(input: AuditInput): {
   };
 }
 
+export function applyResumeAttributionOverrunFlag(
+  flags: string[],
+  summary: Pick<RiskSummary, "counts">,
+): void {
+  const fab = summary.counts.fabricated_role_attribution ?? 0;
+  if (fab > 3 && !flags.includes("resume_attribution_overrun")) {
+    flags.push("resume_attribution_overrun");
+  }
+}
+
 function termPresent(haystack: string, needle: string): boolean {
   if (!needle) return false;
   const esc = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

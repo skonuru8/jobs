@@ -8,6 +8,8 @@
  * - Temperature 0 (set in config)
  */
 
+import type { JdSegments } from "./segment";
+
 export const PROMPT_VERSION = "v1";
 
 // ---------------------------------------------------------------------------
@@ -119,13 +121,42 @@ Include the verbatim phrase that drove your choice in the "visa_quote" field.`;
 // ---------------------------------------------------------------------------
 
 export function buildUserPrompt(descriptionRaw: string): string {
+  return buildUserPromptWithSegments({
+    tags_chips: "",
+    required: "",
+    preferred: "",
+    responsibilities: "",
+    other: descriptionRaw,
+  });
+}
+
+export function buildUserPromptWithSegments(segments: JdSegments): string {
   const MAX_JD_CHARS = 4000;
-  const truncated = descriptionRaw.length > MAX_JD_CHARS
-    ? descriptionRaw.slice(0, MAX_JD_CHARS) + "\n[truncated]"
-    : descriptionRaw;
+  const segmentText = `TAGS/CHIPS:
+${segments.tags_chips || "(none detected)"}
+
+REQUIRED:
+${segments.required || "(none detected)"}
+
+PREFERRED:
+${segments.preferred || "(none detected)"}
+
+RESPONSIBILITIES:
+${segments.responsibilities || "(none detected)"}
+
+OTHER:
+${segments.other || "(none detected)"}
+
+Importance per segment:
+- TAGS/CHIPS and REQUIRED -> "required"
+- PREFERRED -> "preferred"
+- RESPONSIBILITIES and OTHER -> infer from context`;
+  const truncated = segmentText.length > MAX_JD_CHARS
+    ? segmentText.slice(0, MAX_JD_CHARS) + "\n[truncated]"
+    : segmentText;
   return `Extract structured data from this job description.
 
-JOB DESCRIPTION:
+SEGMENTED JOB DESCRIPTION:
 ---
 ${truncated}
 ---

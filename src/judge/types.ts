@@ -44,6 +44,9 @@ export interface JudgeScoreInput {
 export interface JudgeInput {
   job:   JudgeJobInput;
   score: JudgeScoreInput;
+  /** Optional identifiers for validation-failure payload capture. */
+  run_id?: string | null;
+  job_id?: string | null;
   /** When set, system prompt uses live profile instead of a static template. */
   profile?: Profile;
   /** Work-history lines extracted from canonical resume TeX. */
