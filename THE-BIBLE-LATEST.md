@@ -1,14 +1,62 @@
-# THE BIBLE — v10 (2026-05-27)
+# THE BIBLE — v11 (2026-05-27)
 
 > Project: **job-hunter** — automated job discovery + filter + score + judge + cover letter pipeline for Sarath Konuru.
 >
-> This is the authoritative document. Supersedes v9 (2026-05-26), v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
+> This is the authoritative document. Supersedes v10 (2026-05-27), v9 (2026-05-26), v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
 >
 > Read this before writing code. Update this file when module status changes.
 >
 > Bible file policy: keep only two Bible files in the repo. `THE-BIBLE-v1.md`
 > is the original architecture snapshot. `THE-BIBLE-LATEST.md` is the single
 > rolling source of truth. Do not create per-version Bible archives.
+
+---
+
+## What changed since v10
+
+v11 is an operational visibility and manual-recovery update on top of the v10
+quality guards.
+
+**Wave 1 — Failed artifact metadata is no longer hidden.**
+`src/applications/combined-meta.ts` now preserves failure details for missing
+artifacts in the combined `meta.json`. Resume failures keep `resume.error`
+from the generator outcome. Cover-letter failures keep real `model`,
+`prompt_sha`, token counts, `word_count`, `compile_status`, `flags`, and
+`cover_letter.error` instead of flattening to a misleading `"skipped"` block.
+`src/cover-letter/saver.ts` now stores `clResult.error` in cover metadata, so
+`cover_letter_gen_failed` has a useful diagnosis when the model fails or the
+truncation guard rejects the final attempt.
+
+**Wave 2 — Manual and direct-run logs are captured.**
+Direct `scripts/run-pipeline.ts` invocations now tee stdout/stderr to
+`output/logs/runs/log_{timestamp}_{source}_{runid}.log`, matching the
+operational habit established by the orchestrator. Set
+`PIPELINE_DISABLE_RUN_LOG=1` only when intentionally suppressing this local
+diagnostic file. Manual UI/API artifact generation now writes a compact
+`output/logs/runs/manual_{timestamp}_{jobid}.log` with job id, force mode,
+output folder, models, flags, and generator errors.
+
+**Wave 3 — Failed manual artifacts can be regenerated from the UI/API.**
+`src/storage/persist.ts::jobHasCompleteArtifacts()` checks the latest resume row
+and latest cover row and returns true only when both have usable paths and are
+not failed. `src/artifacts/manual-generate.ts` now conflicts only when
+`force=false` and complete artifacts already exist. This lets the UI Generate
+button repair jobs where resume or cover generation failed. The `JobCard`
+component passes `force=true` only when the card already has a resume or cover
+PDF and the user is intentionally regenerating.
+
+**Wave 4 — Resume generation is more tolerant of DeepSeek Pro wrapping.**
+`src/resume-generator/generator.ts` now extracts the LaTeX document from the
+first `\documentclass` through the last `\end{document}` before strict
+validation. This targets the observed DeepSeek v4 Pro failure mode where the
+model appears to return valid LaTeX wrapped in extra prose or markdown. If a
+resume still fails, the stored error now includes useful first/last-character
+snippets or the exact banned style pattern family that caused rejection.
+
+**Validation for v11.**
+`npx tsc --noEmit` passed. `npx vitest run` passed with 20 files, 274 tests, and
+8 skipped. `test/applications/combined-meta.test.ts` covers the failed resume
+and failed cover metadata contract.
 
 ---
 
@@ -100,7 +148,7 @@ SKILLS-drift jobs, 1 employer-stack mismatch, and 38 attribution overruns.
 `resume_attribution_overrun` when fabricated role attribution exceeds 3.
 
 **Validation for v10.**
-`npx tsc --noEmit` passed. `npx vitest run` passed with 19 files, 273 tests, and
+`npx tsc --noEmit` passed. `npx vitest run` passed with 20 files, 274 tests, and
 8 skipped. A live `SOURCE=jobright_api MAX=10 EXTRACT=true DO_RESUME=true
 DO_COVER=true` run loaded the new config, extracted 7/7 eligible jobs, produced
 5 resume/cover pairs, had `judge_failed=0`, `cover_letter_gen_failed=0`, and
@@ -389,7 +437,10 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 - `output/cover-letters/{run_id}/REVIEW_QUEUE/{title-slug}_{job_id_short}.md` — MAYBE or STRONG+score<0.70 above review_queue_threshold
 - `output/logs/orchestrator.log` — rolling log. All run lifecycle events (start/finish/exit code) and monitor warnings. Primary operational log.
 - `output/logs/reaper.log` — rolling log. Ghost reaper sweep events only. Separate from orchestrator.log to keep the main log clean.
-- `output/logs/runs/{run_id}.log` — per-run child stdout+stderr captured verbatim. Created at run start, closed on exit. `tail -f` to watch a live run.
+- `output/logs/runs/log_{timestamp}_{source}_{runid}.log` — per-run stdout+stderr captured verbatim. Orchestrator child runs and direct `scripts/run-pipeline.ts` invocations both create source-labeled logs. `tail -f` to watch a live run.
+- `output/logs/runs/manual_{timestamp}_{jobid}.log` — compact log for manual UI/API artifact generation attempts.
+- `output/logs/judge_failures/{run_id}_{job_id}.json` — final failed judge payload plus schema error after validation retry.
+- `output/audits/round2_artifact_quality_baseline.{json,md}` — historical artifact-quality audit outputs.
 
 ### TypeScript types
 
@@ -432,7 +483,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 | Docker Compose (Postgres + Redis) | ✅ Built | `docker compose up -d` |
 | **Review UI (M9)** | ✅ **Built** | **Express API + Vite/React SPA, port 3001** |
 
-**Test totals: 273 tests green, 8 skipped** across 19 passing test files. UI has no automated tests (manual verification only per spec).
+**Test totals: 274 tests green, 8 skipped** across 20 passing test files. UI has no automated tests (manual verification only per spec).
 
 ### Designed but not built
 
@@ -564,6 +615,10 @@ v10 hard guards:
 - `hasBannedStylePhrase()` rejects bridge-style outputs before save
 - `replaceSkillsSection()` replaces the generated SKILLS block with the canonical SKILLS block before save/compile, making SKILLS atomicity enforceable rather than merely prompted
 - short resumes still set `resume_too_short`, but word-count retry remains removed
+- v11 extracts the LaTeX document from wrapped model responses before strict
+  validation, which makes `deepseek/deepseek-v4-pro`-style prose wrappers less
+  likely to fail the whole resume generation. Remaining failures preserve
+  diagnostic `error` strings in combined metadata.
 
 ### `dedup/` — BUILT
 
@@ -581,6 +636,10 @@ Postgres + pgvector persistence.
 
 - `src/storage/db.ts` — `pg.Pool` singleton with `describeErr` formatting on the error listener.
 - `src/storage/persist.ts` — `saveRun`, `finishRun`, `saveJob`, `isSeenInDB`. All non-throwing. v4.1: `pool.connect()` inside try block, `markStorageDisabled`, `formatErr`. v5.1 additions: `updateHeartbeat` (Postgres helper — available for callers; the orchestrator runner writes heartbeats via its own inline SQL rather than calling this function), `markRunExitCode` (same — available but runner writes exit code via its own SQL; ghost reaper calls this directly), `getUnfinishedRuns` (ghost reaper query — hits partial index), `getRunStats` (monitor post-run check).
+- v11 adds `jobHasCompleteArtifacts(job_id)`, used by manual generation to
+  distinguish "some stale/failed artifact row exists" from "latest resume and
+  latest cover are both healthy." This is what lets the UI repair failed manual
+  generations instead of being blocked by partial history.
 - Persistence note: the silent-error swallow / `markStorageDisabled` / "continuing without persistence" behavior remains in place by locked decision. The `005_tailored_artifacts.sql` cleanup removed the most common migration-replay cascade, but the gating model itself is unchanged.
 - `src/storage/migrate.ts` — runs SQL files in `migrations/` in alphabetical order.
 - `src/storage/integrity.ts` — `verifyIntegrity`. Gated on `VERIFY=1`.
@@ -624,6 +683,12 @@ soft gate for human review before applying.
 | `POST` | `/api/label` | Upsert into `labels`. Body: `{ job_id, run_id, label, application_status?, notes? }`. COALESCE on update: re-labeling never clears a prior `application_status` or `notes` unless the new payload explicitly provides a non-null value. |
 
 **Cover letter file resolution:** `cover_letters.content` is always NULL (pipeline writes to disk only). The server reads from `cover_letters.file_path`, with a path-substitution fallback from `/Downloads/project/` to `/Downloads/jobs/` to handle the historical repo rename.
+
+**Manual generation:** `POST /api/jobs/:job_id/generate` calls
+`src/artifacts/manual-generate.ts`. If `force=false`, it conflicts only when
+the latest resume and cover are both complete. Missing/failed resume or cover
+artifacts can be generated again from the same UI card. Every attempt writes a
+compact `output/logs/runs/manual_{timestamp}_{jobid}.log`.
 
 **`ui/`** — Vite + React 18 + TypeScript SPA. No router, no state library, no CSS framework. Key design decisions:
 - `JobCard.tsx` is a single shared component with `mode: 'apply' | 'hard-reject' | 'soft-reject'` prop — ~80% of rendering logic is shared across all three tabs.
@@ -680,6 +745,10 @@ LinkedIn is offset from Dice by 1h to avoid hitting OpenRouter simultaneously fr
 **Entry point:** `npm start`
 
 **One-shot trigger for testing:** `npx tsx src/orchestrator/trigger-once.ts`
+
+Direct `npx tsx scripts/run-pipeline.ts` runs now also write
+`output/logs/runs/log_{timestamp}_{source}_{runid}.log` unless
+`PIPELINE_DISABLE_RUN_LOG=1` is set.
 
 ---
 
@@ -848,7 +917,7 @@ npx tsx src/orchestrator/trigger-once.ts
 
 # Watch it live in a second terminal
 tail -f output/logs/orchestrator.log
-tail -f output/logs/runs/<run_id>.log
+tail -f output/logs/runs/log_<timestamp>_<source>_<runid>.log
 ```
 
 ### Review UI
@@ -897,6 +966,67 @@ SAVE_FIXTURES=1 EXTRACT=1 SOURCE=dice MAX=20 npx tsx scripts/run-pipeline.ts
 
 # Run integrity check at end (Redis ↔ Postgres seen-state)
 VERIFY=1 EXTRACT=1 SOURCE=dice MAX=20 npx tsx scripts/run-pipeline.ts
+```
+
+Direct pipeline runs now print and write a run log under
+`output/logs/runs/log_{timestamp}_{source}_{runid}.log`.
+
+### Command cookbook by scenario
+
+```bash
+# Run migrations before a pipeline run
+npm run migrate
+
+# Typecheck only
+npm run build
+
+# Full unit test suite
+npm test
+
+# Run one small live validation batch
+DO_RESUME=true DO_COVER=true SOURCE=jobright_api MAX=10 EXTRACT=true \
+  npx tsx scripts/run-pipeline.ts
+
+# Run one larger live validation batch
+DO_RESUME=true DO_COVER=true SOURCE=jobright_api MAX=50 EXTRACT=true \
+  npx tsx scripts/run-pipeline.ts
+
+# Run Dice backfill with artifacts
+POSTED_WITHIN=SEVEN DO_RESUME=true DO_COVER=true SOURCE=dice MAX=100 EXTRACT=true \
+  npx tsx scripts/run-pipeline.ts
+
+# Audit historical generated artifacts
+npm run audit:artifacts
+
+# Find jobs in a run missing resumes
+find output/applications/<run-folder> -mindepth 2 -maxdepth 2 -name meta.json -print \
+  | while read f; do jq -e '.resume.tex_path != null' "$f" >/dev/null || echo "$f"; done
+
+# Inspect one failed resume block
+jq '.resume' output/applications/<run-folder>/<job-folder>/meta.json
+
+# Retry manual artifact generation for one job id
+npx tsx -e "import { manualGenerateArtifacts } from './src/artifacts/manual-generate.ts'; const out = await manualGenerateArtifacts(process.cwd(), '<job_id>', { force: true }); console.log(JSON.stringify(out, null, 2));"
+
+# Inspect newest manual generation output
+ls -td output/applications/manual_* | head -1
+find "$(ls -td output/applications/manual_* | head -1)" -name meta.json -o -name resume.tex -o -name cover_letter.tex
+
+# Tail newest direct/manual run logs
+ls -t output/logs/runs | head
+tail -f output/logs/runs/<log-file>
+
+# Inspect captured judge schema failures
+ls output/logs/judge_failures
+jq '.' output/logs/judge_failures/<run_id>_<job_id>.json
+
+# Check generated artifacts for banned bridge phrases
+grep -rnE 'demonstrating transferable|analogous to|akin to|whose syntax (and|or) features|foundational knowledge of|directly applicable to|immediately useful in' \
+  output/applications/<run-folder>/**/resume.tex output/applications/<run-folder>/**/cover_letter.tex
+
+# Check generated artifacts for em/en dash forms
+grep -rnP '(--|---|[\u2013\u2014])' \
+  output/applications/<run-folder>/**/resume.tex output/applications/<run-folder>/**/cover_letter.tex
 ```
 
 ### Infra tests (real Redis + Postgres required)
@@ -1159,3 +1289,33 @@ migration 008 applied, 7/7 eligible jobs extracted, no judge failures occurred,
 and 5 resume/cover pairs were generated. That run exposed the final two hard
 guards (style lint expansion and SKILLS replacement), which were added
 immediately afterward.
+
+### 18.6 — Failure visibility and manual recovery
+
+v11 closed the loop on a frustrating artifact-debugging class: runs where the
+UI showed "skipped" or "missing" even though generation had actually failed.
+
+Changes:
+
+- `src/applications/combined-meta.ts` preserves failed resume and failed cover
+  metadata in the combined `meta.json`, including model, prompt SHA, token
+  counts, word count, compile status, flags, and `error`.
+- `src/cover-letter/saver.ts` stores `clResult.error` in cover metadata.
+- `src/resume-generator/generator.ts` extracts the LaTeX document from wrapped
+  model output before strict validation, improving compatibility with
+  `deepseek/deepseek-v4-pro`-style responses.
+- `scripts/run-pipeline.ts` writes direct-run stdout/stderr logs to
+  `output/logs/runs/log_{timestamp}_{source}_{runid}.log`.
+- `src/artifacts/manual-generate.ts` writes compact manual-generation logs to
+  `output/logs/runs/manual_{timestamp}_{jobid}.log`.
+- `src/storage/persist.ts::jobHasCompleteArtifacts()` lets manual generation
+  distinguish complete artifacts from partial/failed artifact history.
+- `ui/src/components/JobCard.tsx` passes `force=true` only when the user is
+  regenerating existing PDFs; failed/missing artifacts can be repaired without
+  being blocked by stale rows.
+
+Observed trigger: the `deepseek/deepseek-v4-pro` run
+`2026-05-27T15-32-09_2aec1edc` produced 7 cover letters and 0 resumes. The next
+Flash run produced 5 resumes and 6 cover letters. The likely Pro failure was
+valid LaTeX wrapped in extra model prose, combined with old validation that
+required the response to start exactly at `\documentclass`.

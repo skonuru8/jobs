@@ -96,6 +96,7 @@ function resumeBlock(
       word_count:     o.word_count ?? null,
       compile_status: o.meta?.compile_status ?? "skipped_unknown",
       flags,
+      error:          (o.meta as Record<string, unknown>)?.error ?? null,
       tex_path: null, pdf_path: null,
       risk_summary: null, export_status: "ok",
     };
@@ -122,8 +123,14 @@ function coverBlock(
 ): Record<string, unknown> {
   if (!o?.tex_path) {
     return {
-      model: null, prompt_sha: null, input_tokens: null, output_tokens: null,
-      word_count: null, compile_status: "skipped", flags: [],
+      model:          o?.meta?.model ?? null,
+      prompt_sha:     o?.meta?.prompt_sha ?? null,
+      input_tokens:   o?.meta?.input_tokens ?? null,
+      output_tokens:  o?.meta?.output_tokens ?? null,
+      word_count:     o?.word_count ?? null,
+      compile_status: (o?.meta?.compile_status as string) ?? (o ? "failed" : "skipped"),
+      flags:          o?.flags ?? [],
+      error:          (o?.meta as Record<string, unknown> | undefined)?.error ?? null,
       tex_path: null, pdf_path: null,
       risk_summary: null, export_status: "ok",
     };

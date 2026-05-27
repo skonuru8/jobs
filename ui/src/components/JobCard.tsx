@@ -155,7 +155,8 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
     setGenLoading(true);
     setGenError(null);
     try {
-      await postGenerateArtifacts(row.job_id);
+      const hasArtifacts = Boolean(applyRow?.cover_pdf_url || applyRow?.resume_pdf_url);
+      await postGenerateArtifacts(row.job_id, { force: hasArtifacts });
       onDataChange?.();
       const fresh = await getStats();
       onStatsUpdate(fresh);

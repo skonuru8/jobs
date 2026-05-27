@@ -10,7 +10,7 @@ import {
   buildSlimJdForPrompts,
   buildSlimProfileForPrompts,
 } from "@/shared/artifact-bundle";
-import { hasBannedStylePhrase } from "@/shared/style-lint";
+import { findBannedStylePhrases } from "@/shared/style-lint";
 
 import { PROMPT_SHA, TOTAL_MODE_PROMPT, renderResumeJudgeAddendum } from "./prompt";
 import type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "./types";
@@ -42,18 +42,19 @@ export async function generateResumeTex(
     for (let i = 0; i < maxPerModel; i++) {
       try {
         const r = await call(model);
-        let tex = stripFences(r.content).trim();
+        let tex = extractLatexDocument(stripFences(r.content).trim());
         tex = tex.replace(/^\uFEFF/, "");
         if (!tex.startsWith("\\documentclass")) {
-          lastErr = "missing documentclass";
+          lastErr = `missing documentclass; first chars: ${stripFences(r.content).trim().slice(0, 160)}`;
           continue;
         }
         if (!/\end\{document\}\s*$/s.test(tex)) {
-          lastErr = "missing end{document}";
+          lastErr = `missing end{document}; last chars: ${tex.slice(-160)}`;
           continue;
         }
-        if (hasBannedStylePhrase(tex)) {
-          lastErr = "banned style phrase";
+        const banned = findBannedStylePhrases(tex);
+        if (banned.length > 0) {
+          lastErr = `banned style phrase: ${banned.join(", ")}`;
           continue;
         }
         const wc = countWordsTex(tex);
@@ -136,6 +137,13 @@ function stripFences(s: string): string {
     .replace(/^```(?:latex|tex)?\s*/i, "")
     .replace(/```\s*$/i, "")
     .trim();
+}
+
+function extractLatexDocument(s: string): string {
+  const start = s.indexOf("\\documentclass");
+  const end = s.lastIndexOf("\\end{document}");
+  if (start < 0 || end < start) return s;
+  return s.slice(start, end + "\\end{document}".length).trim();
 }
 
 function countWordsTex(tex: string): number {

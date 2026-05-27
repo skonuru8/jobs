@@ -21,7 +21,7 @@ import {
   insertCoverLetterArtifact,
   insertTailoredResumeArtifact,
   insertLedgerEntries,
-  jobHasAnyArtifacts,
+  jobHasCompleteArtifacts,
 } from "@/storage/persist";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
@@ -41,42 +41,51 @@ export async function manualGenerateArtifacts(
   jobId: string,
   options?: { force?: boolean },
 ): Promise<ManualGenerateResult> {
+  const manualLog = createManualGenerationLog(repoRoot, jobId);
+  manualLog(`start job_id=${jobId} force=${String(options?.force)}`);
+
   if (!isRiskMapLoaded()) {
     loadRiskMap(repoRoot);
   }
 
-  if (options?.force === false && (await jobHasAnyArtifacts(jobId))) {
+  if (options?.force === false && (await jobHasCompleteArtifacts(jobId))) {
+    manualLog("conflict complete_artifacts_exist");
     return {
       ok: false,
       conflict: true,
-      error: "Artifacts already exist for this job. Omit force or set force to true to regenerate.",
+      error: "Complete artifacts already exist for this job. Set force to true to regenerate.",
     };
   }
 
   const snapshot = await fetchLatestJobSnapshotForArtifacts(jobId);
   if (!snapshot) {
+    manualLog("failed missing_snapshot");
     return { ok: false, error: "Job not found or missing score/judge data." };
   }
 
   const profilePath = path.join(repoRoot, "config", "profile.json");
   if (!fs.existsSync(profilePath)) {
+    manualLog("failed profile_missing");
     return { ok: false, error: "profile.json missing" };
   }
   const profile = JSON.parse(fs.readFileSync(profilePath, "utf8"));
   try {
     validateProfile(profile);
   } catch (e) {
+    manualLog(`failed profile_invalid error=${String(e).slice(0, 500)}`);
     return { ok: false, error: `Profile invalid: ${e}` };
   }
 
   const configPath = path.join(repoRoot, "config", "config.json");
   if (!fs.existsSync(configPath)) {
+    manualLog("failed config_missing");
     return { ok: false, error: "config.json missing" };
   }
   const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 
   const canonicalResumeTex = loadCanonicalResumeMaster(repoRoot);
   if (!canonicalResumeTex) {
+    manualLog("failed canonical_missing");
     return { ok: false, error: "config/resume_master.tex missing" };
   }
 
@@ -91,6 +100,7 @@ export async function manualGenerateArtifacts(
     experience_block: experienceBlock,
   });
   if (!bundle.ok) {
+    manualLog(`failed bundle reason=${bundle.reason}`);
     return { ok: false, error: bundle.reason };
   }
 
@@ -131,6 +141,8 @@ export async function manualGenerateArtifacts(
   const runFolderName = makeManualFolderName(new Date());
   const runDir = path.join(repoRoot, "output", "applications", runFolderName);
   const jobFolderAbs = path.join(runDir, jobSlug);
+  manualLog(`folder=${path.relative(repoRoot, jobFolderAbs)}`);
+  manualLog(`models resume=${resumeGeneratorConfig.model} cover=${coverLetterConfig.model}`);
 
   const ctx = {
     runId:         snapshot.run_id,
@@ -144,6 +156,14 @@ export async function manualGenerateArtifacts(
     generateAndSaveResume(bundle, resumeGeneratorConfig, repoRoot, jobFolderAbs, ctx),
     generateAndSaveCoverLetter(bundle, coverLetterConfig, repoRoot, jobFolderAbs, ctx),
   ]);
+  manualLog(
+    `resume tex=${resumeOutcome.tex_path ? "yes" : "no"} flags=${resumeOutcome.flags.join(",") || "(none)"} ` +
+    `error=${String((resumeOutcome.meta as Record<string, unknown>).error ?? "")}`,
+  );
+  manualLog(
+    `cover tex=${coverOutcome.tex_path ? "yes" : "no"} flags=${coverOutcome.flags.join(",") || "(none)"} ` +
+    `error=${String((coverOutcome.meta as Record<string, unknown>).error ?? "")}`,
+  );
 
   // --- Post-generation audit (risk map ledger) ---
   if (resumeOutcome.tex_path) {
@@ -239,5 +259,22 @@ export async function manualGenerateArtifacts(
     ok: true,
     resume: resumeOutcome.meta,
     cover:  coverOutcome.meta,
+  };
+}
+
+function createManualGenerationLog(repoRoot: string, jobId: string): (msg: string) => void {
+  const dir = path.resolve(process.env.OUTPUT_DIR ?? path.join(repoRoot, "output"), "logs", "runs");
+  fs.mkdirSync(dir, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const safeJobId = jobId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "unknown";
+  const logPath = path.join(dir, `manual_${ts}_${safeJobId}.log`);
+
+  return (msg: string) => {
+    const line = `[manual-generate] ${new Date().toISOString()} ${msg}\n`;
+    try {
+      fs.appendFileSync(logPath, line, "utf8");
+    } catch {
+      // Logging is diagnostic only; never break artifact generation.
+    }
   };
 }

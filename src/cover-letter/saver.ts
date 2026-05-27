@@ -299,6 +299,7 @@ function buildMeta(args: {
     word_count:      wordCount,
     compile_status:  compileStatus,
     flags,
+    error:           clResult.error ?? null,
     score:           bundle.score.total,
     judge_verdict:   bundle.judge_json.verdict,
     judge_concerns:  bundle.judge_json.concerns,

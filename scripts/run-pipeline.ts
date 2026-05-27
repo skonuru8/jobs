@@ -135,12 +135,16 @@ const POSTED_WITHIN  = process.env.POSTED_WITHIN ?? "";   // "" = no filter
 const FIXTURES_DIR   = path.join(REPO_ROOT, "fixtures", "extractor");
 const CONFIG_DIR     = path.join(REPO_ROOT, "config");
 const RUN_ID = process.env.RUN_ID ?? randomUUID();
+const RUN_LOG_PATH = installRunLog(REPO_ROOT, SOURCE, RUN_ID);
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
+  if (RUN_LOG_PATH) {
+    log(`Run log: ${RUN_LOG_PATH}`);
+  }
 
   // --- Load profile ---
   if (!fs.existsSync(PROFILE_PATH)) {
@@ -1326,6 +1330,36 @@ function log(msg: string): void {
 function die(msg: string): never {
   process.stderr.write(`[pipeline] ERROR: ${msg}\n`);
   process.exit(1);
+}
+
+function installRunLog(repoRoot: string, source: string, runId: string): string | null {
+  if (process.env.PIPELINE_DISABLE_RUN_LOG === "1") return null;
+
+  const baseDir = path.resolve(process.env.OUTPUT_DIR ?? path.join(repoRoot, "output"), "logs", "runs");
+  fs.mkdirSync(baseDir, { recursive: true });
+
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const safeSource = source.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const shortRunId = runId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 8) || "manual";
+  const logPath = path.join(baseDir, `log_${ts}_${safeSource}_${shortRunId}.log`);
+  const stream = fs.createWriteStream(logPath, { flags: "a" });
+
+  const mirror = <T extends typeof process.stdout.write>(original: T): T => {
+    return ((chunk: unknown, ...args: unknown[]) => {
+      try {
+        stream.write(typeof chunk === "string" || Buffer.isBuffer(chunk) ? chunk : String(chunk));
+      } catch {
+        // Keep logging best-effort. Never let log capture break the run.
+      }
+      return original(chunk as never, ...(args as never[]));
+    }) as T;
+  };
+
+  process.stdout.write = mirror(process.stdout.write.bind(process.stdout) as typeof process.stdout.write);
+  process.stderr.write = mirror(process.stderr.write.bind(process.stderr) as typeof process.stderr.write);
+  process.once("exit", () => stream.end());
+
+  return logPath;
 }
 
 // ---------------------------------------------------------------------------

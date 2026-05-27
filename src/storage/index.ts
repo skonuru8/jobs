@@ -21,6 +21,7 @@ export {
   saveJob,
   isSeenInDB,
   jobHasAnyArtifacts,
+  jobHasCompleteArtifacts,
   insertTailoredResumeArtifact,
   insertCoverLetterArtifact,
   getLatestArtifactsForJob,

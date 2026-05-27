@@ -387,6 +387,46 @@ export async function jobHasAnyArtifacts(jobId: string): Promise<boolean> {
   }
 }
 
+/** True only when the latest resume and cover rows both point at usable files. */
+export async function jobHasCompleteArtifacts(jobId: string): Promise<boolean> {
+  if (_disabled) return false;
+  try {
+    const result = await getPool().query<{ complete: boolean }>(
+      `WITH latest_resume AS (
+          SELECT tex_path, pdf_path, compile_status
+            FROM tailored_resumes
+           WHERE job_id = $1
+           ORDER BY generated_at DESC NULLS LAST
+           LIMIT 1
+        ),
+        latest_cover AS (
+          SELECT tex_path, pdf_path, file_path, compile_status
+            FROM cover_letters
+           WHERE job_id = $1
+           ORDER BY generated_at DESC NULLS LAST
+           LIMIT 1
+        )
+        SELECT (
+          EXISTS (
+            SELECT 1 FROM latest_resume
+             WHERE COALESCE(pdf_path, tex_path) IS NOT NULL
+               AND compile_status <> 'failed'
+          )
+          AND EXISTS (
+            SELECT 1 FROM latest_cover
+             WHERE COALESCE(pdf_path, tex_path, file_path) IS NOT NULL
+               AND compile_status <> 'failed'
+          )
+        ) AS complete`,
+      [jobId],
+    );
+    return Boolean(result.rows[0]?.complete);
+  } catch (e) {
+    console.error("[storage] jobHasCompleteArtifacts failed:", formatErr(e));
+    return false;
+  }
+}
+
 export interface TailoredResumeInsert {
   job_id:          string;
   run_id:          string | null;
