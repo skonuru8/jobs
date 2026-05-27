@@ -26,17 +26,22 @@ export function hardFilter(job: Job, profile: Profile): FilterResult {
   })
 
   // ── RULE 1 — Visa ──────────────────────────────────────────────
-  if (
-    job.visa_sponsorship === false &&
-    profile.work_authorization.requires_sponsorship
-  ) {
-    return reject("no_sponsorship")
-  }
-  if (
-    job.visa_sponsorship === null &&
-    profile.work_authorization.requires_sponsorship
-  ) {
-    flags.push(FLAGS.SPONSORSHIP_UNCLEAR)
+  if (profile.work_authorization.requires_sponsorship) {
+    switch (job.visa_sponsorship) {
+      case "denied":
+        return reject("no_sponsorship")
+      case "payment_model_only":
+        // W-2 only / no C2C — does not block OPT or H-1B. Pass with flag.
+        flags.push(FLAGS.PAYMENT_MODEL_RESTRICTION)
+        break
+      case "unmentioned":
+        flags.push(FLAGS.SPONSORSHIP_UNCLEAR)
+        break
+      case "offered":
+      case "ead_eligible":
+        // positive signals — no flag
+        break
+    }
   }
 
   // ── RULE 2 — Clearance ─────────────────────────────────────────

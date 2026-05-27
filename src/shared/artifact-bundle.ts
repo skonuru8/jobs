@@ -17,7 +17,7 @@ export type ArtifactJudgeJson = {
   verdict:     string | null;
   reasoning:   string | null;
   concerns:    string[];
-  confidence?: number;
+  confidence?: number | null;
   key_matches?: string[];
   gaps?:       JudgeGap[];
   gap_directives?: GapDirective[];
@@ -66,6 +66,7 @@ export function buildSlimProfileForPrompts(profile: Profile, jdRequiredNames: st
     years_experience:  profile.years_experience,
     education:         profile.education,
     preferred_domains: profile.preferred_domains,
+    work_authorization: profile.work_authorization,
     contact:           profile.contact,
     title:             profile.contact.title,
     location_line:     formatProfileLocationLine(profile),
@@ -110,6 +111,7 @@ export function buildArtifactBundle(args: {
     years_experience: sanitized.years_experience,
     education_required: sanitized.education_required,
     visa_sponsorship: sanitized.visa_sponsorship,
+    visa_quote:       sanitized.visa_quote,
     location:         sanitized.location,
     meta:             { posted_at: sanitized.meta.posted_at, source_url: sanitized.meta.source_url },
   };
@@ -145,7 +147,7 @@ function judgeJsonFromResult(judgeResult: JudgeResult | null): ArtifactJudgeJson
     verdict:           f.verdict,
     reasoning:         f.reasoning,
     concerns:          f.concerns ?? [],
-    confidence:        f.confidence,
+    confidence:        f.confidence ?? undefined,
     key_matches:       f.key_matches,
     gaps:              f.gaps,
     gap_directives:    f.gap_directives,
@@ -176,6 +178,7 @@ export function coverLetterInputFromBundle(bundle: ArtifactBundleOk): CoverLette
       yoe_min:          j.years_experience?.min ?? null,
       yoe_max:          j.years_experience?.max ?? null,
       visa_sponsorship: j.visa_sponsorship,
+      visa_quote:       j.visa_quote,
       score:            bundle.score.total,
       score_components: bundle.score.components,
       judge_reasoning:  bundle.judge_json.reasoning,
@@ -193,6 +196,7 @@ export function coverLetterInputFromBundle(bundle: ArtifactBundleOk): CoverLette
       years_experience:  bundle.profile.years_experience,
       education:         bundle.profile.education,
       preferred_domains: bundle.profile.preferred_domains,
+      work_authorization: bundle.profile.work_authorization,
       contact:           {
         name:     bundle.profile.contact.name,
         email:    bundle.profile.contact.email,

@@ -17,7 +17,8 @@
       ],
       "years_experience": { "min": 5, "max": 8 },
       "education_required": { "minimum": "bachelor", "field": "Computer Science" },
-      "visa_sponsorship": true,
+      "visa_sponsorship": "offered",
+      "visa_quote": "visa sponsorship available",
       "responsibilities": [
         "Design and build microservices for payment processing",
         "Own technical delivery across full stack"

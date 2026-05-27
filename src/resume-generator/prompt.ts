@@ -79,6 +79,28 @@ everywhere in the resume (skills, bullets, summary). Replace the technology name
 If target_role is present, apply that swap ONLY inside the matching employer section.
 If target_role is null or missing, apply it unscoped (current behavior).
 
+--- SKILLS SECTION ATOMICITY (NON-NEGOTIABLE) ---
+
+The SKILLS section is LOCKED to the canonical resume's SKILLS content.
+
+You MAY:
+  - Reorder skill categories (e.g. lead with Backend when the JD is backend-heavy).
+  - Reorder skills within a category to lead with JD-relevant ones.
+
+You MAY NOT, under any circumstance:
+  - Add a skill, tool, framework, language, or library that is not in the
+    canonical SKILLS section.
+  - Remove any skill from the canonical SKILLS section.
+  - Move skills between categories (Cypress is not Backend; do not relocate).
+
+This rule applies even when JUDGE_JSON.gap_directives requests adding a tool
+via handling="fabricate". Fabricate directives apply ONLY to Experience bullets,
+NEVER to the SKILLS section.
+
+If a JD requires a tool that is not in the candidate's canonical SKILLS, surface
+it through an Experience bullet reframe at the role indicated by the relevant
+gap_directive's target_role — never by adding it to SKILLS.
+
 --- LENGTH CONSTRAINT ---
 Word count of the rendered text (ignoring LaTeX commands): between 1900 and 2500.
 Do NOT summarize. Do NOT shorten. Do NOT remove bullets or projects for any

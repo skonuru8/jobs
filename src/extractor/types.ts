@@ -37,6 +37,13 @@ export interface ExtractedEducation {
   quote:   string | null;
 }
 
+export type VisaSponsorshipStatus =
+  | "offered"
+  | "denied"
+  | "ead_eligible"
+  | "payment_model_only"
+  | "unmentioned";
+
 /**
  * The structured output the LLM returns.
  * Every quoted field is verified as a substring of description_raw
@@ -47,7 +54,8 @@ export interface ExtractedFields {
   years_experience:   ExtractedYOE;
   education_required: ExtractedEducation;
   responsibilities:   string[];
-  visa_sponsorship:   boolean | null;
+  visa_sponsorship:   VisaSponsorshipStatus;
+  visa_quote:         string | null;
   security_clearance: string;   // "none" | "required" | "preferred" | "unknown"
   domain:             string | null;
 }

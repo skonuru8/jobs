@@ -18,6 +18,23 @@ export interface JobArtifactSnapshot {
   bucket: string;
 }
 
+function parseVisaStatus(value: unknown): Job["visa_sponsorship"] {
+  switch (value) {
+    case "offered":
+    case "denied":
+    case "ead_eligible":
+    case "payment_model_only":
+    case "unmentioned":
+      return value;
+    case true:
+      return "offered";
+    case false:
+      return "denied";
+    default:
+      return "unmentioned";
+  }
+}
+
 export async function fetchLatestJobSnapshotForArtifacts(
   jobId: string,
 ): Promise<JobArtifactSnapshot | null> {
@@ -89,7 +106,8 @@ export async function fetchLatestJobSnapshotForArtifacts(
       required_skills:    Array.isArray(ex.required_skills) ? (ex.required_skills as Job["required_skills"]) : [],
       years_experience:   (ex.years_experience ?? { min: null, max: null }) as Job["years_experience"],
       education_required: (ex.education_required ?? { minimum: "", field: "" }) as Job["education_required"],
-      visa_sponsorship:   typeof ex.visa_sponsorship === "boolean" ? ex.visa_sponsorship : null,
+      visa_sponsorship:   parseVisaStatus(ex.visa_sponsorship),
+      visa_quote:         typeof ex.visa_quote === "string" ? ex.visa_quote : null,
       security_clearance: String(ex.security_clearance ?? ""),
       domain:             typeof ex.domain === "string" ? ex.domain : null,
       responsibilities:   Array.isArray(ex.responsibilities) ? (ex.responsibilities as string[]) : [],
@@ -130,12 +148,19 @@ export async function fetchLatestJobSnapshotForArtifacts(
           verdict,
           reasoning: row.jv_reasoning ?? "",
           concerns,
-          confidence: row.jv_confidence != null ? Number(row.jv_confidence) : undefined,
-          key_matches: Array.isArray(row.jv_key_matches) ? (row.jv_key_matches as string[]) : undefined,
-          gaps: Array.isArray(row.jv_gaps) ? (row.jv_gaps as JudgeFields["gaps"]) : undefined,
-          gap_directives: gapDirectives,
-          why_apply: row.jv_why_apply ?? undefined,
-          tailoring_hints: tailoringHints,
+          confidence: row.jv_confidence != null ? Number(row.jv_confidence) : null,
+          key_matches: Array.isArray(row.jv_key_matches) ? (row.jv_key_matches as string[]) : [],
+          gaps: Array.isArray(row.jv_gaps) ? (row.jv_gaps as JudgeFields["gaps"]) : [],
+          gap_directives: gapDirectives ?? [],
+          why_apply: row.jv_why_apply ?? null,
+          tailoring_hints: tailoringHints ?? {
+            emphasize_roles: [],
+            emphasize_skills: [],
+            downplay_skills: [],
+            domain_reframe_angle: null,
+            tech_swaps: [],
+            gap_directives: gapDirectives ?? [],
+          },
         }
       : null;
 

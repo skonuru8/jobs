@@ -16,7 +16,8 @@
       ],
       "years_experience": { "min": 4, "max": 7 },
       "education_required": { "minimum": "", "field": "" },
-      "visa_sponsorship": null,
+      "visa_sponsorship": "unmentioned",
+      "visa_quote": null,
       "responsibilities": [
         "Develop and maintain Java microservices",
         "Build Angular UI components"

@@ -1,0 +1,6 @@
+{
+  "name": "flag: payment_model_restriction when visa_sponsorship is payment_model_only and profile needs sponsorship",
+  "job": { "visa_sponsorship": "payment_model_only" },
+  "profile": { "work_authorization": { "requires_sponsorship": true, "visa_type": "H1B", "clearance_eligible": true } },
+  "expected": { "verdict": "PASS", "reason": null, "flags": ["payment_model_restriction"] }
+}

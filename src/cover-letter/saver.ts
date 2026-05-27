@@ -55,6 +55,7 @@ export async function generateAndSaveCoverLetter(
         years_experience: input.profile.years_experience,
         education: input.profile.education,
         preferred_domains: input.profile.preferred_domains,
+        work_authorization: input.profile.work_authorization,
         contact: input.profile.contact,
         title: input.profile.title,
         location_line: input.profile.location_line,

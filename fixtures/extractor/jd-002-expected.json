@@ -20,7 +20,8 @@
       "Manage Jenkins CI/CD pipelines for deployment automation",
       "Handle production incidents and provide on-call support"
     ],
-    "visa_sponsorship": true,
+    "visa_sponsorship": "offered",
+    "visa_quote": "Visa sponsorship available",
     "security_clearance": "required",
     "domain": "healthcare"
   }

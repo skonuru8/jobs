@@ -16,7 +16,8 @@
       ],
       "years_experience": { "min": 5, "max": 8 },
       "education_required": { "minimum": "bachelor", "field": "Computer Science" },
-      "visa_sponsorship": null,
+      "visa_sponsorship": "unmentioned",
+      "visa_quote": null,
       "responsibilities": [
         "Architect and implement microservices for enterprise clients",
         "Build Angular frontend modules",

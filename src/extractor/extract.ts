@@ -169,6 +169,11 @@ export function verifyCitations(
     text.includes(fields.education_required.quote.toLowerCase());
   if (fields.education_required.quote && !eduQuoteValid) failures++;
 
+  const visaQuoteValid =
+    fields.visa_quote &&
+    text.includes(fields.visa_quote.toLowerCase());
+  if (fields.visa_quote && !visaQuoteValid) failures++;
+
   return {
     fields: {
       required_skills:    verifiedSkills,
@@ -184,6 +189,7 @@ export function verifyCitations(
       },
       responsibilities:   fields.responsibilities,
       visa_sponsorship:   fields.visa_sponsorship,
+      visa_quote:         visaQuoteValid ? fields.visa_quote : null,
       security_clearance: fields.security_clearance,
       domain:             fields.domain,
     },

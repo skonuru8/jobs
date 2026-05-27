@@ -17,7 +17,8 @@
       ],
       "years_experience": { "min": 7, "max": 15 },
       "education_required": { "minimum": "", "field": "" },
-      "visa_sponsorship": null,
+      "visa_sponsorship": "unmentioned",
+      "visa_quote": null,
       "responsibilities": [
         "Develop Java EE applications for capital markets",
         "Maintain Linux-based deployment pipelines"

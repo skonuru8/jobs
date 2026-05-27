@@ -21,7 +21,7 @@ const techSwap = z.object({
   from: z.string(),
   to: z.string(),
   confidence: z.number(),
-  target_role: z.string().min(1).nullable().optional(),
+  target_role: z.string().min(1).nullable(),
 });
 
 export const JudgeFieldsSchema = z.object({
@@ -29,19 +29,19 @@ export const JudgeFieldsSchema = z.object({
   reasoning: z.string().min(1),
   concerns:  z.array(z.string()),
 
-  confidence:      z.number().min(0).max(1).optional(),
-  key_matches:     z.array(z.string()).optional(),
-  gaps:            z.array(judgeGap).optional(),
-  gap_directives:  z.array(gapDirective).optional(),
-  why_apply:       z.string().optional(),
+  confidence:      z.number().min(0).max(1).nullable(),
+  key_matches:     z.array(z.string()),
+  gaps:            z.array(judgeGap),
+  gap_directives:  z.array(gapDirective),
+  why_apply:       z.string().nullable(),
   tailoring_hints: z.object({
-    emphasize_roles:      z.array(z.string()).optional(),
-    emphasize_skills:     z.array(z.string()).optional(),
-    downplay_skills:      z.array(z.string()).optional(),
-    domain_reframe_angle: z.string().optional(),
-    tech_swaps: z.array(techSwap).optional(),
-    gap_directives: z.array(gapDirective).optional(),
-  }).optional(),
+    emphasize_roles:      z.array(z.string()),
+    emphasize_skills:     z.array(z.string()),
+    downplay_skills:      z.array(z.string()),
+    domain_reframe_angle: z.string().nullable(),
+    tech_swaps:           z.array(techSwap),
+    gap_directives:       z.array(gapDirective),
+  }),
 });
 
 export type ValidatedJudgeFields = z.infer<typeof JudgeFieldsSchema>;

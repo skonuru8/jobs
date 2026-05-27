@@ -177,7 +177,8 @@
     "packaging and deploying web applications",
     "write unit tests that exercise all major logic components"
   ],
-  "visa_sponsorship": null,
+  "visa_sponsorship": "unmentioned",
+  "visa_quote": null,
   "security_clearance": "none",
   "domain": "finance"
 }

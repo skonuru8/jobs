@@ -1,5 +1,5 @@
 {
-  "_note": "WEAK — visa_sponsorship = false, OPT candidate cannot apply regardless of skills",
+  "_note": "WEAK — visa_sponsorship = denied, OPT candidate cannot apply regardless of skills",
   "input": {
     "job": {
       "title": "Senior Java Backend Engineer",
@@ -16,7 +16,8 @@
       ],
       "years_experience": { "min": 5, "max": 8 },
       "education_required": { "minimum": "bachelor", "field": "Computer Science" },
-      "visa_sponsorship": false,
+      "visa_sponsorship": "denied",
+      "visa_quote": "no sponsorship available",
       "responsibilities": [
         "Build high-throughput payment microservices",
         "Lead backend design for trading platform"

@@ -18,7 +18,8 @@
       ],
       "years_experience": { "min": 5, "max": null },
       "education_required": { "minimum": "bachelor", "field": "" },
-      "visa_sponsorship": null,
+      "visa_sponsorship": "unmentioned",
+      "visa_quote": null,
       "responsibilities": [
         "Architect and implement scalable microservices",
         "Lead technical discussions with product teams"

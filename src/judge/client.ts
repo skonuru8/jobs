@@ -9,6 +9,8 @@
  *   model ignores the reasoning flag).
  */
 
+import { JUDGE_JSON_SCHEMA } from "./schema";
+
 export interface ChatMessage {
   role:    "system" | "user" | "assistant";
   content: string;
@@ -51,7 +53,9 @@ export async function complete(opts: CompletionOptions): Promise<CompletionResul
     messages:        opts.messages,
     max_tokens:      opts.max_tokens,
     temperature:     opts.temperature,
-    response_format: { type: "json_object" },
+    response_format: process.env.JUDGE_FORCE_JSON_OBJECT
+      ? { type: "json_object" }
+      : { type: "json_schema", json_schema: JUDGE_JSON_SCHEMA },
   };
   if (opts.reasoning) body["reasoning"] = opts.reasoning;
 

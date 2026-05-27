@@ -23,7 +23,8 @@ describe("validateExtraction", () => {
       years_experience:   { min: 5, max: null, quote: "5+ years" },
       education_required: { minimum: "bachelor", field: "Computer Science", quote: "Bachelor's degree" },
       responsibilities:   ["Design microservices", "Write tests"],
-      visa_sponsorship:   false,
+      visa_sponsorship:   "denied",
+      visa_quote:         "No sponsorship available",
       security_clearance: "none",
       domain:             "fintech",
     });
@@ -40,7 +41,8 @@ describe("validateExtraction", () => {
       years_experience:   { min: null, max: null, quote: null },
       education_required: { minimum: "", field: "", quote: null },
       responsibilities:   [],
-      visa_sponsorship:   null,
+      visa_sponsorship:   "unmentioned",
+      visa_quote:         null,
       security_clearance: "none",
       domain:             null,
     });
@@ -60,7 +62,8 @@ describe("validateExtraction", () => {
       years_experience:   { min: null, max: null, quote: null },
       education_required: { minimum: "", field: "", quote: null },
       responsibilities:   [],
-      visa_sponsorship:   null,
+      visa_sponsorship:   "unmentioned",
+      visa_quote:         null,
       security_clearance: "none",
       domain:             null,
     });
@@ -77,7 +80,8 @@ describe("validateExtraction", () => {
       years_experience:   { min: null, max: null, quote: null },
       education_required: { minimum: "", field: "", quote: null },
       responsibilities:   [],
-      visa_sponsorship:   null,
+      visa_sponsorship:   "unmentioned",
+      visa_quote:         null,
       security_clearance: "none",
       domain:             null,
     });
@@ -91,7 +95,8 @@ describe("validateExtraction", () => {
       years_experience:   { min: null, max: null, quote: null },
       education_required: { minimum: "", field: "", quote: null },
       responsibilities:   [],
-      visa_sponsorship:   null,
+      visa_sponsorship:   "unmentioned",
+      visa_quote:         null,
       security_clearance: "none",
       domain:             null,
     });
@@ -108,13 +113,14 @@ describe("validateExtraction", () => {
     }
   });
 
-  it("accepts null visa_sponsorship", () => {
+  it("accepts unmentioned visa_sponsorship", () => {
     const raw = JSON.stringify({
       required_skills:    [],
       years_experience:   { min: null, max: null, quote: null },
       education_required: { minimum: "", field: "", quote: null },
       responsibilities:   [],
-      visa_sponsorship:   null,
+      visa_sponsorship:   "unmentioned",
+      visa_quote:         null,
       security_clearance: "none",
       domain:             null,
     });
@@ -128,14 +134,15 @@ describe("validateExtraction", () => {
 
 describe("verifyCitations", () => {
 
-  const baseFields = {
-    years_experience:   { min: null, max: null, quote: null },
-    education_required: { minimum: "", field: "", quote: null },
-    responsibilities:   [],
-    visa_sponsorship:   null,
-    security_clearance: "none",
-    domain:             null,
-  };
+    const baseFields = {
+      years_experience:   { min: null, max: null, quote: null },
+      education_required: { minimum: "", field: "", quote: null },
+      responsibilities:   [],
+      visa_sponsorship:   "unmentioned" as const,
+      visa_quote:         null,
+      security_clearance: "none",
+      domain:             null,
+    };
 
   it("keeps quote when it is a substring of description_raw", () => {
     const fields = {

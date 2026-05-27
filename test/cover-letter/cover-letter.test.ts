@@ -42,7 +42,8 @@ const BASE_JOB: CoverLetterInput["job"] = {
   ],
   yoe_min:          5,
   yoe_max:          8,
-  visa_sponsorship: null,
+  visa_sponsorship: "unmentioned",
+  visa_quote:       null,
   score:            0.854,
   score_components: { skills: 0.85, semantic: 0.63, yoe: 1.0, seniority: 1.0, location: 1.0 },
   judge_reasoning:  "Candidate's Java and Spring Boot expertise aligns perfectly. Accenture typically sponsors visas.",
@@ -74,6 +75,13 @@ const BASE_PROFILE: CoverLetterInput["profile"] = {
   years_experience:  6,
   education:         { degree: "master", field: "Computer Science" },
   preferred_domains: ["fintech", "healthcare", "enterprise saas"],
+  work_authorization: {
+    requires_sponsorship: true,
+    visa_type: "F-1 OPT",
+    clearance_eligible: false,
+    cover_letter_phrasing_sponsorship_needed: "I am authorized to work in the United States on F-1 OPT and will require H-1B sponsorship at the standard transition point.",
+    cover_letter_phrasing_no_sponsorship_needed: "",
+  },
 };
 
 const BASE_INPUT: CoverLetterInput = {
@@ -144,22 +152,22 @@ describe("buildCoverLetterPrompt", () => {
     expect(p).toContain("Accenture typically sponsors visas");
   });
 
-  it("shows visa note when sponsorship is null", () => {
+  it("shows verbatim visa instruction when sponsorship is unmentioned", () => {
     const p = buildCoverLetterPrompt(BASE_INPUT);
     expect(p).toContain("not mentioned");
-    expect(p).toContain("work authorization");
+    expect(p).toContain("VERBATIM");
   });
 
-  it("shows 'sponsorship is explicitly offered' when visa_sponsorship = true", () => {
-    const input: CoverLetterInput = { ...BASE_INPUT, job: { ...BASE_JOB, visa_sponsorship: true } };
+  it("shows profile-authored sentence when sponsorship is offered", () => {
+    const input: CoverLetterInput = { ...BASE_INPUT, job: { ...BASE_JOB, visa_sponsorship: "offered" } };
     const p = buildCoverLetterPrompt(input);
-    expect(p).toContain("explicitly offered");
+    expect(p).toContain("Copy character-for-character");
   });
 
-  it("shows caution note when visa_sponsorship = false", () => {
-    const input: CoverLetterInput = { ...BASE_INPUT, job: { ...BASE_JOB, visa_sponsorship: false } };
+  it("shows silence rule when visa_sponsorship = denied", () => {
+    const input: CoverLetterInput = { ...BASE_INPUT, job: { ...BASE_JOB, visa_sponsorship: "denied" } };
     const p = buildCoverLetterPrompt(input);
-    expect(p).toContain("CAUTION");
+    expect(p).toContain("Do not mention work authorization");
   });
 
   it("includes resume text when provided", () => {

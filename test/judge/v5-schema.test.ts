@@ -4,53 +4,66 @@ import { validateJudge } from "@/judge/validate";
 import { hasExtendedJudgeContext } from "@/shared/artifact-bundle";
 
 describe("judge v5 schema compatibility", () => {
-  it("accepts old judge output without gap_directives and consumers stay safe", () => {
-    const raw = JSON.stringify({
-      verdict: "STRONG",
-      reasoning: "Good fit.",
-      concerns: [],
-      tailoring_hints: {
-        tech_swaps: [{ from: "React", to: "Angular", confidence: 0.9 }],
-      },
-    });
+  const strictBase = {
+    verdict: "STRONG",
+    reasoning: "Good fit.",
+    concerns: [],
+    confidence: null,
+    key_matches: [],
+    gaps: [],
+    gap_directives: [],
+    why_apply: null,
+    tailoring_hints: {
+      emphasize_roles: [],
+      emphasize_skills: [],
+      downplay_skills: [],
+      domain_reframe_angle: null,
+      tech_swaps: [],
+      gap_directives: [],
+    },
+  };
+
+  it("accepts strict judge output with empty arrays and consumers stay safe", () => {
+    const raw = JSON.stringify(strictBase);
 
     const result = validateJudge(raw);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.gap_directives).toBeUndefined();
+      expect(result.data.gap_directives).toEqual([]);
       expect(() => hasExtendedJudgeContext({
         verdict: result.data.verdict,
         reasoning: result.data.reasoning,
         concerns: result.data.concerns,
+        gap_directives: result.data.gap_directives,
         tailoring_hints: result.data.tailoring_hints,
       })).not.toThrow();
     }
   });
 
-  it("accepts old judge output with unscoped tech_swaps", () => {
+  it("accepts strict judge output with unscoped tech_swaps", () => {
     const raw = JSON.stringify({
-      verdict: "STRONG",
-      reasoning: "Good fit.",
-      concerns: [],
+      ...strictBase,
       tailoring_hints: {
-        tech_swaps: [{ from: "React", to: "Angular", confidence: 0.9 }],
+        ...strictBase.tailoring_hints,
+        tech_swaps: [{ from: "React", to: "Angular", confidence: 0.9, target_role: null }],
       },
     });
 
     const result = validateJudge(raw);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.tailoring_hints?.tech_swaps?.[0]?.target_role).toBeUndefined();
+      expect(result.data.tailoring_hints.tech_swaps[0].target_role).toBeNull();
     }
   });
 
   it("accepts v5 judge output with empty gap_directives", () => {
     const raw = JSON.stringify({
+      ...strictBase,
       verdict: "MAYBE",
       reasoning: "Partial fit.",
       concerns: ["Missing one stack item."],
-      gap_directives: [],
       tailoring_hints: {
+        ...strictBase.tailoring_hints,
         tech_swaps: [],
       },
     });
@@ -64,6 +77,7 @@ describe("judge v5 schema compatibility", () => {
 
   it("accepts one of each handling value", () => {
     const raw = JSON.stringify({
+      ...strictBase,
       verdict: "MAYBE",
       reasoning: "Several gaps.",
       concerns: ["Needs careful tailoring."],
@@ -75,6 +89,7 @@ describe("judge v5 schema compatibility", () => {
         { jd_requirement: "FX trading", handling: "forbid", target_role: null, frame_as: null },
       ],
       tailoring_hints: {
+        ...strictBase.tailoring_hints,
         tech_swaps: [
           { from: "React", to: "Angular", confidence: 0.8, target_role: "PHIA Group" },
         ],
@@ -91,9 +106,9 @@ describe("judge v5 schema compatibility", () => {
 
   it("rejects malformed handling values", () => {
     const raw = JSON.stringify({
+      ...strictBase,
       verdict: "MAYBE",
       reasoning: "Several gaps.",
-      concerns: [],
       gap_directives: [
         {
           jd_requirement: "Cassandra",

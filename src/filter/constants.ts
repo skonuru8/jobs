@@ -61,6 +61,7 @@ export const FX_TO_USD: Record<string, number> = {
 // Enumerated flags — LLM judge contract must handle each.
 export const FLAGS = {
   SPONSORSHIP_UNCLEAR: "sponsorship_unclear",
+  PAYMENT_MODEL_RESTRICTION: "payment_model_restriction",
   CLEARANCE_UNCLEAR: "clearance_unclear",
   REMOTE_UNCLEAR: "remote_unclear",
   EMPLOYMENT_TYPE_UNCLEAR: "employment_type_unclear",

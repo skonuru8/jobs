@@ -102,4 +102,18 @@ export function validateProfile(profile: Profile): void {
   ) {
     throw new Error("profile.years_experience must be a non-negative number")
   }
+
+  const workAuth = profile.work_authorization
+  if (!workAuth || typeof workAuth !== "object") {
+    throw new Error("profile.work_authorization is required")
+  }
+  for (const key of [
+    "visa_type",
+    "cover_letter_phrasing_sponsorship_needed",
+    "cover_letter_phrasing_no_sponsorship_needed",
+  ] as const) {
+    if (typeof workAuth[key] !== "string") {
+      throw new Error(`profile.work_authorization.${key} must be a string`)
+    }
+  }
 }

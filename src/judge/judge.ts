@@ -54,6 +54,8 @@ function defaultProfileForJudge(): Profile {
       requires_sponsorship: false,
       visa_type: "",
       clearance_eligible: true,
+      cover_letter_phrasing_sponsorship_needed: "",
+      cover_letter_phrasing_no_sponsorship_needed: "",
     },
     preferred_domains: [],
     deal_breakers: [],

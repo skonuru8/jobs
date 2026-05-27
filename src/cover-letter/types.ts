@@ -2,6 +2,7 @@
  * types.ts — input/output types for cover letter generation.
  */
 
+import type { VisaSponsorshipStatus } from "@/filter/types";
 import type { GapDirective, TechSwap } from "@/judge/types";
 
 // ---------------------------------------------------------------------------
@@ -18,7 +19,8 @@ export interface CoverLetterJobInput {
   responsibilities: string[];
   yoe_min:          number | null;
   yoe_max:          number | null;
-  visa_sponsorship: boolean | null;
+  visa_sponsorship: VisaSponsorshipStatus;
+  visa_quote:       string | null;
   score:            number;
   score_components: {
     skills:    number;
@@ -54,6 +56,13 @@ export interface CandidateProfile {
   years_experience: number;
   education: { degree: string; field: string };
   preferred_domains: string[];
+  work_authorization: {
+    requires_sponsorship: boolean;
+    visa_type: string;
+    clearance_eligible: boolean;
+    cover_letter_phrasing_sponsorship_needed: string;
+    cover_letter_phrasing_no_sponsorship_needed: string;
+  };
   contact: CandidateContact;
   /** Default headline under name in template. */
   title?: string;

@@ -26,7 +26,7 @@ describe("hardFilter purity", () => {
 
   it("returned flags array is a fresh copy — caller cannot mutate internal state", () => {
     const job = baseJob()
-    job.visa_sponsorship = null
+    job.visa_sponsorship = "unmentioned"
     const profile = baseProfile()
     profile.work_authorization.requires_sponsorship = true
 

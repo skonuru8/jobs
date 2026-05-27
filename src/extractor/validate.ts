@@ -37,7 +37,10 @@ export const ExtractedFieldsSchema = z.object({
   years_experience:   ExtractedYOESchema,
   education_required: ExtractedEducationSchema,
   responsibilities:   z.array(z.string()),
-  visa_sponsorship:   z.boolean().nullable(),
+  visa_sponsorship:   z.enum([
+    "offered", "denied", "ead_eligible", "payment_model_only", "unmentioned",
+  ]),
+  visa_quote:         z.string().nullable(),
   security_clearance: z.string(),
   domain:             z.string().nullable(),
 });

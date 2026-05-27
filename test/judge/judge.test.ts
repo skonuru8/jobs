@@ -37,7 +37,8 @@ const BASE_JOB: JudgeInput["job"] = {
   ],
   years_experience:  { min: 5, max: 8 },
   education_required: { minimum: "bachelor", field: "Computer Science" },
-  visa_sponsorship:  null,
+  visa_sponsorship:  "unmentioned",
+  visa_quote:        null,
   responsibilities:  ["Design microservices", "Own technical delivery"],
   flags:             ["posted_at_missing"],
 };
@@ -52,16 +53,38 @@ const BASE_SCORE: JudgeInput["score"] = {
 // ---------------------------------------------------------------------------
 
 describe("validateJudge", () => {
+  const minimal = (overrides: Record<string, unknown> = {}) => JSON.stringify({
+    verdict: "STRONG",
+    reasoning: "Good fit.",
+    concerns: [],
+    confidence: null,
+    key_matches: [],
+    gaps: [],
+    gap_directives: [],
+    why_apply: null,
+    tailoring_hints: {
+      emphasize_roles: [],
+      emphasize_skills: [],
+      downplay_skills: [],
+      domain_reframe_angle: null,
+      tech_swaps: [],
+      gap_directives: [],
+    },
+    ...overrides,
+  });
+
   it("accepts STRONG verdict with empty concerns", () => {
-    const raw = JSON.stringify({ verdict: "STRONG", reasoning: "Great fit.", concerns: [] });
+    const raw = minimal({ verdict: "STRONG", reasoning: "Great fit." });
     const result = validateJudge(raw);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.data.verdict).toBe("STRONG");
   });
 
   it("accepts MAYBE verdict with concerns", () => {
-    const raw = JSON.stringify({
-      verdict: "MAYBE", reasoning: "Sponsorship unclear.", concerns: ["Sponsorship not mentioned"],
+    const raw = minimal({
+      verdict: "MAYBE",
+      reasoning: "Sponsorship unclear.",
+      concerns: ["Sponsorship not mentioned"],
     });
     const result = validateJudge(raw);
     expect(result.ok).toBe(true);
@@ -72,8 +95,10 @@ describe("validateJudge", () => {
   });
 
   it("accepts WEAK verdict", () => {
-    const raw = JSON.stringify({
-      verdict: "WEAK", reasoning: "No sponsorship.", concerns: ["Explicitly no sponsorship"],
+    const raw = minimal({
+      verdict: "WEAK",
+      reasoning: "No sponsorship.",
+      concerns: ["Explicitly no sponsorship"],
     });
     const result = validateJudge(raw);
     expect(result.ok).toBe(true);
@@ -81,7 +106,7 @@ describe("validateJudge", () => {
   });
 
   it("rejects invalid verdict value", () => {
-    const raw = JSON.stringify({ verdict: "PASS", reasoning: "ok", concerns: [] });
+    const raw = minimal({ verdict: "PASS", reasoning: "ok" });
     const result = validateJudge(raw);
     expect(result.ok).toBe(false);
   });
@@ -93,7 +118,7 @@ describe("validateJudge", () => {
   });
 
   it("rejects empty reasoning string", () => {
-    const raw = JSON.stringify({ verdict: "STRONG", reasoning: "", concerns: [] });
+    const raw = minimal({ reasoning: "" });
     const result = validateJudge(raw);
     expect(result.ok).toBe(false);
   });
@@ -111,15 +136,23 @@ describe("validateJudge", () => {
   });
 
   it("accepts extended judge fields", () => {
-    const raw = JSON.stringify({
+    const raw = minimal({
       verdict: "STRONG",
       reasoning: "Good fit.",
       concerns: [],
       confidence: 0.88,
       key_matches: ["Nokia CPQ — Spring Boot microservices"],
       gaps: [],
+      gap_directives: [],
       why_apply: "Fintech domain overlap.",
-      tailoring_hints: { emphasize_roles: ["Nokia"] },
+      tailoring_hints: {
+        emphasize_roles: ["Nokia"],
+        emphasize_skills: [],
+        downplay_skills: [],
+        domain_reframe_angle: null,
+        tech_swaps: [],
+        gap_directives: [],
+      },
     });
     const result = validateJudge(raw);
     expect(result.ok).toBe(true);
@@ -130,7 +163,7 @@ describe("validateJudge", () => {
   });
 
   it("strips markdown code fences before parsing", () => {
-    const inner = JSON.stringify({ verdict: "STRONG", reasoning: "Good.", concerns: [] });
+    const inner = minimal({ verdict: "STRONG", reasoning: "Good." });
     const result = validateJudge("```json\n" + inner + "\n```");
     expect(result.ok).toBe(true);
   });
@@ -170,18 +203,18 @@ describe("buildJudgePrompt", () => {
     expect(prompt).toContain("Location");
   });
 
-  it("shows 'sponsorship offered' when visa_sponsorship = true", () => {
-    const with_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: true }, score: BASE_SCORE };
+  it("shows 'sponsorship offered' when visa_sponsorship = offered", () => {
+    const with_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: "offered" }, score: BASE_SCORE };
     expect(buildJudgePrompt(with_visa)).toContain("sponsorship offered");
   });
 
-  it("shows 'NO sponsorship' when visa_sponsorship = false", () => {
-    const no_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: false }, score: BASE_SCORE };
+  it("shows 'NO sponsorship' when visa_sponsorship = denied", () => {
+    const no_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: "denied" }, score: BASE_SCORE };
     expect(buildJudgePrompt(no_visa)).toContain("NO sponsorship");
   });
 
-  it("shows 'not mentioned' when visa_sponsorship = null", () => {
-    const null_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: null }, score: BASE_SCORE };
+  it("shows 'not mentioned' when visa_sponsorship = unmentioned", () => {
+    const null_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: "unmentioned" }, score: BASE_SCORE };
     expect(buildJudgePrompt(null_visa)).toContain("not mentioned");
   });
 
@@ -216,7 +249,7 @@ describe("SYSTEM_PROMPT", () => {
   });
 
   it("contains the no-sponsorship hard rule", () => {
-    expect(systemPrompt).toContain("visa_sponsorship = false");
+    expect(systemPrompt).toContain(`visa_sponsorship = "denied"`);
   });
 });
 
@@ -227,7 +260,18 @@ describe("SYSTEM_PROMPT", () => {
 
 describe("getBucket", () => {
   const makeResult = (verdict: "STRONG" | "MAYBE" | "WEAK"): JudgeResult => ({
-    status: "ok", fields: { verdict, reasoning: "test", concerns: [] },
+    status: "ok", fields: {
+      verdict, reasoning: "test", concerns: [],
+      confidence: null, key_matches: [], gaps: [], gap_directives: [], why_apply: null,
+      tailoring_hints: {
+        emphasize_roles: [],
+        emphasize_skills: [],
+        downplay_skills: [],
+        domain_reframe_angle: null,
+        tech_swaps: [],
+        gap_directives: [],
+      },
+    },
     verdict, model: "test", prompt_version: "v1", judged_at: new Date().toISOString(),
   });
 

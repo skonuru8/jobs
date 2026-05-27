@@ -17,7 +17,8 @@
       ],
       "years_experience": { "min": 5, "max": null },
       "education_required": { "minimum": "", "field": "" },
-      "visa_sponsorship": true,
+      "visa_sponsorship": "offered",
+      "visa_quote": "sponsorship available",
       "responsibilities": [
         "Build Node.js microservices for health data platform",
         "Develop React dashboards for clinical reporting"

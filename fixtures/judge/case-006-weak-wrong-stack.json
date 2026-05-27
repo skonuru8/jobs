@@ -18,7 +18,8 @@
       ],
       "years_experience": { "min": 5, "max": 10 },
       "education_required": { "minimum": "bachelor", "field": "" },
-      "visa_sponsorship": null,
+      "visa_sponsorship": "unmentioned",
+      "visa_quote": null,
       "responsibilities": [
         "Build enterprise .NET applications",
         "Maintain C# backend services and Blazor frontend"

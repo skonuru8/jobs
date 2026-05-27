@@ -8,7 +8,8 @@
       "Participate in code reviews",
       "Work with the team"
     ],
-    "visa_sponsorship": null,
+    "visa_sponsorship": "unmentioned",
+    "visa_quote": null,
     "security_clearance": "none",
     "domain": null
   }

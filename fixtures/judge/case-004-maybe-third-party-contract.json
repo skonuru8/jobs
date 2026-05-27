@@ -16,7 +16,8 @@
       ],
       "years_experience": { "min": 8, "max": null },
       "education_required": { "minimum": "", "field": "" },
-      "visa_sponsorship": null,
+      "visa_sponsorship": "unmentioned",
+      "visa_quote": null,
       "responsibilities": [
         "Build REST and GraphQL APIs in Java and Node.js",
         "Develop Vue.js frontend components"

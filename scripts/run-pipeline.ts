@@ -638,6 +638,7 @@ async function processJobs(
           sanitized.education_required = { minimum: f.education_required.minimum, field: f.education_required.field };
           sanitized.responsibilities   = f.responsibilities;
           sanitized.visa_sponsorship   = f.visa_sponsorship;
+          sanitized.visa_quote         = f.visa_quote;
           sanitized.security_clearance = mapClearance(f.security_clearance, sanitized);
           sanitized.domain             = f.domain;
 
@@ -649,7 +650,7 @@ async function processJobs(
           if (f.years_experience.min != null || f.years_experience.max != null) {
             clearFlag("years_experience_missing");
           }
-          if (f.visa_sponsorship != null) {
+          if (f.visa_sponsorship !== "unmentioned") {
             clearFlag("sponsorship_unclear");
           }
           if (f.education_required.minimum && f.education_required.minimum !== "") {
@@ -776,7 +777,8 @@ async function processJobs(
             minimum: sanitized.education_required?.minimum ?? "",
             field:   sanitized.education_required?.field   ?? "",
           },
-          visa_sponsorship:  sanitized.visa_sponsorship ?? null,
+          visa_sponsorship:  sanitized.visa_sponsorship ?? "unmentioned",
+          visa_quote:        sanitized.visa_quote ?? null,
           responsibilities:  sanitized.responsibilities  ?? [],
           flags:             allFlags,
         },
@@ -979,6 +981,10 @@ async function processJobs(
         extracted:       sanitized.required_skills?.length
                            ? { required_skills: sanitized.required_skills,
                                years_experience: sanitized.years_experience,
+                               education_required: sanitized.education_required,
+                               visa_sponsorship: sanitized.visa_sponsorship,
+                               visa_quote: sanitized.visa_quote,
+                               security_clearance: sanitized.security_clearance,
                                domain: sanitized.domain,
                                responsibilities: sanitized.responsibilities }
                            : null,

@@ -146,11 +146,25 @@ ${input.experience_block.trim()}
     ? `CANONICAL RESUME (LaTeX or text — metrics must match this source only):\n${resume.trim()}`
     : `CANONICAL RESUME: Not provided. Use profile skills only; do not invent metrics.`;
 
-  const visaNote = job.visa_sponsorship === true
-    ? "Visa sponsorship is explicitly offered — no need to mention it."
-    : job.visa_sponsorship === false
-    ? "CAUTION: Job says no sponsorship. Do not mention visa at all."
-    : `Visa sponsorship not mentioned. If appropriate, one factual sentence on work authorization may appear in the closing paragraph.`;
+  // Pull verbatim phrasing from profile. Generator inserts as-is, no rewording.
+  const verbatim = profile.work_authorization.requires_sponsorship
+    ? profile.work_authorization.cover_letter_phrasing_sponsorship_needed
+    : profile.work_authorization.cover_letter_phrasing_no_sponsorship_needed;
+
+  let visaNote: string;
+  if (job.visa_sponsorship === "denied") {
+    // Job explicitly refused sponsorship. Do not discuss authorization.
+    visaNote = "Do not mention work authorization, visa, or sponsorship anywhere in the letter.";
+  } else if (verbatim && verbatim.trim().length > 0) {
+    // Insert user-authored sentence verbatim. No rewording.
+    visaNote =
+      `In the closing paragraph, include the following sentence VERBATIM. ` +
+      `Do not rephrase, summarize, expand, or modify it in any way. ` +
+      `Copy character-for-character:\n\n"${verbatim.trim()}"`;
+  } else {
+    // No user-authored phrasing. Stay silent.
+    visaNote = "Do not mention work authorization, visa, or sponsorship.";
+  }
 
   const gapNote = missingRequired.length > 0
     ? `SKILLS NOT EXPLICITLY ON RESUME (required by job): ${missingRequired.join(", ")}
@@ -162,6 +176,15 @@ Assert competence through closest analogous experience from the resume — never
     : "Concerns: none";
 
   const gapDirectivesSection = renderCoverLetterGapDirectives(input.gap_directives);
+  const visaSummary = (() => {
+    switch (job.visa_sponsorship) {
+      case "offered": return "sponsorship offered";
+      case "denied": return "sponsorship denied";
+      case "ead_eligible": return "EAD/OPT/H-1B eligible";
+      case "payment_model_only": return "payment model restriction only";
+      case "unmentioned": return "not mentioned";
+    }
+  })();
 
   return `Write the cover letter BODY for the following application (no greeting or sign-off).
 
@@ -171,7 +194,7 @@ TARGET JOB:
   Domain:          ${job.domain ?? "not specified"}
   Employment type: ${job.employment_type ?? "not specified"}
   YOE required:    ${yoe}
-  Visa:            ${job.visa_sponsorship === true ? "sponsorship offered" : job.visa_sponsorship === false ? "no sponsorship" : "not mentioned"}
+  Visa:            ${visaSummary}${job.visa_quote ? ` — quote: "${job.visa_quote}"` : ""}
 
 ROLE RESPONSIBILITIES:
 ${respLines}

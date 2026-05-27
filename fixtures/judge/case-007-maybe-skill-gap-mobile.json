@@ -16,7 +16,8 @@
       ],
       "years_experience": { "min": 5, "max": 8 },
       "education_required": { "minimum": "", "field": "" },
-      "visa_sponsorship": null,
+      "visa_sponsorship": "unmentioned",
+      "visa_quote": null,
       "responsibilities": [
         "Develop native Android and iOS applications",
         "Build Java backend APIs to support mobile clients"

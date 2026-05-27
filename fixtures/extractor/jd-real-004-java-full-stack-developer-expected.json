@@ -156,7 +156,8 @@
     "Gain experience in cloud platforms",
     "Create PDF documents using XML or HTML"
   ],
-  "visa_sponsorship": null,
+  "visa_sponsorship": "unmentioned",
+  "visa_quote": null,
   "security_clearance": "none",
   "domain": null
 }

@@ -3,7 +3,7 @@
  * Bible §5 stages 13–14.
  */
 
-import type { Profile } from "@/filter/types";
+import type { Profile, VisaSponsorshipStatus } from "@/filter/types";
 
 // ---------------------------------------------------------------------------
 // Judge inputs
@@ -24,7 +24,8 @@ export interface JudgeJobInput {
   required_skills:   JudgeSkill[];
   years_experience:  { min: number | null; max: number | null };
   education_required: { minimum: string; field: string };
-  visa_sponsorship:  boolean | null;
+  visa_sponsorship:  VisaSponsorshipStatus;
+  visa_quote:        string | null;
   responsibilities:  string[];
   flags:             string[];
 }
@@ -75,20 +76,20 @@ export interface TechSwap {
   from: string;
   to: string;
   confidence: number;
-  target_role?: string | null;
+  target_role: string | null;
 }
 
 export interface TailoringHints {
-  emphasize_roles?:      string[];
-  emphasize_skills?:     string[];
-  downplay_skills?:      string[];
-  domain_reframe_angle?: string;
-  tech_swaps?:           TechSwap[];
+  emphasize_roles:      string[];
+  emphasize_skills:     string[];
+  downplay_skills:      string[];
+  domain_reframe_angle: string | null;
+  tech_swaps:           TechSwap[];
   /**
    * Storage mirror for v5 gap directives so DB round-trips stay additive
    * without needing a new judge_verdicts column.
    */
-  gap_directives?:       GapDirective[];
+  gap_directives:       GapDirective[];
 }
 
 export interface JudgeFields {
@@ -96,12 +97,12 @@ export interface JudgeFields {
   reasoning: string;
   concerns:  string[];
 
-  confidence?:      number;
-  key_matches?:     string[];
-  gaps?:            JudgeGap[];
-  gap_directives?:  GapDirective[];
-  why_apply?:       string;
-  tailoring_hints?: TailoringHints;
+  confidence:      number | null;
+  key_matches:     string[];
+  gaps:            JudgeGap[];
+  gap_directives:  GapDirective[];
+  why_apply:       string | null;
+  tailoring_hints: TailoringHints;
 }
 
 export interface JudgeResult {

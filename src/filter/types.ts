@@ -31,6 +31,13 @@ export interface RequiredSkill {
   category: string
 }
 
+export type VisaSponsorshipStatus =
+  | "offered"
+  | "denied"
+  | "ead_eligible"
+  | "payment_model_only"
+  | "unmentioned";
+
 export interface Job {
   meta: JobMeta
   title: string
@@ -42,7 +49,8 @@ export interface Job {
   required_skills: RequiredSkill[]
   years_experience: { min: number | null; max: number | null }
   education_required: { minimum: string; field: string }
-  visa_sponsorship: boolean | null
+  visa_sponsorship: VisaSponsorshipStatus
+  visa_quote: string | null
   security_clearance: string
   domain: string | null
   responsibilities: string[]
@@ -103,6 +111,17 @@ export interface Profile {
     requires_sponsorship: boolean
     visa_type: string
     clearance_eligible: boolean
+    /**
+     * Verbatim sentence to insert in the cover letter when sponsorship
+     * is needed and the job has not denied sponsorship. User-authored.
+     * Generator inserts as-is, no rewording, no paraphrasing.
+     */
+    cover_letter_phrasing_sponsorship_needed: string
+    /**
+     * Verbatim sentence when sponsorship is not needed (citizen / GC).
+     * Generator inserts as-is.
+     */
+    cover_letter_phrasing_no_sponsorship_needed: string
   }
   preferred_domains: string[]
   deal_breakers: string[]
