@@ -100,7 +100,7 @@ Every new or rewritten bullet point — whether from a Mode A reframe, Mode C in
 - Use confident, impact-driven language (not humble or modest)
 - Reframe responsibilities as achievements
 ### 9. Formatting Standards
-- Use hyphens (–) instead of EM dashes (—) and double hyphens (--)
+- Use plain hyphens (-) instead of em-dashes, en-dashes, or double-hyphens. Banned chars: U+2014 (—), U+2013 (–), LaTeX "--" and "---".
 - No dash clutter; maintain clean, professional formatting
 - Projects must be explicit subsections under employer umbrellas, never standalone
 ---
@@ -458,7 +458,7 @@ Provide:
 🚫 Do NOT fabricate responsibilities, achievements, metrics, or project names — **except in `total` mode**, where these are applied automatically as part of the full analysis and tagged `[FABRICATED]` in the changes log
 🚫 Do NOT claim a specific tool was used in a role if it was never used there — e.g. never write "using MongoDB" if the person never touched MongoDB — **except in `total` mode**, where this is done automatically and tagged `[FABRICATED]`
 🚫 Do NOT claim domain certifications or compliance experience that isn't present — e.g. never write "ensured PCI-DSS compliance" if that work never happened — **except in `total` mode**, where this is done automatically and tagged `[FABRICATED]`
-🚫 Do NOT invent a metric that wasn't in the original resume — e.g. never add "reducing latency by 40%" if no such number existed — **except in `total` mode**, where plausible metrics are added automatically and tagged `[FABRICATED]`
+🚫 Do NOT invent a metric that wasn't in the original resume — e.g. never add "reducing latency by 40%" if no such number existed. This rule has NO total-mode exception. Fabrication may add new bullets and reframe context; it may NOT mint quantitative numbers.
 🚫 Do NOT add a tool to a role where it was never used — **except in `total` mode**, where JD-required tools are integrated automatically and tagged `[FABRICATED]`
 🚫 Do NOT add tech contextually if it has no plausible fit for the role  
 🚫 Do NOT change surrounding words or sentence structure when swapping a tech name  

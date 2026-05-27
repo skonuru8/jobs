@@ -59,7 +59,7 @@ this message is the sole and authoritative source.
 - Apply all four modes (A, B, C, D) as described above.
 - Honor CAR/STAR framework for every new/rewritten bullet.
 - Bold all quantifiable metrics.
-- Never delete skills; only add or reorder.
+- Never delete skills. Reordering categories and within-category order is fine; SKILLS additions are not allowed (see SKILLS SECTION ATOMICITY below).
 - Never delete experience bullets, sub-bullets, or projects. The canonical
   resume's complete content MUST appear in the output. You may add, reorder,
   re-emphasize, or rewrite phrasing, but every canonical bullet and every
@@ -71,7 +71,7 @@ this message is the sole and authoritative source.
 - All Prohibited Actions remain prohibited EXCEPT the ones the skill explicitly
   unlocks under total mode.
 - Domain reframes for missing JD domains: apply them; do not print the rationale.
-- Reorder roles, sections, and skill categories to lead with JD-relevant content.
+- Reorder skill categories (within SKILLS) and bullets within a role's EXPERIENCE block to lead with JD-relevant content. Do NOT reorder employer blocks (EXPERIENCE stays reverse-chronological). Do NOT reorder top-level sections (SUMMARY / SKILLS / EXPERIENCE / PROJECTS / EDUCATION order is fixed).
 
 --- TECH SWAPS ---
 For each entry in JUDGE_JSON.tailoring_hints.tech_swaps, replace "from" with "to"

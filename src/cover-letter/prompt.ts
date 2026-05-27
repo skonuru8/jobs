@@ -19,9 +19,9 @@ OUTPUT FORMAT:
 - Do NOT include metadata, frontmatter, footnotes, or commentary
 - Do NOT use markdown formatting (no **, ##, etc.) — output plain prose paragraphs
 - Separate paragraphs with a single blank line
-- Output must be safe for LaTeX: avoid %, &, $, _, #, ~, ^, \\ — use plain text alternatives
+- Output must be safe for LaTeX: avoid %, &, $, _, #, ~, ^, \\. Use plain text alternatives.
 
-STRUCTURE (4 paragraphs, 400-550 words total. UNDER 400 WORDS IS A FAILURE):
+STRUCTURE (4 paragraphs, target 400-550 words; absolute minimum 350):
 Count words before output. If the body is under 400 words, add a fourth paragraph that either:
   - addresses the strongest judge.gaps[].reframe_angle in depth, OR
   - expands on why_apply with a specific company-relevant detail from the JD
@@ -38,7 +38,7 @@ it appears. This is a Mode B substitution — no surrounding word changes. If a 
 has target_role, keep that substitution scoped to the matching employer only.
 
 STYLE:
-- Confident, direct, specific numbers — never vague
+- Confident, direct, specific numbers; never vague
 - No hedging: replace "I believe", "I think", "I feel" with "I bring", "I have", "I deliver"
 - Match the JD's vocabulary where natural
 - Do NOT fabricate metrics. Only use metrics that appear in the canonical resume.
@@ -122,7 +122,8 @@ export function buildCoverLetterPrompt(input: CoverLetterInput): string {
   const swapsBlock = renderSwapsBlock(input.tech_swaps);
   const fabricatedClaimsBlock = renderFabricatedClaimsBlock(input.gap_directives);
   const resumeSection = input.experience_block?.trim()
-    ? `=== CANDIDATE EXPERIENCE (verbatim from resume, do not reorganize) ===
+    ? `=== CANDIDATE EXPERIENCE (verbatim from resume) ===
+This block is reference material. Do not reorder bullets, do not reorder employers, do not move bullets or metrics between employers. Quote selectively when narrating.
 
 ${input.experience_block.trim()}
 
@@ -142,9 +143,7 @@ ${input.experience_block.trim()}
    employer's work, use the "to" technology, not the "from" technology. If
    target_role is null, the swap applies everywhere that tech is mentioned.
 
-4. NEVER attribute work from one employer to another. If a Hitachi bullet
-   describes a decomposition that restored 7 min to 1 min, do not retell that
-   accomplishment under AquilaEdge.
+4. NEVER move real bullets, accomplishments, or metrics from one employer to another. If a Hitachi bullet describes a decomposition that restored 7 min to 1 min, do not retell that accomplishment under AquilaEdge. This rule applies to canonical-resume content only. Claims listed under FABRICATED CLAIMS THE RESUME HAS MADE are bound to their declared target_role by the resume itself; mirroring them at that target_role is consistent, not cross-attribution.
 
 5. If you do not name an employer, use neutral framing ("in a prior role",
    "in a recent engagement"). Whatever tech you mention must come from a

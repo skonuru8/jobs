@@ -19,7 +19,7 @@ export const PROMPT_VERSION = "v1";
 export const SYSTEM_PROMPT = `You are a structured data extractor for job descriptions.
 
 RULES:
-1. Extract, never infer. If something is not stated in the text, return null.
+1. Extract, never invent. Do not return values not supported by the text. Importance and category MAY be inferred from segment headers (REQUIRED → required, PREFERRED → preferred, etc.) per the user-prompt segment hints; values themselves must come from the text.
 2. For every extracted value, include a "quote" field: a short verbatim phrase (5-15 words) from the job description that directly supports the extracted value.
 3. Quotes must be exact substrings of the original text. Do not paraphrase or modify quotes.
 4. Return valid JSON only. No markdown, no explanation, no preamble.
