@@ -566,8 +566,9 @@ export async function insertLedgerEntries(rows: LedgerEntryInput[]): Promise<voi
   if (rows.length === 0) return;
   if (_disabled) return;
 
-  const client = await getPool().connect();
+  let client: PoolClient | undefined;
   try {
+    client = await getPool().connect();
     await client.query("BEGIN");
     for (const r of rows) {
       await client.query(`
@@ -584,11 +585,12 @@ export async function insertLedgerEntries(rows: LedgerEntryInput[]): Promise<voi
     }
     await client.query("COMMIT");
   } catch (e) {
-    await client.query("ROLLBACK");
+    if (client) {
+      try { await client.query("ROLLBACK"); } catch {}
+    }
     console.error("[storage] insertLedgerEntries failed:", formatErr(e));
-    throw e;
   } finally {
-    client.release();
+    client?.release();
   }
 }
 

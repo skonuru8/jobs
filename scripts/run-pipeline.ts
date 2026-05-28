@@ -68,6 +68,8 @@ import { makeDateFolderName, makeRunFolderName, makeRunLabel } from "@/applicati
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
 import { makeJobSlug } from "@/shared/slug";
 import { loadRiskMap, auditTailoredArtifact, applyResumeAttributionOverrunFlag } from "@/risk-map";
+import { parseBoolEnv } from "@/pipeline/env";
+import { routeJob, hasUsableDescription } from "@/pipeline/routing";
 
 // Dedup + storage — gracefully disabled via SKIP_DEDUP=1 / SKIP_PERSIST=1
 import {
@@ -77,7 +79,7 @@ import {
 import {
   runMigrations, saveRun, finishRun, saveJob, closePool,
   insertTailoredResumeArtifact, insertCoverLetterArtifact,
-  insertLedgerEntries,
+  insertLedgerEntries, markStorageDisabled, formatErr,
 } from "@/storage/index";
 import type { JobRecord } from "@/storage/types";
 
@@ -104,19 +106,19 @@ loadEnv({ path: path.join(REPO_ROOT, ".env") });
 
 const SOURCE         = process.env.SOURCE  ?? "dice";
 const MAX_JOBS       = parseInt(process.env.MAX ?? "20", 10);
-const HEADED         = Boolean(process.env.HEADED);
+const HEADED         = parseBoolEnv(process.env.HEADED);
 const JSONL_OVERRIDE = process.env.JSONL   ?? "";
-const DO_EXTRACT     = Boolean(process.env.EXTRACT);   // opt-in — costs LLM calls
-const DO_SCORE       = DO_EXTRACT || Boolean(process.env.SCORE);  // auto when extract runs
-const DO_JUDGE       = DO_EXTRACT || Boolean(process.env.JUDGE);  // auto when extract runs
-const DO_COVER       = DO_EXTRACT || Boolean(process.env.COVER);  // auto when extract runs
+const DO_EXTRACT     = parseBoolEnv(process.env.EXTRACT);   // opt-in — costs LLM calls
+const DO_SCORE       = DO_EXTRACT || parseBoolEnv(process.env.SCORE);  // auto when extract runs
+const DO_JUDGE       = DO_EXTRACT || parseBoolEnv(process.env.JUDGE);  // auto when extract runs
+const DO_COVER       = DO_EXTRACT || parseBoolEnv(process.env.COVER);  // auto when extract runs
 /** When false, skip tailored resume LLM+PDF (default: enabled). */
-const DO_RESUME_ARTIFACT = !["0", "false"].includes((process.env.DO_RESUME ?? "").toLowerCase());
+const DO_RESUME_ARTIFACT = parseBoolEnv(process.env.DO_RESUME, true);
 /** When false, skip cover letter LLM+PDF (default: enabled). */
-const DO_COVER_ARTIFACT = !["0", "false"].includes((process.env.DO_COVER ?? "").toLowerCase());
-const SAVE_FIXTURES  = Boolean(process.env.SAVE_FIXTURES); // save real extraction fixtures
-const SKIP_DEDUP     = Boolean(process.env.SKIP_DEDUP);    // bypass Redis + pgvector dedup
-const SKIP_PERSIST   = Boolean(process.env.SKIP_PERSIST);  // bypass Postgres persistence 
+const DO_COVER_ARTIFACT = parseBoolEnv(process.env.DO_COVER, true);
+const SAVE_FIXTURES  = parseBoolEnv(process.env.SAVE_FIXTURES); // save real extraction fixtures
+const SKIP_DEDUP     = parseBoolEnv(process.env.SKIP_DEDUP);    // bypass Redis + pgvector dedup
+const SKIP_PERSIST   = parseBoolEnv(process.env.SKIP_PERSIST);  // bypass Postgres persistence
 
 // Dice-only env vars. Both passed through to the scraper subprocess.
 //   QUERY="java developer"          search term (default below)
@@ -266,6 +268,7 @@ async function main(): Promise<void> {
       log(`Run record saved: ${RUN_ID}`);
     } catch (e: any) {
       log(`Storage init failed (continuing without persistence): ${e.message}`);
+      markStorageDisabled(formatErr(e));
     }
   } else {
     log("Persistence disabled (SKIP_PERSIST=1)");
@@ -584,10 +587,9 @@ async function processJobs(
       // apply URL is a downstream ATS link (Oracle/Workday/Phenom/etc.)
       // that returns near-empty HTML to a plain HTTP fetcher anyway.
       // Skip the fetch when the scraper has already provided substantive prose.
-      const PRESCRAPED_MIN_CHARS = 200;
       let fetchStatus: "ok" | "error" | "skipped" = "skipped";
 
-      if (sanitized.description_raw && sanitized.description_raw.trim().length >= PRESCRAPED_MIN_CHARS) {
+      if (hasUsableDescription(sanitized.description_raw)) {
         fetchStatus = "ok";
         log(`[${n}]  Description provided by scraper (${sanitized.description_raw.trim().length} chars), skipping fetch`);
       } else if (DO_EXTRACT) {
@@ -608,13 +610,18 @@ async function processJobs(
       const checked = postFetchChecks(sanitized, nowIso);
 
       // Stage 7 — extract structured fields
-      let extractStatus = "skipped";
+      let extractStatus: "ok" | "error" | "skipped" = "skipped";
       let skills:    string[]     = [];
       let yoeMin:    number | null = null;
       let yoeMax:    number | null = null;
       let domain:    string | null = null;
 
-      if (DO_EXTRACT && sanitized.description_raw) {
+      if (DO_EXTRACT) {
+        if (!hasUsableDescription(sanitized.description_raw)) {
+          extractStatus = "error";
+          sanitized.meta.flags.push("no_usable_description");
+          log(`[${n}]  No usable description after fetch → ARCHIVE`);
+        } else {
         // Small courtesy pause — not rate-limit critical with reasoning disabled,
         // but avoids bursting all 3 concurrent slots simultaneously.
         if (extractorConfig.throttle_ms > 0) {
@@ -684,6 +691,7 @@ async function processJobs(
           log(`[${n}]  Extraction failed: ${extraction.error}`);
           sanitized.meta.flags.push("extraction_failed");
         }
+        }
       }
 
     // Stage 11 — deterministic scoring
@@ -722,39 +730,39 @@ async function processJobs(
     // gate_fail → ARCHIVE bucket.
     // extraction_failed → ARCHIVE (no reliable data to judge on).
     // When scoring is disabled, all PASS jobs go through as PASS (no gate).
-    const gateVerdict = extractionFailed
-      ? "ARCHIVE"
-      : scoreResult
-        ? (scoreResult.gate_passed ? "GATE_PASS" : "ARCHIVE")
-        : "PASS";
-
     // sanitized.meta.flags is the live flag set — cleaned up after extraction
     // resolved earlier-flagged uncertainty. filterResult.flags is stale
     // (snapshotted before extraction). Merge live flags with post-fetch checks.
     const allFlags = [...new Set([...(sanitized.meta?.flags ?? []), ...checked])];
 
-    // Stage 13–14 — LLM judge + routing (GATE_PASS only)
-    let judgeResult: JudgeResult | undefined;
-    // Seed bucket from gate verdict so ARCHIVE (gate_fail / extraction_failed)
-    // lands in the archive bucket for the summary — only GATE_PASS paths
-    // reassign bucket after the judge runs.
-    let bucket: FinalBucket | undefined = gateVerdict === "ARCHIVE" ? "ARCHIVE" : undefined;
-    let finalVerdict = gateVerdict;
-
     // Stage 12.5 — pgvector cross-site semantic dedup
     // Only runs on GATE_PASS jobs with an embedding — avoids calling the
     // judge on a job that's semantically identical to one we already processed.
-    if (!SKIP_DEDUP && jobEmbedding && gateVerdict === "GATE_PASS") {
+    const provisionalGatePass = !extractionFailed && !!scoreResult && scoreResult.gate_passed;
+    let isSemanticDuplicate = false;
+    if (!SKIP_DEDUP && jobEmbedding && provisionalGatePass) {
       const dupJobId = await findSemanticDuplicate(Array.from(jobEmbedding), RUN_ID);
       if (dupJobId) {
         log(`[${n}]  Semantic dup of job ${dupJobId} → ARCHIVE`);
         allFlags.push("semantic_duplicate");
-        bucket       = "ARCHIVE";
-        finalVerdict = "ARCHIVE";
+        isSemanticDuplicate = true;
       }
     }
 
-    if (DO_JUDGE && gateVerdict === "GATE_PASS" && scoreResult) {
+    const routing = routeJob({
+      doExtract: DO_EXTRACT,
+      extractStatus,
+      scored: !!scoreResult,
+      gatePassed: scoreResult?.gate_passed ?? false,
+      isSemanticDuplicate,
+    });
+
+    // Stage 13–14 — LLM judge + routing (GATE_PASS only)
+    let judgeResult: JudgeResult | undefined;
+    let bucket: FinalBucket | undefined = routing.isArchived ? "ARCHIVE" : undefined;
+    let finalVerdict = routing.isArchived ? "ARCHIVE" : routing.gateVerdict;
+
+    if (DO_JUDGE && routing.shouldJudge && scoreResult) {
       // Throttle between LLM calls
       if (judgeConfigArg.throttle_ms > 0) {
         await new Promise(r => setTimeout(r, judgeConfigArg.throttle_ms));
@@ -805,7 +813,7 @@ async function processJobs(
 
       judgeResult = await judge(judgeInput, judgeConfigArg);
       bucket      = getBucket(judgeResult, scoreResult.score);
-      finalVerdict = gateVerdict;   // still GATE_PASS for the raw record; bucket is the real routing
+      finalVerdict = routing.gateVerdict;   // still GATE_PASS for the raw record; bucket is the real routing
 
       if (judgeResult.status === "ok") {
         log(`[${n}]  Judge: ${judgeResult.verdict} → ${bucket}`);

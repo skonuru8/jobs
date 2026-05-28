@@ -85,3 +85,6 @@ HANDOFF.md
 HANDOFF-*.md
 CHAT-CONTEXT*.md
 SESSION-NOTES*.md
+
+# Local audit scratch notes
+docs/audit-*.md

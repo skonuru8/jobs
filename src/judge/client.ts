@@ -88,7 +88,9 @@ export async function complete(opts: CompletionOptions): Promise<CompletionResul
   return { content, model };
 }
 
-/** Remove <think>...</think> blocks. Qwen emits them even with JSON mode. */
+/** Remove <think>...</think> and <redacted_thinking>...</redacted_thinking>. */
 function stripThinkBlocks(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  return text
+    .replace(/<(?:redacted_thinking|think)>[\s\S]*?<\/(?:redacted_thinking|think)>/gi, "")
+    .trim();
 }

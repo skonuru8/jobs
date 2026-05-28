@@ -120,6 +120,18 @@ class TestParseLocation:
         assert r["type"] == "onsite"
         assert r["cities"] == ["Bayonne"]
 
+    def test_foreign_berlin_not_usa(self):
+        r = parse_location("Berlin, Germany")
+        assert r["countries"] == []
+
+    def test_foreign_toronto_ontario_not_usa(self):
+        r = parse_location("Toronto, Ontario")
+        assert r["countries"] == []
+
+    def test_foreign_remote_india_not_usa(self):
+        r = parse_location("Remote in India")
+        assert r["countries"] == []
+
     def test_empty_returns_none_type(self):
         r = parse_location("")
         assert r["type"] is None

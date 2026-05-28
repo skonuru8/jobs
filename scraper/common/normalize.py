@@ -60,7 +60,7 @@ def parse_posted_at(text: str, now: datetime) -> str | None:
 # ---------------------------------------------------------------------------
 
 # US state names → country inference
-_US_STATES = {
+_US_STATE_NAMES = {
     "alabama","alaska","arizona","arkansas","california","colorado","connecticut",
     "delaware","florida","georgia","hawaii","idaho","illinois","indiana","iowa",
     "kansas","kentucky","louisiana","maine","maryland","massachusetts","michigan",
@@ -69,7 +69,9 @@ _US_STATES = {
     "north dakota","ohio","oklahoma","oregon","pennsylvania","rhode island",
     "south carolina","south dakota","tennessee","texas","utah","vermont",
     "virginia","washington","west virginia","wisconsin","wyoming",
-    # common abbreviations
+}
+
+_US_STATE_ABBREVS = {
     "al","ak","az","ar","ca","co","ct","de","fl","ga","hi","id","il","in","ia",
     "ks","ky","la","me","md","ma","mi","mn","ms","mo","mt","ne","nv","nh","nj",
     "nm","ny","nc","nd","oh","ok","or","pa","ri","sc","sd","tn","tx","ut","vt",
@@ -78,7 +80,13 @@ _US_STATES = {
 
 def _contains_us_state(text: str) -> bool:
     lower = text.lower()
-    return any(state in lower for state in _US_STATES)
+    if any(state in lower for state in _US_STATE_NAMES):
+        return True
+    raw_tokens = {t.strip(" .,()/") for t in re.split(r"[\s,]+", text)}
+    for tok in raw_tokens:
+        if len(tok) == 2 and tok.isupper() and tok.lower() in _US_STATE_ABBREVS:
+            return True
+    return False
 
 
 def parse_location(text: str) -> dict:
@@ -160,7 +168,7 @@ def _extract_city(text: str) -> list[str]:
         return []
     city = parts[0]
     # If there's only one token and it's a known state abbreviation, skip
-    if len(parts) == 1 and city.lower() in _US_STATES and len(city) <= 3:
+    if len(parts) == 1 and city.lower() in _US_STATE_ABBREVS and len(city) <= 3:
         return []
     return [city]
 

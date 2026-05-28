@@ -21,10 +21,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   saveRun, saveJob, finishRun, isSeenInDB,
+  insertLedgerEntries,
   markStorageDisabled, isStorageAvailable, formatErr,
   _resetDisabledForTesting,
 } from "../persist.js";
 import type { JobRecord, RunRecord, RunStats } from "../types.js";
+import type { LedgerEntryInput } from "../../risk-map/types.js";
 
 // ---------------------------------------------------------------------------
 // formatErr — preserves AggregateError detail
@@ -184,5 +186,22 @@ describe.skipIf(!process.env.RUN_DB_DOWN_TESTS)("DB unreachable — non-throwing
     };
     // The whole point of the v4.1 fix: this used to throw AggregateError.
     await expect(saveJob(job)).resolves.toBeUndefined();
+  });
+
+  it("insertLedgerEntries() with DB down does NOT throw", async () => {
+    const rows: LedgerEntryInput[] = [{
+      job_id: "test-job",
+      run_id: "manual-test-run",
+      artifact_type: "resume",
+      jd_skill: null,
+      canonical_skill_found: null,
+      generated_skill_or_claim: "x",
+      change_type: "reworded",
+      truth_distance_score: 0,
+      fabrication_risk: "low",
+      location: "unknown",
+      human_review_required: false,
+    }];
+    await expect(insertLedgerEntries(rows)).resolves.toBeUndefined();
   });
 });
