@@ -1,3 +1,5 @@
+import pLimit from "p-limit";
+
 /**
  * client.ts — OpenRouter API client for cover letter generation.
  * Plain text response (no JSON mode — cover letters are prose).
@@ -36,7 +38,18 @@ export interface CompletionResult {
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
+// Shared across ALL resume + cover-letter generation calls (both modules import
+// this complete()). Caps simultaneous OpenRouter requests so the job-level
+// pLimit(5) in run-pipeline.ts cannot fan out into 10+ concurrent LLM calls and
+// blow the per-request timeout. Tune the value if throughput vs. timeout balance
+// changes; 3 is safe for the current OpenRouter account and run size.
+const _llmLimit = pLimit(3);
+
 export async function complete(opts: CompletionOptions): Promise<CompletionResult> {
+  return _llmLimit(() => _complete(opts));
+}
+
+async function _complete(opts: CompletionOptions): Promise<CompletionResult> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -70,7 +83,7 @@ export async function complete(opts: CompletionOptions): Promise<CompletionResul
       "X-Title":       "job-hunter-cover-letter",
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(opts.timeout_ms ?? 120_000),
+    signal: AbortSignal.timeout(opts.timeout_ms ?? 240_000),
   });
 
   if (!response.ok) {

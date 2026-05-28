@@ -54,6 +54,7 @@ export async function generateResumeTex(
   const attempts = dedupeAttempts(primaryAttempts);
   const maxPerModel = (config.retries ?? 1) + 1;
   let lastErr = "unknown";
+  let lastTruncated: { tex: string; model: string; tokens: { input: number; output: number } } | null = null;
 
   for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
     const attempt = attempts[attemptIndex];
@@ -83,6 +84,9 @@ export async function generateResumeTex(
         }
         if (!/\end\{document\}\s*$/s.test(tex)) {
           lastErr = `missing end{document}; last chars: ${tex.slice(-160)}`;
+          if (tex.startsWith("\\documentclass")) {
+            lastTruncated = { tex, model: r.model, tokens: { input: r.input_tokens ?? 0, output: r.output_tokens ?? 0 } };
+          }
           logPremiumFailure(
             usePremium,
             attempt.model,
@@ -130,6 +134,25 @@ export async function generateResumeTex(
           await new Promise(res => setTimeout(res, 2000));
         }
       }
+    }
+  }
+
+  // Last resort: every model attempt failed and the most recent failure was a
+  // truncation. Salvage it rather than emitting no resume at all. This runs only
+  // here — after the flash fallback has also failed — so it never preempts fallback.
+  if (lastTruncated) {
+    const recovered = recoverTruncatedLatex(lastTruncated.tex);
+    if (/\end\{document\}\s*$/s.test(recovered) && findBannedStylePhrases(recovered).length === 0) {
+      console.warn(`[resume] all attempts failed on truncation; salvaging recovered partial (model=${lastTruncated.model})`);
+      return {
+        status:       "ok",
+        tex:          recovered,
+        model:        lastTruncated.model,
+        prompt_sha:   PROMPT_SHA,
+        word_count:   countWordsTex(recovered),
+        tokens:       lastTruncated.tokens,
+        generated_at,
+      };
     }
   }
 
@@ -207,9 +230,15 @@ function buildUserMessage(input: ResumeGenInput, shortHint?: string): string {
     "SCORE_JSON:",
     JSON.stringify(input.score, null, 2),
   ];
+  const judgeGapDirectives = (input.judge_json.gap_directives?.length ?? 0) > 0
+    ? input.judge_json.gap_directives
+    : (input.gap_directives ?? []);
+  const judgeTechSwaps = (input.judge_json.tailoring_hints?.tech_swaps?.length ?? 0) > 0
+    ? input.judge_json.tailoring_hints?.tech_swaps
+    : (input.tech_swaps ?? []);
   const judgeAddendum = renderResumeJudgeAddendum(
-    input.gap_directives ?? input.judge_json.gap_directives,
-    input.tech_swaps ?? input.judge_json.tailoring_hints?.tech_swaps,
+    judgeGapDirectives,
+    judgeTechSwaps,
   );
   if (judgeAddendum) {
     parts.push("", judgeAddendum);
@@ -229,9 +258,45 @@ function stripFences(s: string): string {
 
 function extractLatexDocument(s: string): string {
   const start = s.indexOf("\\documentclass");
+  if (start < 0) return s;
   const end = s.lastIndexOf("\\end{document}");
-  if (start < 0 || end < start) return s;
-  return s.slice(start, end + "\\end{document}".length).trim();
+  if (end >= start) return s.slice(start, end + "\\end{document}".length).trim();
+  return s.slice(start).trim(); // truncated: best-effort slice, still missing \end{document}
+}
+
+/**
+ * Best-effort repair of a LaTeX doc truncated before \end{document}.
+ * 1) drop a trailing incomplete macro line (unbalanced braces, e.g. "\vspace{2pt")
+ * 2) close still-open environments in LIFO order
+ * 3) close the document
+ * Recovered output is usually short → resume_too_short fires downstream as a signal.
+ */
+function recoverTruncatedLatex(partial: string): string {
+  const lines = partial.split("\n");
+  while (lines.length > 0) {
+    const last = lines[lines.length - 1].trim();
+    if (!last) { lines.pop(); continue; }
+    const open  = (last.match(/\{/g) ?? []).length;
+    const close = (last.match(/\}/g) ?? []).length;
+    if (open > close) { lines.pop(); } else { break; }
+  }
+  const cleaned = lines.join("\n");
+
+  const stack: string[] = [];
+  const re = /\\(begin|end)\{([^}]+)\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(cleaned)) !== null) {
+    if (m[1] === "begin") stack.push(m[2]);
+    else if (stack.length > 0 && stack[stack.length - 1] === m[2]) stack.pop();
+  }
+
+  let out = cleaned;
+  for (const env of stack.reverse()) {
+    if (env === "document") continue; // closed last, below
+    out += `\n\\end{${env}}`;
+  }
+  if (!out.includes("\\end{document}")) out += "\n\\end{document}";
+  return out.trim();
 }
 
 function countWordsTex(tex: string): number {
