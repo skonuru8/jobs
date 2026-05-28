@@ -211,6 +211,17 @@ Assert competence only through closest supported experience from the resume. Nev
     : "Concerns: none";
 
   const gapDirectivesSection = renderCoverLetterGapDirectives(input.gap_directives);
+  const canonicalFactGuard = `=== CANONICAL FACT GUARD (NON-NEGOTIABLE) ===
+
+Do not upgrade adjacent experience into direct expertise. If the canonical
+experience says "hands-on exposure", "built adjacent systems", or names a
+nearby tool, do not write "deep expertise", "extensive production experience",
+or "expert in" for the missing JD tool. Strong claims must be directly supported
+by the CANDIDATE EXPERIENCE block or by ACTIVE_TECH_SWAPS/FABRICATED CLAIMS.
+
+Use senior, confident language, but keep factual strength equal to the resume.
+Never make the cover letter stronger than the paired resume on employer stack,
+domain, tool depth, certifications, or years of experience.`;
   const visaSummary = (() => {
     switch (job.visa_sponsorship) {
       case "offered": return "sponsorship offered";
@@ -252,6 +263,8 @@ CANDIDATE PROFILE:
 ${resumeSection}
 
 ${gapDirectivesSection}
+
+${canonicalFactGuard}
 
 JUDGE REASONING (themes to echo, not to paste verbatim):
 ${job.judge_reasoning ?? "Strong skill and seniority alignment."}

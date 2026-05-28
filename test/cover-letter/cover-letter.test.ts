@@ -224,6 +224,13 @@ describe("buildCoverLetterPrompt", () => {
     expect(p).toContain("Requires React");
   });
 
+  it("includes canonical fact guard", () => {
+    const p = buildCoverLetterPrompt(BASE_INPUT);
+    expect(p).toContain("CANONICAL FACT GUARD");
+    expect(p).toContain("Do not upgrade adjacent experience into direct expertise");
+    expect(p).toContain("Never make the cover letter stronger than the paired resume");
+  });
+
   it("shows 'none' when no concerns", () => {
     const p = buildCoverLetterPrompt(BASE_INPUT);
     expect(p).toContain("none");

@@ -60,7 +60,7 @@ export async function generateAndSaveResume(
     return emptyOutcome(bundle, ctx, flags, gen, combinedMetaRel);
   }
 
-  let tex = replaceSkillsSection(stripDashes(gen.tex), bundle.canonical_resume_tex);
+  let tex = boldMetrics(replaceSkillsSection(stripDashes(gen.tex), bundle.canonical_resume_tex));
 
   let wc = gen.word_count;
   if (wc < wMin) {
@@ -202,4 +202,22 @@ export function replaceSkillsSection(tex: string, canonicalTex: string): string 
     /\\section\*\{SKILLS\}[\s\S]*?(?=\\section\*\{EXPERIENCE\})/,
     canonicalSkills,
   );
+}
+
+export function boldMetrics(tex: string): string {
+  return tex
+    .split("\n")
+    .map(line => {
+      if (!line.includes("\\item")) return line;
+      const protectedBold: string[] = [];
+      const masked = line.replace(/\\textbf\{[^{}]*\}/g, m => {
+        protectedBold.push(m);
+        return `@@BOLD_${protectedBold.length - 1}@@`;
+      });
+      return masked.replace(
+        /\b(\d+(?:\.\d+)?(?:\+)?\s*(?:\\?%|percent|x|ms|sec(?:onds?)?|min(?:utes?)?|hours?|days?|weeks?|months?|years?|yrs?|roles?|users?|patients?|records?|jobs?|services?|APIs?|pipelines?|components?|workflows?|reports?|claims?))(?=\s|[.,;:)]|$)/gi,
+        "\\textbf{$1}",
+      ).replace(/@@BOLD_(\d+)@@/g, (_, i) => protectedBold[Number(i)] ?? "");
+    })
+    .join("\n");
 }

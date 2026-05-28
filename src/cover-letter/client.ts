@@ -23,6 +23,8 @@ export interface CompletionOptions {
   max_tokens:  number;
   temperature: number;
   thinking?:   ThinkingConfig;
+  stream?:     boolean;
+  timeout_ms?: number;
 }
 
 export interface CompletionResult {
@@ -50,6 +52,11 @@ export async function complete(opts: CompletionOptions): Promise<CompletionResul
     temperature: opts.temperature,
   };
 
+  if (opts.stream) {
+    body["stream"] = true;
+    body["stream_options"] = { include_usage: true };
+  }
+
   if (opts.thinking) {
     body["thinking"] = opts.thinking;
   }
@@ -63,12 +70,16 @@ export async function complete(opts: CompletionOptions): Promise<CompletionResul
       "X-Title":       "job-hunter-cover-letter",
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(120_000),   // longer timeout: writing + thinking
+    signal: AbortSignal.timeout(opts.timeout_ms ?? 120_000),
   });
 
   if (!response.ok) {
     const errBody = await response.text().catch(() => "");
     throw new Error(`OpenRouter API error ${response.status}: ${errBody}`);
+  }
+
+  if (opts.stream) {
+    return readStreamingCompletion(response, opts.model);
   }
 
   const data    = await response.json() as any;
@@ -86,6 +97,75 @@ export async function complete(opts: CompletionOptions): Promise<CompletionResul
     model,
     input_tokens:  usage?.prompt_tokens,
     output_tokens: usage?.completion_tokens,
+  };
+}
+
+async function readStreamingCompletion(response: Response, fallbackModel: string): Promise<CompletionResult> {
+  if (!response.body) {
+    throw new Error("OpenRouter streaming response missing body");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let raw = "";
+  let model = fallbackModel;
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
+
+  const readEvent = (event: string): void => {
+    for (const line of event.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+
+      const payload = trimmed.slice("data:".length).trim();
+      if (!payload || payload === "[DONE]") continue;
+
+      let data: any;
+      try {
+        data = JSON.parse(payload);
+      } catch {
+        continue;
+      }
+
+      if (data?.model) model = data.model;
+      const delta = data?.choices?.[0]?.delta?.content;
+      if (typeof delta === "string") raw += delta;
+
+      const usage = data?.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
+      if (usage) {
+        inputTokens = usage.prompt_tokens;
+        outputTokens = usage.completion_tokens;
+      }
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? "";
+
+    for (const event of events) {
+      readEvent(event);
+    }
+  }
+  if (buffer.trim()) {
+    readEvent(buffer);
+  }
+
+  const content = stripThinkBlocks(raw.trim());
+  if (!content) {
+    throw new Error("OpenRouter returned empty streaming content");
+  }
+
+  return {
+    content,
+    model,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
   };
 }
 

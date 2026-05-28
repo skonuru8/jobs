@@ -53,10 +53,22 @@ model appears to return valid LaTeX wrapped in extra prose or markdown. If a
 resume still fails, the stored error now includes useful first/last-character
 snippets or the exact banned style pattern family that caused rejection.
 
+**Wave 5 — Premium resume path and stricter artifact quality guards.**
+Resume generation now supports a premium first-call route: if the judge verdict
+is STRONG and score is at least `resume_generator.premium_min_score`, the resume
+generator tries `resume_generator.premium_model` with OpenRouter streaming. If
+the premium stream errors, drops, times out, or fails validation, it logs the
+reason and falls back to the normal Flash model for that job. No Flash-first
+redo loop is used. Quality guards also tightened: resume prompt now enforces a
+summary relevance gate, CAR-style bullet quality gate, and project placement /
+scope rule; cover-letter prompt now has a canonical fact guard; resume
+post-processing bolds numeric outcomes and scale markers inside `\item` lines.
+
 **Validation for v11.**
-`npx tsc --noEmit` passed. `npx vitest run` passed with 20 files, 274 tests, and
+`npx tsc --noEmit` passed. `npx vitest run` passed with 20 files, 279 tests, and
 8 skipped. `test/applications/combined-meta.test.ts` covers the failed resume
-and failed cover metadata contract.
+and failed cover metadata contract; resume and cover prompt tests cover the new
+quality gates.
 
 ---
 
@@ -483,7 +495,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 | Docker Compose (Postgres + Redis) | ✅ Built | `docker compose up -d` |
 | **Review UI (M9)** | ✅ **Built** | **Express API + Vite/React SPA, port 3001** |
 
-**Test totals: 274 tests green, 8 skipped** across 20 passing test files. UI has no automated tests (manual verification only per spec).
+**Test totals: 279 tests green, 8 skipped** across 20 passing test files. UI has no automated tests (manual verification only per spec).
 
 ### Designed but not built
 
@@ -506,7 +518,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 - `resume_master.tex` — canonical resume. v10 refreshed from `resume_fin.tex`; parser-compatible after the role extractor learned optional `\vspace{}` between employer headers and role lines.
 - `profile.json` — Sarath's structured profile (v2). 84 visible canonical skills, 7 target titles. **Authoritative.** Min comp confirmed at $110k.
 - `skills.json` — 93 canonical skill entries, 408 aliases. `buildAliasMap()` flattens to lookup map.
-- `config.json` — locked models (`deepseek/deepseek-v4-flash` for extractor, judge, cover letter, and resume generator primary; resume fallback remains `deepseek/deepseek-v4-pro` unless locally changed), throttle_ms=100 (extractor + judge), scoring weights (0.35/0.25/0.15/0.15/0.10), gate threshold 0.50 (`scoring.gate_threshold`), cover-letter `max_tokens=3000`, cover-letter `retries=1`. Note: `config.json` also contains a `pipeline.schedule` block (`pipeline.sources`, etc.) — this is **legacy/unused**; the actual cron schedules are hardcoded in `src/orchestrator/scheduler.ts`, which is the single source of truth for when and how the pipeline runs.
+- `config.json` — locked models (`deepseek/deepseek-v4-flash` for extractor, judge, cover letter, and resume generator primary), optional resume fallback Flash alias, and optional premium resume route (`premium_model=deepseek/deepseek-v4-pro`, `premium_min_score=0.70`, `premium_stream=true`). Pro is not the normal fallback; it is tried first only for high-value STRONG jobs, with streaming, then Flash handles any premium failure. Also owns throttle_ms=100 (extractor + judge), scoring weights (0.35/0.25/0.15/0.15/0.10), gate threshold 0.50 (`scoring.gate_threshold`), cover-letter `max_tokens=3000`, cover-letter `retries=1`. Note: `config.json` also contains a `pipeline.schedule` block (`pipeline.sources`, etc.) — this is **legacy/unused**; the actual cron schedules are hardcoded in `src/orchestrator/scheduler.ts`, which is the single source of truth for when and how the pipeline runs.
 - `cookies/` — gitignored. Dice + Jobright browser cookies. Dice is now public-only since the search page needs no auth, but Jobright still requires cookies.
 
 ### `job-filter/` — BUILT
@@ -619,6 +631,10 @@ v10 hard guards:
   validation, which makes `deepseek/deepseek-v4-pro`-style prose wrappers less
   likely to fail the whole resume generation. Remaining failures preserve
   diagnostic `error` strings in combined metadata.
+- v11 supports premium model routing for high-value jobs: STRONG + score >=
+  `premium_min_score` can use `premium_model` with streaming first, then falls
+  back to Flash on any premium failure. Post-processing also bolds numeric
+  outcomes inside `\item` lines before save/compile.
 
 ### `dedup/` — BUILT
 
@@ -942,11 +958,38 @@ npm start
 # Review queue in output/cover-letters/{run_id}/REVIEW_QUEUE/
 ```
 
-### Manual run modes (bypassing orchestrator)
+### Default manual pipeline command
 
 ```bash
-# Full pipeline, fresh jobs only
 POSTED_WITHIN=ONE EXTRACT=1 SOURCE=dice MAX=20 \
+  npx tsx scripts/run-pipeline.ts
+```
+
+Use this command for normal day-to-day manual runs. It means:
+
+- `SOURCE=dice` — scrape Dice
+- `MAX=20` — inspect up to 20 listings
+- `POSTED_WITHIN=ONE` — only listings from the last 24 hours
+- `EXTRACT=1` — enable extraction; scoring, judge, and cover routing auto-enable
+- resume generation is enabled by default unless `DO_RESUME=0` or `DO_RESUME=false`
+- cover-letter generation is enabled by default unless `DO_COVER=0` or `DO_COVER=false`
+- direct-run logs are written to `output/logs/runs/log_{timestamp}_{source}_{runid}.log`
+
+`EXTRACT=1` and `EXTRACT=true` both work because the pipeline treats any
+non-empty `EXTRACT` value as enabled. Prefer `EXTRACT=1` in docs for
+consistency.
+
+Only jobs routed to `COVER_LETTER` or eligible `REVIEW_QUEUE` produce resume and
+cover artifacts. A run can complete correctly and still generate no artifacts if
+no jobs pass score/judge routing.
+
+### Advanced manual pipeline commands
+
+Use these only for the specific scenario named in the comment.
+
+```bash
+# Same as the default command, but explicit about artifacts
+POSTED_WITHIN=ONE EXTRACT=1 DO_RESUME=true DO_COVER=true SOURCE=dice MAX=20 \
   npx tsx scripts/run-pipeline.ts
 
 # Backfill last 7 days
@@ -983,16 +1026,16 @@ npm run build
 # Full unit test suite
 npm test
 
-# Run one small live validation batch
-DO_RESUME=true DO_COVER=true SOURCE=jobright_api MAX=10 EXTRACT=true \
+# Run one small Jobright validation batch
+EXTRACT=1 SOURCE=jobright_api MAX=10 \
   npx tsx scripts/run-pipeline.ts
 
-# Run one larger live validation batch
-DO_RESUME=true DO_COVER=true SOURCE=jobright_api MAX=50 EXTRACT=true \
+# Run one larger Jobright validation batch
+EXTRACT=1 SOURCE=jobright_api MAX=50 \
   npx tsx scripts/run-pipeline.ts
 
-# Run Dice backfill with artifacts
-POSTED_WITHIN=SEVEN DO_RESUME=true DO_COVER=true SOURCE=dice MAX=100 EXTRACT=true \
+# Run Dice backfill with artifacts; DO_* flags shown for clarity, but redundant
+POSTED_WITHIN=SEVEN EXTRACT=1 DO_RESUME=true DO_COVER=true SOURCE=dice MAX=100 \
   npx tsx scripts/run-pipeline.ts
 
 # Audit historical generated artifacts

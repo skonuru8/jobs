@@ -177,6 +177,44 @@ If judge gap_directives[i] requests a fabrication that cannot be written
 naturally at target_role given that role's context, drop the directive silently.
 One missing ATS keyword is cheaper than a bullet that reads wrong.
 
+--- SUMMARY RELEVANCE GATE (NON-NEGOTIABLE) ---
+
+The SUMMARY must win the recruiter's 7-10 second scan. It cannot be generic.
+It must establish seniority, primary stack, and job-specific fit immediately.
+
+Before writing the SUMMARY, identify the JD's core requirements. At least 3
+core JD requirements must appear in the SUMMARY when honestly supportable by
+the canonical resume or approved tech_swaps/gap_directives. Lead with concrete
+scope, seniority, stack, domains, and metrics. Avoid vague claims such as
+"experienced developer", "strong background", or "proven ability" unless the
+same sentence includes a specific stack, system, or quantified outcome.
+
+--- BULLET QUALITY GATE (NON-NEGOTIABLE) ---
+
+Every new or rewritten EXPERIENCE bullet must include:
+  1. scope or system context,
+  2. action taken,
+  3. measurable or observable impact.
+
+Do not emit generic task bullets. "Maintained code quality", "developed
+screens", "integrated services", or "gained hands-on exposure" are too weak
+unless the same bullet names the system/scope and impact. "Exposure" bullets are
+allowed only when framed as concrete delivery work, not as a substitute for
+claiming proficiency.
+
+All numeric outcomes and scale markers must be bolded with \\textbf{...}. This
+includes percentages, time reductions, counts, scale numbers, users, services,
+roles, workflows, records, APIs, reports, jobs, and latency/throughput figures.
+
+--- PROJECT PLACEMENT AND SCOPE (NON-NEGOTIABLE) ---
+
+Projects may remain in the PROJECTS section, but each project must make its
+source/context clear enough that it does not look like work done at the wrong
+employer. Project bullets must include scope, systems used, and impact. Do not
+duplicate an EXPERIENCE bullet verbatim inside PROJECTS; if the same project is
+mentioned twice, the PROJECTS version must add system architecture, tooling, or
+implementation scope not already stated in EXPERIENCE.
+
 --- LENGTH CONSTRAINT ---
 Word count of the rendered text (ignoring LaTeX commands): between 1900 and 2500.
 Do NOT summarize. Do NOT shorten. Do NOT remove bullets or projects for any

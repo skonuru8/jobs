@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renderResumeGapDirectives, renderResumeJudgeAddendum, renderResumeScopedTechSwaps } from "@/resume-generator/prompt";
+import { TOTAL_MODE_PROMPT, renderResumeGapDirectives, renderResumeJudgeAddendum, renderResumeScopedTechSwaps } from "@/resume-generator/prompt";
 
 describe("resume generator gap directives", () => {
   it("omits gap section when gap_directives is empty", () => {
@@ -80,5 +80,11 @@ describe("resume generator gap directives", () => {
     );
     expect(rendered).toContain("JUDGE TECH SWAPS");
     expect(rendered).toContain("JUDGE GAP DIRECTIVES");
+  });
+
+  it("includes quality gates in the total-mode prompt", () => {
+    expect(TOTAL_MODE_PROMPT).toContain("SUMMARY RELEVANCE GATE");
+    expect(TOTAL_MODE_PROMPT).toContain("BULLET QUALITY GATE");
+    expect(TOTAL_MODE_PROMPT).toContain("PROJECT PLACEMENT AND SCOPE");
   });
 });

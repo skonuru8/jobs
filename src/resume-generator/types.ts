@@ -33,6 +33,9 @@ export interface ResumeGenResult {
 export interface ResumeGenConfig {
   model: string;
   fallback_model?: string;
+  premium_model?: string;
+  premium_min_score?: number;
+  premium_stream?: boolean;
   max_tokens: number;
   temperature: number;
   throttle_ms: number;

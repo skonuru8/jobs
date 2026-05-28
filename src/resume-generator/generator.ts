@@ -23,7 +23,13 @@ export async function generateResumeTex(
   const generated_at = new Date().toISOString();
   const userMsg = buildUserMessage(input, shortRetryHint);
 
-  const call = (model: string) => complete({
+  const usePremium = Boolean(
+    config.premium_model &&
+    input.judge_json.verdict === "STRONG" &&
+    input.score.total >= (config.premium_min_score ?? 0.70),
+  );
+
+  const call = (model: string, stream: boolean) => complete({
     model,
     messages: [
       { role: "system", content: TOTAL_MODE_PROMPT },
@@ -31,30 +37,73 @@ export async function generateResumeTex(
     ],
     max_tokens:  config.max_tokens,
     temperature: config.temperature,
+    stream,
+    timeout_ms: stream ? 300_000 : undefined,
   });
 
-  const uniqModels = [...new Set([config.model, config.fallback_model].filter(Boolean) as string[])];
-  const attempts = uniqModels.length ? uniqModels : [config.model];
+  const primaryAttempts = usePremium
+    ? [
+        { model: config.premium_model!, stream: config.premium_stream ?? true },
+        { model: config.model, stream: false },
+        ...(config.fallback_model ? [{ model: config.fallback_model, stream: false }] : []),
+      ]
+    : [
+        { model: config.model, stream: false },
+        ...(config.fallback_model ? [{ model: config.fallback_model, stream: false }] : []),
+      ];
+  const attempts = dedupeAttempts(primaryAttempts);
   const maxPerModel = (config.retries ?? 1) + 1;
   let lastErr = "unknown";
 
-  for (const model of attempts) {
-    for (let i = 0; i < maxPerModel; i++) {
+  for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
+    const attempt = attempts[attemptIndex];
+    const attemptsForModel = usePremium && attempt.model === config.premium_model ? 1 : maxPerModel;
+    for (let i = 0; i < attemptsForModel; i++) {
+      const premiumTag = usePremium && attempt.model === config.premium_model
+        ? ` (premium: score=${input.score.total.toFixed(3)} ${input.judge_json.verdict})`
+        : "";
+      const streamTag = attempt.stream ? " stream" : "";
+      const retryTag = attemptsForModel > 1 ? ` attempt ${i + 1}/${attemptsForModel}` : "";
+      console.log(`[resume] model: ${attempt.model}${premiumTag}${streamTag}${retryTag}`);
       try {
-        const r = await call(model);
+        const r = await call(attempt.model, attempt.stream);
         let tex = extractLatexDocument(stripFences(r.content).trim());
         tex = tex.replace(/^\uFEFF/, "");
         if (!tex.startsWith("\\documentclass")) {
           lastErr = `missing documentclass; first chars: ${stripFences(r.content).trim().slice(0, 160)}`;
+          logPremiumFailure(
+            usePremium,
+            attempt.model,
+            config.premium_model,
+            lastErr,
+            i < attemptsForModel - 1,
+            attempts[attemptIndex + 1]?.model,
+          );
           continue;
         }
         if (!/\end\{document\}\s*$/s.test(tex)) {
           lastErr = `missing end{document}; last chars: ${tex.slice(-160)}`;
+          logPremiumFailure(
+            usePremium,
+            attempt.model,
+            config.premium_model,
+            lastErr,
+            i < attemptsForModel - 1,
+            attempts[attemptIndex + 1]?.model,
+          );
           continue;
         }
         const banned = findBannedStylePhrases(tex);
         if (banned.length > 0) {
           lastErr = `banned style phrase: ${banned.join(", ")}`;
+          logPremiumFailure(
+            usePremium,
+            attempt.model,
+            config.premium_model,
+            lastErr,
+            i < attemptsForModel - 1,
+            attempts[attemptIndex + 1]?.model,
+          );
           continue;
         }
         const wc = countWordsTex(tex);
@@ -69,7 +118,15 @@ export async function generateResumeTex(
         };
       } catch (e) {
         lastErr = String(e);
-        if (i < maxPerModel - 1) {
+        logPremiumFailure(
+          usePremium,
+          attempt.model,
+          config.premium_model,
+          lastErr,
+          i < attemptsForModel - 1,
+          attempts[attemptIndex + 1]?.model,
+        );
+        if (i < attemptsForModel - 1) {
           await new Promise(res => setTimeout(res, 2000));
         }
       }
@@ -86,6 +143,37 @@ export async function generateResumeTex(
     generated_at,
     error:        lastErr,
   };
+}
+
+function logPremiumFailure(
+  usePremium: boolean,
+  model: string,
+  premiumModel: string | undefined,
+  reason: string,
+  willRetryPremium: boolean,
+  fallbackModel: string | undefined,
+): void {
+  if (!(usePremium && model === premiumModel)) return;
+
+  if (willRetryPremium) {
+    console.warn(`[resume] premium model failed; retrying premium: ${reason.slice(0, 240)}`);
+    return;
+  }
+  if (fallbackModel) {
+    console.warn(`[resume] premium model failed; falling back to ${fallbackModel}: ${reason.slice(0, 240)}`);
+    return;
+  }
+  console.warn(`[resume] premium model failed; no fallback remaining: ${reason.slice(0, 240)}`);
+}
+
+function dedupeAttempts(attempts: Array<{ model: string; stream: boolean }>): Array<{ model: string; stream: boolean }> {
+  const seen = new Set<string>();
+  return attempts.filter(a => {
+    const key = `${a.model}:${a.stream ? "stream" : "plain"}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function buildUserMessage(input: ResumeGenInput, shortHint?: string): string {
