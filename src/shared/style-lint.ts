@@ -2,14 +2,18 @@ const BANNED_STYLE_PATTERNS = [
   /demonstrating transferable/i,
   /analogous to/i,
   /akin to/i,
+  /parallel to/i,
   /whose syntax (?:and|or) features/i,
+  /syntactically equivalent to/i,
   /foundational knowledge of/i,
+  /transitional knowledge of/i,
   /directly applicable to/i,
   /translate[s]? directly to/i,
   /immediately useful in/i,
   /comparable to/i,
   /while not having direct/i,
   /with limited .* exposure/i,
+  /transferable skills/i,
 ];
 
 export function findBannedStylePhrases(text: string): string[] {

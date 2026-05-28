@@ -43,7 +43,9 @@ export async function manualGenerateArtifacts(
   options?: { force?: boolean },
 ): Promise<ManualGenerateResult> {
   loadEnv({ path: path.join(repoRoot, ".env") });
-  const manualLog = createManualGenerationLog(repoRoot, jobId);
+  const generatedAt = new Date();
+  const runFolderName = makeManualFolderName(generatedAt);
+  const manualLog = createManualGenerationLog(repoRoot, jobId, runFolderName, generatedAt);
   manualLog(`start job_id=${jobId} force=${String(options?.force)}`);
 
   if (!isRiskMapLoaded()) {
@@ -143,7 +145,6 @@ export async function manualGenerateArtifacts(
     },
     jobId,
   );
-  const runFolderName = makeManualFolderName(new Date());
   const runDir = path.join(repoRoot, "output", "applications", runFolderName);
   const jobFolderAbs = path.join(runDir, jobSlug);
   manualLog(`folder=${path.relative(repoRoot, jobFolderAbs)}`);
@@ -267,12 +268,18 @@ export async function manualGenerateArtifacts(
   };
 }
 
-function createManualGenerationLog(repoRoot: string, jobId: string): (msg: string) => void {
+function createManualGenerationLog(
+  repoRoot: string,
+  jobId: string,
+  runFolderName: string,
+  generatedAt: Date,
+): (msg: string) => void {
   const dir = path.resolve(process.env.OUTPUT_DIR ?? path.join(repoRoot, "output"), "logs", "runs");
   fs.mkdirSync(dir, { recursive: true });
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const ts = generatedAt.toISOString().replace(/[:.]/g, "-");
   const safeJobId = jobId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "unknown";
-  const logPath = path.join(dir, `manual_${ts}_${safeJobId}.log`);
+  const safeRunFolder = runFolderName.replace(/[\\/]/g, "__").replace(/[^a-zA-Z0-9_-]/g, "_");
+  const logPath = path.join(dir, `manual_${ts}_${safeRunFolder}_${safeJobId}.log`);
 
   return (msg: string) => {
     const line = `[manual-generate] ${new Date().toISOString()} ${msg}\n`;

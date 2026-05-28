@@ -64,7 +64,7 @@ import { buildExperienceBlockFromCanonicalTex } from "@/cover-letter/resume-brie
 import { extractRolesFromCanonicalResume, extractSkillsSectionFromCanonical } from "@/judge/roles-extractor";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
-import { makeRunFolderName } from "@/applications/run-folder";
+import { makeRunFolderName, makeRunLabel } from "@/applications/run-folder";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
 import { makeJobSlug } from "@/shared/slug";
 import { loadRiskMap, auditTailoredArtifact, applyResumeAttributionOverrunFlag } from "@/risk-map";
@@ -135,7 +135,9 @@ const POSTED_WITHIN  = process.env.POSTED_WITHIN ?? "";   // "" = no filter
 const FIXTURES_DIR   = path.join(REPO_ROOT, "fixtures", "extractor");
 const CONFIG_DIR     = path.join(REPO_ROOT, "config");
 const RUN_ID = process.env.RUN_ID ?? randomUUID();
-const RUN_LOG_PATH = installRunLog(REPO_ROOT, SOURCE, RUN_ID);
+const RUN_STARTED_AT = new Date();
+const RUN_FOLDER_NAME = makeRunFolderName(RUN_STARTED_AT, RUN_ID);
+const RUN_LOG_PATH = installRunLog(REPO_ROOT, SOURCE, RUN_ID, RUN_STARTED_AT);
 
 // ---------------------------------------------------------------------------
 // Main
@@ -228,10 +230,6 @@ async function main(): Promise<void> {
     if (!canonicalResumeTex) {
       die(`Missing config/resume_master.tex (required when EXTRACT=1 and resume/cover artifacts are enabled).`);
     }
-    const skillPath = path.join(REPO_ROOT, "skills", "resume-tailor", "SKILL.md");
-    if (DO_RESUME_ARTIFACT && !fs.existsSync(skillPath)) {
-      die(`Missing resume tailor skill: ${skillPath}`);
-    }
     log(`Canonical resume loaded (${canonicalResumeTex.length} chars)`);
   }
 
@@ -296,9 +294,8 @@ async function main(): Promise<void> {
   log(`Reading: ${jsonlPath}`);
 
   // --- Process ---
-  const nowIso  = new Date().toISOString();
-  const runStartedAt = new Date(nowIso);
-  const runFolderName = makeRunFolderName(runStartedAt, RUN_ID);
+  const nowIso  = RUN_STARTED_AT.toISOString();
+  const runFolderName = RUN_FOLDER_NAME;
   const experienceBlock = canonicalResumeTex
     ? buildExperienceBlockFromCanonicalTex(canonicalResumeTex)
     : "";
@@ -1335,16 +1332,17 @@ function die(msg: string): never {
   process.exit(1);
 }
 
-function installRunLog(repoRoot: string, source: string, runId: string): string | null {
+function installRunLog(repoRoot: string, source: string, runId: string, startedAt: Date): string | null {
   if (process.env.PIPELINE_DISABLE_RUN_LOG === "1") return null;
 
   const baseDir = path.resolve(process.env.OUTPUT_DIR ?? path.join(repoRoot, "output"), "logs", "runs");
   fs.mkdirSync(baseDir, { recursive: true });
 
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const ts = startedAt.toISOString().replace(/[:.]/g, "-");
   const safeSource = source.replace(/[^a-zA-Z0-9_-]/g, "_");
   const shortRunId = runId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 8) || "manual";
-  const logPath = path.join(baseDir, `log_${ts}_${safeSource}_${shortRunId}.log`);
+  const runLabel = makeRunLabel(startedAt, runId).replace(/[^a-zA-Z0-9_-]/g, "_");
+  const logPath = path.join(baseDir, `log_${ts}_${runLabel}_${safeSource}_${shortRunId}.log`);
   const stream = fs.createWriteStream(logPath, { flags: "a" });
 
   const mirror = <T extends typeof process.stdout.write>(original: T): T => {

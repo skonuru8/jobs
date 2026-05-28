@@ -24,6 +24,7 @@
 import fs from "fs";
 import path from "path";
 import pg from "pg";
+import { makeDateFolderName, makeRunLabel } from "@/applications/run-folder";
 
 const { Pool } = pg;
 
@@ -94,7 +95,9 @@ export function runLogPath(source: string, runId: string, startedAt: Date): stri
   const ts = formatLogTimestamp(startedAt);
   const safeSource = sanitizeLogSegment(source) || "run";
   const shortRunId = runId.slice(0, 8);
-  return path.join(OUTPUT_LOGS_DIR, "runs", `log_${ts}_${safeSource}_${shortRunId}.log`);
+  const runFolder = `${makeDateFolderName(startedAt)}_${makeRunLabel(startedAt, runId)}`
+    .replace(/[^a-zA-Z0-9_-]/g, "_");
+  return path.join(OUTPUT_LOGS_DIR, "runs", `log_${ts}_${runFolder}_${safeSource}_${shortRunId}.log`);
 }
 
 // ---------------------------------------------------------------------------
