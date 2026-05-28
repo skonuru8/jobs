@@ -16,7 +16,7 @@ import { generateAndSaveResume } from "@/resume-generator/index";
 import type { ResumeGenConfig } from "@/resume-generator/types";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
 import { makeJobSlug } from "@/shared/slug";
-import { makeManualFolderName } from "@/applications/run-folder";
+import { makeDateFolderName, makeManualFolderName } from "@/applications/run-folder";
 import { fetchLatestJobSnapshotForArtifacts } from "@/storage/artifact-load";
 import {
   insertCoverLetterArtifact,
@@ -274,12 +274,13 @@ function createManualGenerationLog(
   runFolderName: string,
   generatedAt: Date,
 ): (msg: string) => void {
-  const dir = path.resolve(process.env.OUTPUT_DIR ?? path.join(repoRoot, "output"), "logs", "runs");
-  fs.mkdirSync(dir, { recursive: true });
+  const baseDir = path.resolve(process.env.OUTPUT_DIR ?? path.join(repoRoot, "output"), "logs", "runs");
+  const dayDir = path.join(baseDir, makeDateFolderName(generatedAt));
+  fs.mkdirSync(dayDir, { recursive: true });
   const ts = generatedAt.toISOString().replace(/[:.]/g, "-");
   const safeJobId = jobId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "unknown";
   const safeRunFolder = runFolderName.replace(/[\\/]/g, "__").replace(/[^a-zA-Z0-9_-]/g, "_");
-  const logPath = path.join(dir, `manual_${ts}_${safeRunFolder}_${safeJobId}.log`);
+  const logPath = path.join(dayDir, `manual_${ts}_${safeRunFolder}_${safeJobId}.log`);
 
   return (msg: string) => {
     const line = `[manual-generate] ${new Date().toISOString()} ${msg}\n`;

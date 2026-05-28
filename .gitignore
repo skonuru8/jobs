@@ -79,3 +79,9 @@ CLAUDE.md
 skills/cavecrew
 skills/caveman*
 skills-lock.json
+
+# Local handoff/context notes for chat-to-chat transfer
+HANDOFF.md
+HANDOFF-*.md
+CHAT-CONTEXT*.md
+SESSION-NOTES*.md

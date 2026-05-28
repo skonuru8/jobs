@@ -64,7 +64,7 @@ import { buildExperienceBlockFromCanonicalTex } from "@/cover-letter/resume-brie
 import { extractRolesFromCanonicalResume, extractSkillsSectionFromCanonical } from "@/judge/roles-extractor";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
-import { makeRunFolderName, makeRunLabel } from "@/applications/run-folder";
+import { makeDateFolderName, makeRunFolderName, makeRunLabel } from "@/applications/run-folder";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
 import { makeJobSlug } from "@/shared/slug";
 import { loadRiskMap, auditTailoredArtifact, applyResumeAttributionOverrunFlag } from "@/risk-map";
@@ -1336,13 +1336,14 @@ function installRunLog(repoRoot: string, source: string, runId: string, startedA
   if (process.env.PIPELINE_DISABLE_RUN_LOG === "1") return null;
 
   const baseDir = path.resolve(process.env.OUTPUT_DIR ?? path.join(repoRoot, "output"), "logs", "runs");
-  fs.mkdirSync(baseDir, { recursive: true });
+  const dayDir = path.join(baseDir, makeDateFolderName(startedAt));
+  fs.mkdirSync(dayDir, { recursive: true });
 
   const ts = startedAt.toISOString().replace(/[:.]/g, "-");
   const safeSource = source.replace(/[^a-zA-Z0-9_-]/g, "_");
   const shortRunId = runId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 8) || "manual";
   const runLabel = makeRunLabel(startedAt, runId).replace(/[^a-zA-Z0-9_-]/g, "_");
-  const logPath = path.join(baseDir, `log_${ts}_${runLabel}_${safeSource}_${shortRunId}.log`);
+  const logPath = path.join(dayDir, `log_${ts}_${runLabel}_${safeSource}_${shortRunId}.log`);
   const stream = fs.createWriteStream(logPath, { flags: "a" });
 
   const mirror = <T extends typeof process.stdout.write>(original: T): T => {

@@ -97,7 +97,9 @@ export function runLogPath(source: string, runId: string, startedAt: Date): stri
   const shortRunId = runId.slice(0, 8);
   const runFolder = `${makeDateFolderName(startedAt)}_${makeRunLabel(startedAt, runId)}`
     .replace(/[^a-zA-Z0-9_-]/g, "_");
-  return path.join(OUTPUT_LOGS_DIR, "runs", `log_${ts}_${runFolder}_${safeSource}_${shortRunId}.log`);
+  const dayDir = path.join(OUTPUT_LOGS_DIR, "runs", makeDateFolderName(startedAt));
+  fs.mkdirSync(dayDir, { recursive: true });
+  return path.join(dayDir, `log_${ts}_${runFolder}_${safeSource}_${shortRunId}.log`);
 }
 
 // ---------------------------------------------------------------------------
