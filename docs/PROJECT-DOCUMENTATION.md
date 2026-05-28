@@ -105,7 +105,13 @@ Annotated tree (key paths only):
 │   ├── 001_initial.sql            # core schema + pgvector extension/index
 │   ├── 002_orchestrator.sql       # run supervision columns (heartbeat/exit_code/extraction counts)
 │   ├── 003_labels.sql             # labels table for calibration
-│   └── 004_ui_application_tracking.sql  # application_status + applied_at
+│   ├── 004_ui_application_tracking.sql  # application_status + applied_at
+│   ├── 005_tailored_artifacts.sql       # tailored_resumes artifacts table
+│   ├── 006_consolidate_artifacts.sql    # cover_letters surrogate id / cleanup
+│   ├── 007_fabrication_ledger.sql       # fabrication risk audit ledger
+│   ├── 008_visa_enum.sql                # visa sponsorship enum migration
+│   ├── 009_cover_letter_artifact_columns.sql # missing cover artifact cols for fresh DBs
+│   └── 010_ledger_run_id_text.sql       # ledger run_id aligned to TEXT
 ├── scripts/
 │   ├── run-pipeline.ts            # main 19-stage pipeline runner
 │   ├── ui-server.ts               # Express 5 API + static UI server (port 3001)
@@ -163,6 +169,7 @@ The pipeline and orchestrator are configured almost entirely via environment var
 | `RUN_ID` | Optional | pipeline (set by orchestrator) | `manual-...` | Force pipeline to use a specific `run_id` |
 | `DEBUG_EXTRACT` | Optional | extractor | `1` | Print raw model response preview when extraction validation fails |
 | `EXTRACTOR_FORCE_JSON_OBJECT` | Optional | extractor client | `1` | Force OpenRouter `response_format` to `json_object` instead of strict `json_schema` |
+| `JUDGE_FORCE_JSON_OBJECT` | Optional | judge client | `1` | Force judge client `response_format` to `json_object` instead of strict `json_schema` |
 | `RUN_INFRA_TESTS` | Optional | tests | `1` | Enable tests that require real Redis/Postgres |
 | `RUN_DB_DOWN_TESTS` | Optional | storage tests | `1` | Enable slow tests that simulate DB connection failures |
 
@@ -880,4 +887,3 @@ Labels and application actions are persisted in `labels` and are the foundation 
 - [`docs/FILE-REFERENCE.md`](./FILE-REFERENCE.md)
 - [`docs/SCHEMA-REFERENCE.md`](./SCHEMA-REFERENCE.md)
 - [`docs/OPERATIONS.md`](./OPERATIONS.md)
-

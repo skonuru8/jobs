@@ -73,13 +73,13 @@ import { routeJob, hasUsableDescription } from "@/pipeline/routing";
 
 // Dedup + storage — gracefully disabled via SKIP_DEDUP=1 / SKIP_PERSIST=1
 import {
-  connectRedis, disconnectRedis, isSeen, markSeen,
+  connectRedis, disconnectRedis, isSeen, markSeen, listSeenJobIds,
   findSemanticDuplicate,
 } from "@/dedup/index";
 import {
   runMigrations, saveRun, finishRun, saveJob, closePool,
   insertTailoredResumeArtifact, insertCoverLetterArtifact,
-  insertLedgerEntries, markStorageDisabled, formatErr,
+  insertLedgerEntries, markStorageDisabled, formatErr, verifyIntegrity, formatReport as formatIntegrityReport,
 } from "@/storage/index";
 import type { JobRecord } from "@/storage/types";
 
@@ -119,6 +119,7 @@ const DO_COVER_ARTIFACT = parseBoolEnv(process.env.DO_COVER, true);
 const SAVE_FIXTURES  = parseBoolEnv(process.env.SAVE_FIXTURES); // save real extraction fixtures
 const SKIP_DEDUP     = parseBoolEnv(process.env.SKIP_DEDUP);    // bypass Redis + pgvector dedup
 const SKIP_PERSIST   = parseBoolEnv(process.env.SKIP_PERSIST);  // bypass Postgres persistence
+const VERIFY         = parseBoolEnv(process.env.VERIFY);        // run Redis↔Postgres integrity check
 
 // Dice-only env vars. Both passed through to the scraper subprocess.
 //   QUERY="java developer"          search term (default below)
@@ -349,6 +350,12 @@ async function main(): Promise<void> {
       extractions_attempted: results.filter(r => r.extract_status === "ok" || r.extract_status === "error").length,
       extractions_succeeded: results.filter(r => r.extract_status === "ok").length,
     });
+  }
+
+  if (VERIFY && !SKIP_DEDUP && !SKIP_PERSIST) {
+    const seenIds = await listSeenJobIds(SOURCE);
+    const report = await verifyIntegrity(SOURCE, seenIds);
+    log(formatIntegrityReport(report));
   }
 
   // --- Disconnect ---

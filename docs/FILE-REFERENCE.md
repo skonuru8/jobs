@@ -302,7 +302,7 @@ This is the low-level reference for **every file** in the system. For each file:
 
 **Purpose:** Public re-exports for fetcher.
 
-**Exports / public interface:** `fetchJobPage`, `fetchJobPages`, `extractText`, `isAllowedByRobots`, `FetchResult`.
+**Exports / public interface:** `fetchJobPage`, `extractText`, `isAllowedByRobots`, `FetchResult`.
 
 ---
 
@@ -313,7 +313,6 @@ This is the low-level reference for **every file** in the system. For each file:
 **Exports / public interface:**
 
 - `fetchJobPage(url: string): Promise<FetchResult>` (never throws; returns status)
-- `fetchJobPages(urls: string[]): Promise<FetchResult[]>`
 - `extractText(html: string): string`
 - `isAllowedByRobots(url: string): Promise<boolean>`
 
@@ -550,7 +549,7 @@ This is the low-level reference for **every file** in the system. For each file:
 
 **Purpose:** Cross-run exact dedup via Redis with TTL; best-effort non-throwing behavior.
 
-**Exports / public interface:** `connectRedis`, `disconnectRedis`, `isSeen`, `markSeen`, `markSeenBulk`.
+**Exports / public interface:** `connectRedis`, `disconnectRedis`, `isSeen`, `markSeen`, `listSeenJobIds`.
 
 ---
 
@@ -839,4 +838,3 @@ psql $DATABASE_URL -f scripts/storage/calibration-export.sql -A -F',' > labels.c
 **What it returns:** One row per labeled job with columns: `job_id`, `title`, `company`, `source`, `score_total`, `skills`, `semantic`, `yoe`, `seniority`, `location`, `judge_verdict`, `judge_bucket`, `user_label`, `notes`, `labeled_at`. Ordered by `score_total DESC`.
 
 **Used by:** Section 7.3 calibration workflow — this is the export step before weight tuning.
-

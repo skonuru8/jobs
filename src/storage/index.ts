@@ -37,3 +37,4 @@ export type { TailoredResumeInsert, CoverLetterArtifactInsert } from "./persist.
 
 export { fetchLatestJobSnapshotForArtifacts } from "./artifact-load.js";
 export type { JobArtifactSnapshot } from "./artifact-load.js";
+export { verifyIntegrity, formatReport } from "./integrity.js";

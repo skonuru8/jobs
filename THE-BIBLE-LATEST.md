@@ -584,6 +584,7 @@ Single file `src/fetcher/fetch.ts`. `fetchJobPage` is non-throwing, uses per-dom
 OpenRouter client (no SDK dependency, raw fetch).
 
 - `src/extractor/client.ts` — OpenRouter API call. Currently uses strict `json_schema` response_format (with a JSON Schema mirror of the Zod schema), with fallback to `json_object` via `EXTRACTOR_FORCE_JSON_OBJECT=1` for models that reject strict mode.
+- `src/judge/client.ts` — OpenRouter API call for judge stage. Uses strict `json_schema` response_format, with fallback to `json_object` via `JUDGE_FORCE_JSON_OBJECT=1`.
 - `src/extractor/segment.ts` — v10 JD pre-pass. Splits text into `tags_chips`, `required`, `preferred`, `responsibilities`, and `other` so preferred-section technologies and tag-chip tech lists are not hidden behind abstract required prose.
 - `src/extractor/prompt.ts` — `PROMPT_VERSION = "v1"`. Extract-don't-infer. Exact substring quotes 5–15 words. `buildUserPromptWithSegments()` feeds labeled segments with importance hints: tags/chips and required default to required, preferred defaults to preferred, responsibilities/other infer from context.
 - `src/extractor/validate.ts` — Zod schema. Strips markdown fences if model ignored JSON mode.
@@ -679,7 +680,7 @@ v10 hard guards:
 
 Two complementary mechanisms.
 
-**Cross-run exact dedup (`src/dedup/redis.ts`)**: Redis SET with per-key TTL. Key shape `seen:{source}:{job_id}`, value `"1"`, TTL 7 days. `isSeen()`, `markSeen()`, `markSeenBulk()` — all non-throwing, gracefully no-op when Redis is down. `_connectionFailed` flag prevents repeated reconnect attempts.
+**Cross-run exact dedup (`src/dedup/redis.ts`)**: Redis SET with per-key TTL. Key shape `seen:{source}:{job_id}`, value `"1"`, TTL 7 days. `isSeen()`, `markSeen()`, `listSeenJobIds()` — all non-throwing, gracefully no-op when Redis is down. `_connectionFailed` flag prevents repeated reconnect attempts.
 
 **Cross-site semantic dedup (`src/dedup/pgvector.ts`)**: pgvector cosine similarity on the `jobs.embedding` column (HNSW index). Default threshold 0.88, lookback 7 days. Non-throwing — returns null on any DB error.
 
@@ -703,6 +704,8 @@ Postgres + pgvector persistence.
 - `migrations/002_orchestrator.sql` — new in v5.1: 4 columns + partial index on `runs`.
 - `migrations/005_tailored_artifacts.sql` — cleaned up to create only `tailored_resumes` + two indexes. The stale `cover_letters` block and transient `version` column were removed to stay replay-safe with `006_consolidate_artifacts.sql`.
 - `migrations/008_visa_enum.sql` — migrates `jobs.visa_sponsorship` from boolean-era semantics to the five-state text enum (`offered`, `denied`, `ead_eligible`, `payment_model_only`, `unmentioned`) and adds `jobs.visa_quote`.
+- `migrations/009_cover_letter_artifact_columns.sql` — adds missing cover-letter artifact columns on `cover_letters` for clean installs (`tex_path`, `pdf_path`, `meta_path`, `prompt_sha`, `canonical_sha`, token counts, `compile_status`, `generated_by`, `flags`).
+- `migrations/010_ledger_run_id_text.sql` — aligns `fabrication_ledger.run_id` from `UUID` to `TEXT` to match `runs.run_id` and support `manual-...` run ids.
 - `test/persist.test.ts` — 14 tests. All pass against updated `finishRun` — disabled-state tests don't touch SQL, compile-time enforcement handles the new fields at the call site.
 
 ### `risk-map/` — BUILT (v2 / Bug F hardening)

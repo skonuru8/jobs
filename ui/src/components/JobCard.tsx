@@ -167,7 +167,7 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
     }
   }
 
-  async function doPost(newLabel: Label, newAppStatus?: AppStatus, notesOverride?: string) {
+  async function doPost(newLabel: Label, newAppStatus?: AppStatus, notesOverride?: string): Promise<boolean> {
     setSaving(true);
     setError(null);
     const notesVal = notesOverride !== undefined ? notesOverride : (notes === '' ? '' : notes || null);
@@ -181,8 +181,10 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
       });
       const fresh = await getStats();
       onStatsUpdate(fresh);
+      return true;
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -196,9 +198,8 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
   async function handleAppStatus(s: 'applied' | 'skipped' | 'apply_later') {
     if (!label) return;
     setAppStatus(s);
-    // Remove card from view immediately — don't wait for POST
-    onRemove?.(row.job_id, row.run_id);
-    await doPost(label, s);
+    const ok = await doPost(label, s);
+    if (ok) onRemove?.(row.job_id, row.run_id);
   }
 
   async function handleNotesBlur() {
@@ -214,8 +215,8 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
       // immediate POST + mark as not-applied (skipped)
       setLabel('no');
       setAppStatus('skipped');
-      onRemove?.(row.job_id, row.run_id);
-      await doPost('no', 'skipped', chipText);
+      const ok = await doPost('no', 'skipped', chipText);
+      if (ok) onRemove?.(row.job_id, row.run_id);
     } else {
       // just fill textarea; user still picks action
       if (!label) {

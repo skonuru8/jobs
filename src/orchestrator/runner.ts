@@ -175,8 +175,10 @@ export async function spawnRun(config: RunConfig): Promise<number> {
     forceKill.unref();
   };
 
-  process.once("SIGTERM", () => forwardSignal("SIGTERM"));
-  process.once("SIGINT",  () => forwardSignal("SIGINT"));
+  const onSigterm = () => forwardSignal("SIGTERM");
+  const onSigint = () => forwardSignal("SIGINT");
+  process.once("SIGTERM", onSigterm);
+  process.once("SIGINT", onSigint);
 
   // Wait for child to exit
   const exitCode = await new Promise<number>((resolve) => {
@@ -197,6 +199,8 @@ export async function spawnRun(config: RunConfig): Promise<number> {
   // Cleanup
   clearInterval(heartbeatInterval);
   logStream.end();
+  process.off("SIGTERM", onSigterm);
+  process.off("SIGINT", onSigint);
 
   // Write exit code to DB
   await markExitCode(runId, exitCode);

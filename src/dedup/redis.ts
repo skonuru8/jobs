@@ -105,25 +105,31 @@ export async function markSeen(
 }
 
 /**
- * Bulk mark multiple job IDs as seen.
- * Used at pipeline end to mark all processed jobs in one pass.
+ * List seen job IDs for a source via SCAN.
+ * Returns [] on any Redis error.
  */
-export async function markSeenBulk(
-  source:  string,
-  jobIds:  string[],
-  ttlDays: number = DEFAULT_TTL_DAYS,
-): Promise<void> {
-  if (!jobIds.length) return;
+export async function listSeenJobIds(source: string): Promise<string[]> {
   const client = getClient();
-  if (!client || _connectionFailed) return;
+  if (!client || _connectionFailed) return [];
+  const out: string[] = [];
+  const prefix = `seen:${source}:`;
   try {
-    const pipeline = client.pipeline();
-    const ttlSec   = ttlDays * 86_400;
-    for (const id of jobIds) {
-      pipeline.set(key(source, id), "1", "EX", ttlSec);
-    }
-    await pipeline.exec();
+    let cursor = "0";
+    do {
+      const [nextCursor, keys] = await client.scan(
+        cursor,
+        "MATCH",
+        `${prefix}*`,
+        "COUNT",
+        1000,
+      );
+      cursor = nextCursor;
+      for (const k of keys) {
+        if (k.startsWith(prefix)) out.push(k.slice(prefix.length));
+      }
+    } while (cursor !== "0");
   } catch {
-    // non-fatal
+    return [];
   }
+  return out;
 }

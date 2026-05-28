@@ -1,5 +1,6 @@
 // storage/src/integrity.ts
-import { getPool, isStorageAvailable } from "./index.js";
+import { getPool } from "./db.js";
+import { isStorageAvailable } from "./persist.js";
 
 export interface IntegrityReport {
   source:           string;

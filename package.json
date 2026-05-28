@@ -22,7 +22,6 @@
     "node-cron": "^3.0.3",
     "p-limit": "^7.3.0",
     "pg": "^8.20.0",
-    "pgvector": "^0.2.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {

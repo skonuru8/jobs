@@ -124,19 +124,6 @@ export async function fetchJobPage(url: string): Promise<FetchResult> {
   };
 }
 
-/**
- * Fetch multiple URLs with per-domain polite delays.
- * Returns results in same order as input.
- * Errors are captured per-result, never thrown.
- */
-export async function fetchJobPages(urls: string[]): Promise<FetchResult[]> {
-  const results: FetchResult[] = [];
-  for (const url of urls) {
-    results.push(await fetchJobPage(url));
-  }
-  return results;
-}
-
 // ---------------------------------------------------------------------------
 // HTML → plain text
 // ---------------------------------------------------------------------------

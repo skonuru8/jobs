@@ -3,7 +3,7 @@ export {
   disconnectRedis,
   isSeen,
   markSeen,
-  markSeenBulk,
+  listSeenJobIds,
 } from "./redis.js";
 
 export { findSemanticDuplicate } from "./pgvector.js";

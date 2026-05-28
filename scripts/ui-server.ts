@@ -116,19 +116,25 @@ async function main() {
           p ? `/${String(p).replace(/\\/g, '/')}` : null;
         row.resume_pdf_url = toUrl(row.resume_pdf_path);
         row.cover_pdf_url = toUrl(row.cover_pdf_path ?? (row.cover_letter_path && /\.pdf$/i.test(row.cover_letter_path) ? row.cover_letter_path : null));
-        const postedIso = row.posted_at ? new Date(row.posted_at as string).toISOString() : null;
-        const slug = makeJobSlug(
-          { title: row.title ?? "", company: row.company ?? "", posted_at: postedIso },
-          row.job_id,
-        );
-        row.job_description_url = toUrl(`output/applications/${slug}/job_description.md`);
+        const resumeMetaPath = row.resume_meta_path as string | null;
+        const coverMetaPath  = row.cover_meta_path as string | null;
+        const metaPath = resumeMetaPath ?? coverMetaPath;
+        if (metaPath) {
+          const artifactDir = path.dirname(metaPath);
+          row.job_description_url = toUrl(path.join(artifactDir, 'job_description.md'));
+        } else {
+          const postedIso = row.posted_at ? new Date(row.posted_at as string).toISOString() : null;
+          const slug = makeJobSlug(
+            { title: row.title ?? "", company: row.company ?? "", posted_at: postedIso },
+            row.job_id,
+          );
+          row.job_description_url = toUrl(`output/applications/${slug}/job_description.md`);
+        }
         const rf = row.resume_flags as string[] | null;
         const cf = row.cover_flags as string[] | null;
         row.artifact_flags = [...(rf ?? []), ...(cf ?? [])];
 
         // Attach risk_summary + export_status from meta.json for latest resume/cover
-        const resumeMetaPath = row.resume_meta_path as string | null;
-        const coverMetaPath  = row.cover_meta_path  as string | null;
         if (resumeMetaPath) {
           try {
             const metaAbs = path.join(REPO_ROOT, resumeMetaPath);

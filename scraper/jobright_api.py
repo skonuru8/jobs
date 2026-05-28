@@ -305,6 +305,7 @@ def scrape(
     jobs: list[dict] = []
     position = 0
     retried_after_rate_limit = False  # one retry per run
+    mapping_failures = 0
 
     while len(jobs) < max_jobs:
         refresh = position == 0
@@ -342,7 +343,14 @@ def scrape(
         for item in page_items:
             try:
                 mapped = _map_job(item, run_id=run_id, scraped_at=scraped_at)
-            except Exception:
+            except Exception as e:
+                mapping_failures += 1
+                jr = item.get("jobResult") or {}
+                item_id = jr.get("jobId") or "unknown"
+                item_title = jr.get("jobTitle") or "unknown"
+                _err(
+                    f"[jobright_api] Mapping failure at position={position} job_id={item_id} title={item_title}: {e}"
+                )
                 continue
 
             mapped_id = mapped.get("meta", {}).get("job_id")
@@ -364,5 +372,4 @@ def scrape(
         if len(jobs) < max_jobs:
             time.sleep(THROTTLE_SECONDS)
 
-    _err(f"[jobright_api] Done. Yielded {len(jobs)} jobs.")
-
+    _err(f"[jobright_api] Done. Yielded {len(jobs)} jobs. mapping_failures={mapping_failures}")
