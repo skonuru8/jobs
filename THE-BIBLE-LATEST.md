@@ -1,14 +1,53 @@
-# THE BIBLE — v11 (2026-05-27)
+# THE BIBLE — v12 (2026-05-27)
 
 > Project: **job-hunter** — automated job discovery + filter + score + judge + cover letter pipeline for Sarath Konuru.
 >
-> This is the authoritative document. Supersedes v10 (2026-05-27), v9 (2026-05-26), v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
+> This is the authoritative document. Supersedes v11 (2026-05-27), v10 (2026-05-27), v9 (2026-05-26), v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
 >
 > Read this before writing code. Update this file when module status changes.
 >
 > Bible file policy: keep only two Bible files in the repo. `THE-BIBLE-v1.md`
 > is the original architecture snapshot. `THE-BIBLE-LATEST.md` is the single
 > rolling source of truth. Do not create per-version Bible archives.
+
+---
+
+## What changed since v11
+
+v12 is a repo-operations and path-clarity update on top of the v11 recovery
+and premium-generation work.
+
+**Wave 1 — Application output is date-grouped, not only run-grouped.**
+`src/applications/run-folder.ts` now builds artifact folders as
+`output/applications/{YYYY-MM-DD}/{run_label}/{slug}/...` for pipeline runs and
+`output/applications/{YYYY-MM-DD}/manual_{ISO timestamp}/{slug}/...` for manual
+generation. This keeps the per-run identity from v8 while making same-day
+artifact review and archiving much easier.
+
+**Wave 2 — Run logs are date-grouped across every entry path.**
+Direct `scripts/run-pipeline.ts` runs, orchestrator-managed child runs, and
+manual UI/API artifact generation logs now all land under
+`output/logs/runs/{YYYY-MM-DD}/...`. Filenames still include timestamp,
+run-folder identity, source, and short run id or job id, so the new day folder
+adds browseability without losing traceability.
+
+**Wave 3 — Prompt/runtime cleanup landed with the layout refresh.**
+`src/resume-generator/prompt.ts` now documents the total-mode prompt as the
+single path, replacing the old SKILL.md runtime chain. `src/cover-letter/prompt.ts`
+is now explicitly `PROMPT_VERSION="pipeline-tex-v3"` with the canonical fact
+guard centered around the same swap/fabrication data the resume generator uses.
+`src/shared/style-lint.ts` also widened the banned bridge-language family to
+catch phrases such as "parallel to", "syntactically equivalent to",
+"transitional knowledge of", and "transferable skills".
+
+**Wave 4 — Local context docs are intentionally untracked.**
+`.gitignore` now ignores `HANDOFF.md`, `HANDOFF-*.md`, `CHAT-CONTEXT*.md`, and
+`SESSION-NOTES*.md`, clarifying that chat-to-chat transfer notes are local
+operator context rather than repository history.
+
+**Validation for v12.**
+No code-path changes were made after the latest green state; this update
+reconciles the Bible with commits `4df9f39`, `41add01`, and `e40aaac`.
 
 ---
 
@@ -29,11 +68,11 @@ truncation guard rejects the final attempt.
 
 **Wave 2 — Manual and direct-run logs are captured.**
 Direct `scripts/run-pipeline.ts` invocations now tee stdout/stderr to
-`output/logs/runs/log_{timestamp}_{source}_{runid}.log`, matching the
+`output/logs/runs/{YYYY-MM-DD}/log_{timestamp}_{run-folder}_{source}_{runid}.log`, matching the
 operational habit established by the orchestrator. Set
 `PIPELINE_DISABLE_RUN_LOG=1` only when intentionally suppressing this local
 diagnostic file. Manual UI/API artifact generation now writes a compact
-`output/logs/runs/manual_{timestamp}_{jobid}.log` with job id, force mode,
+`output/logs/runs/{YYYY-MM-DD}/manual_{timestamp}_{run-folder}_{jobid}.log` with job id, force mode,
 output folder, models, flags, and generator errors.
 
 **Wave 3 — Failed manual artifacts can be regenerated from the UI/API.**
@@ -391,7 +430,7 @@ The pipeline is a 19-stage flow inside one `main()` function in `scripts/run-pip
 | 13 | Threshold gate: score ≥ 0.50 → GATE_PASS, else ARCHIVE | scoring disabled |
 | 14 | LLM judge — STRONG / MAYBE / WEAK + reasoning + concerns + optional v5 `gap_directives[]` + scoped `tailoring_hints.tech_swaps[]`; final validation failures are captured under `output/logs/judge_failures/` | judge disabled |
 | 15 | Bucket routing: STRONG+score≥0.70→COVER_LETTER, STRONG+score<0.70→RESULTS, MAYBE→REVIEW_QUEUE, WEAK→ARCHIVE | — |
-| 16 | Artifact generation (resume + cover letter) for COVER_LETTER jobs and eligible REVIEW_QUEUE jobs → write `.tex`/`.pdf`/`meta.json` under `output/applications/{run_label}/{slug}/`; resume output is dash-cleaned, style-linted, and canonical-SKILLS-locked before save | artifact flags disabled or bucket below threshold |
+| 16 | Artifact generation (resume + cover letter) for COVER_LETTER jobs and eligible REVIEW_QUEUE jobs → write `.tex`/`.pdf`/`meta.json` under `output/applications/{YYYY-MM-DD}/{run_label}/{slug}/`; resume output is dash-cleaned, style-linted, and canonical-SKILLS-locked before save | artifact flags disabled or bucket below threshold |
 | 17 | Persist all of the above to Postgres in one transaction; mark seen in Redis | `SKIP_PERSIST=1` / `SKIP_DEDUP=1` |
 | 18 | Optional: integrity check comparing Redis seen-set vs Postgres `seen_jobs` | `VERIFY=1` not set |
 | 19 | Finish run record — `jobs_total`, `jobs_passed`, `jobs_gated`, `jobs_covered`, `extractions_attempted`, `extractions_succeeded` derived from results array | `SKIP_PERSIST=1` |
@@ -449,8 +488,8 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 - `output/cover-letters/{run_id}/REVIEW_QUEUE/{title-slug}_{job_id_short}.md` — MAYBE or STRONG+score<0.70 above review_queue_threshold
 - `output/logs/orchestrator.log` — rolling log. All run lifecycle events (start/finish/exit code) and monitor warnings. Primary operational log.
 - `output/logs/reaper.log` — rolling log. Ghost reaper sweep events only. Separate from orchestrator.log to keep the main log clean.
-- `output/logs/runs/log_{timestamp}_{source}_{runid}.log` — per-run stdout+stderr captured verbatim. Orchestrator child runs and direct `scripts/run-pipeline.ts` invocations both create source-labeled logs. `tail -f` to watch a live run.
-- `output/logs/runs/manual_{timestamp}_{jobid}.log` — compact log for manual UI/API artifact generation attempts.
+- `output/logs/runs/{YYYY-MM-DD}/log_{timestamp}_{run-folder}_{source}_{runid}.log` — per-run stdout+stderr captured verbatim. Orchestrator child runs and direct `scripts/run-pipeline.ts` invocations both create source-labeled logs. `tail -f` to watch a live run.
+- `output/logs/runs/{YYYY-MM-DD}/manual_{timestamp}_{run-folder}_{jobid}.log` — compact log for manual UI/API artifact generation attempts.
 - `output/logs/judge_failures/{run_id}_{job_id}.json` — final failed judge payload plus schema error after validation retry.
 - `output/audits/round2_artifact_quality_baseline.{json,md}` — historical artifact-quality audit outputs.
 
@@ -583,7 +622,7 @@ Real-data validation confirmed (2026-04-25): judge correctly identified Citi (na
 
 ### `cover-letter/` — BUILT (v5 consumer)
 
-Model switched from `google/gemma-4-31b-it` to `deepseek/deepseek-v4-flash` since v5. Artifact output now lands with the paired resume under `output/applications/{run_label}/{slug}/`. Retry-once remains available; v10 sets `max_tokens=3000` and `retries=1`.
+Model switched from `google/gemma-4-31b-it` to `deepseek/deepseek-v4-flash` since v5. Artifact output now lands with the paired resume under `output/applications/{YYYY-MM-DD}/{run_label}/{slug}/`. Retry-once remains available; v10 sets `max_tokens=3000` and `retries=1`.
 
 Current brief source is the verbatim EXPERIENCE slice built by
 `src/cover-letter/resume-brief.ts::buildExperienceBlockFromCanonicalTex()`.
@@ -704,7 +743,7 @@ soft gate for human review before applying.
 `src/artifacts/manual-generate.ts`. If `force=false`, it conflicts only when
 the latest resume and cover are both complete. Missing/failed resume or cover
 artifacts can be generated again from the same UI card. Every attempt writes a
-compact `output/logs/runs/manual_{timestamp}_{jobid}.log`.
+compact `output/logs/runs/{YYYY-MM-DD}/manual_{timestamp}_{run-folder}_{jobid}.log`.
 
 **`ui/`** — Vite + React 18 + TypeScript SPA. No router, no state library, no CSS framework. Key design decisions:
 - `JobCard.tsx` is a single shared component with `mode: 'apply' | 'hard-reject' | 'soft-reject'` prop — ~80% of rendering logic is shared across all three tabs.
@@ -763,7 +802,7 @@ LinkedIn is offset from Dice by 1h to avoid hitting OpenRouter simultaneously fr
 **One-shot trigger for testing:** `npx tsx src/orchestrator/trigger-once.ts`
 
 Direct `npx tsx scripts/run-pipeline.ts` runs now also write
-`output/logs/runs/log_{timestamp}_{source}_{runid}.log` unless
+`output/logs/runs/{YYYY-MM-DD}/log_{timestamp}_{run-folder}_{source}_{runid}.log` unless
 `PIPELINE_DISABLE_RUN_LOG=1` is set.
 
 ---
@@ -933,7 +972,7 @@ npx tsx src/orchestrator/trigger-once.ts
 
 # Watch it live in a second terminal
 tail -f output/logs/orchestrator.log
-tail -f output/logs/runs/log_<timestamp>_<source>_<runid>.log
+tail -f output/logs/runs/<YYYY-MM-DD>/log_<timestamp>_<run-folder>_<source>_<runid>.log
 ```
 
 ### Review UI
@@ -973,7 +1012,7 @@ Use this command for normal day-to-day manual runs. It means:
 - `EXTRACT=1` — enable extraction; scoring, judge, and cover routing auto-enable
 - resume generation is enabled by default unless `DO_RESUME=0` or `DO_RESUME=false`
 - cover-letter generation is enabled by default unless `DO_COVER=0` or `DO_COVER=false`
-- direct-run logs are written to `output/logs/runs/log_{timestamp}_{source}_{runid}.log`
+- direct-run logs are written to `output/logs/runs/{YYYY-MM-DD}/log_{timestamp}_{run-folder}_{source}_{runid}.log`
 
 `EXTRACT=1` and `EXTRACT=true` both work because the pipeline treats any
 non-empty `EXTRACT` value as enabled. Prefer `EXTRACT=1` in docs for
@@ -1012,7 +1051,7 @@ VERIFY=1 EXTRACT=1 SOURCE=dice MAX=20 npx tsx scripts/run-pipeline.ts
 ```
 
 Direct pipeline runs now print and write a run log under
-`output/logs/runs/log_{timestamp}_{source}_{runid}.log`.
+`output/logs/runs/{YYYY-MM-DD}/log_{timestamp}_{run-folder}_{source}_{runid}.log`.
 
 ### Command cookbook by scenario
 
@@ -1052,12 +1091,13 @@ jq '.resume' output/applications/<run-folder>/<job-folder>/meta.json
 npx tsx -e "import { manualGenerateArtifacts } from './src/artifacts/manual-generate.ts'; const out = await manualGenerateArtifacts(process.cwd(), '<job_id>', { force: true }); console.log(JSON.stringify(out, null, 2));"
 
 # Inspect newest manual generation output
-ls -td output/applications/manual_* | head -1
-find "$(ls -td output/applications/manual_* | head -1)" -name meta.json -o -name resume.tex -o -name cover_letter.tex
+latest_manual="$(find output/applications -type d -name 'manual_*' | sort | tail -1)"
+printf '%s\n' "$latest_manual"
+find "$latest_manual" -name meta.json -o -name resume.tex -o -name cover_letter.tex
 
 # Tail newest direct/manual run logs
-ls -t output/logs/runs | head
-tail -f output/logs/runs/<log-file>
+find output/logs/runs -type f | sort | tail
+tail -f output/logs/runs/<YYYY-MM-DD>/<log-file>
 
 # Inspect captured judge schema failures
 ls output/logs/judge_failures
@@ -1194,18 +1234,18 @@ multiple Bible archive files.
 ### 18.1 — Run-folder layout
 
 After initial v8 implementation, observed that flat `output/applications/{slug}/`
-made it impossible to track which pipeline run produced which artifacts.
-Patched to nest under run folders:
+made it impossible to track which pipeline run produced which artifacts. That
+first patch nested under run folders; the latest layout also groups by day:
 
-  `output/applications/{run_label}/{slug}/...`
+  `output/applications/{YYYY-MM-DD}/{run_label}/{slug}/...`
 
 where `run_label` is:
 - pipeline: `{ISO timestamp}_{run_id first 8}` e.g. `2026-05-14T10-30-15_9e27688e`
 - manual:   `manual_{ISO timestamp}` e.g. `manual_2026-05-15T09-15-30`
 
 DB unchanged. `tex_path` / `pdf_path` columns store full relative path including
-run folder. Existing flat-layout folders stay where they are; new generations
-land in run folders.
+date folder plus run folder. Existing older layouts stay where they are; new
+generations land in date-grouped run folders.
 
 ### 18.2 — Risk map + fabrication ledger (no policy modes)
 
@@ -1348,9 +1388,9 @@ Changes:
   model output before strict validation, improving compatibility with
   `deepseek/deepseek-v4-pro`-style responses.
 - `scripts/run-pipeline.ts` writes direct-run stdout/stderr logs to
-  `output/logs/runs/log_{timestamp}_{source}_{runid}.log`.
+  `output/logs/runs/{YYYY-MM-DD}/log_{timestamp}_{run-folder}_{source}_{runid}.log`.
 - `src/artifacts/manual-generate.ts` writes compact manual-generation logs to
-  `output/logs/runs/manual_{timestamp}_{jobid}.log`.
+  `output/logs/runs/{YYYY-MM-DD}/manual_{timestamp}_{run-folder}_{jobid}.log`.
 - `src/storage/persist.ts::jobHasCompleteArtifacts()` lets manual generation
   distinguish complete artifacts from partial/failed artifact history.
 - `ui/src/components/JobCard.tsx` passes `force=true` only when the user is
