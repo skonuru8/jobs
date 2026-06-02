@@ -10,7 +10,8 @@ interface JobCardProps {
   mode: Mode;
   row: ApplyQueueRow | HardRejectionRow | SoftRejectionRow;
   onStatsUpdate: (stats: Stats) => void;
-  onRemove?: (jobId: string, runId: string) => void;
+  selected?: boolean;
+  onSelect?: () => void;
   /** Refetch list data after manual artifact generation (apply queue). */
   onDataChange?: () => void;
 }
@@ -120,26 +121,35 @@ function RiskBadge({ label, status, summary }: { label: string; status: 'ok' | '
   );
 }
 
-// Change 2: quick-fill chips
-const NOTE_CHIPS = [
-  'Job posting no longer available',
+const YES_CHIPS = [
   'Not a good fit',
   'Already applied elsewhere',
   'Too senior / too junior',
 ];
 
-export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: JobCardProps) {
+const NO_CHIPS = [
+  'Not a good fit',
+  'Too senior',
+  'Too junior',
+  'No sponsorship mentioned',
+  'Location not ideal',
+  'Contract / not FTE',
+  'Low compensation',
+  'Job posting no longer available',
+  'Already applied elsewhere',
+];
+
+export function JobCard({ mode, row, onStatsUpdate, selected, onSelect, onDataChange }: JobCardProps) {
   const [label, setLabel] = useState<Label | null>(row.label ?? null);
   const [appStatus, setAppStatus] = useState<AppStatus>(
     mode === 'apply' ? ((row as ApplyQueueRow).application_status ?? null) : null
   );
   const [notes, setNotes] = useState<string>(row.label_notes ?? '');
-  const [reasoningOpen, setReasoningOpen] = useState(false);
-  const [clOpen, setClOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [selectedChips, setSelectedChips] = useState<string[]>([]);
 
   const applyRow = mode === 'apply' ? (row as ApplyQueueRow) : null;
   const hardRow = mode === 'hard-reject' ? (row as HardRejectionRow) : null;
@@ -192,14 +202,15 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
 
   async function handleLabel(l: Label) {
     setLabel(l);
-    await doPost(l);
+    const ok = await doPost(l);
+    if (ok && mode !== 'apply') onDataChange?.();
   }
 
   async function handleAppStatus(s: 'applied' | 'skipped' | 'apply_later') {
     if (!label) return;
     setAppStatus(s);
     const ok = await doPost(label, s);
-    if (ok) onRemove?.(row.job_id, row.run_id);
+    if (ok) onDataChange?.();
   }
 
   async function handleNotesBlur() {
@@ -207,24 +218,24 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
     await doPost(label);
   }
 
-  // Change 2: chip click
-  async function handleChip(chipText: string) {
+  function handleCardClick(e: React.MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, textarea, input, select')) return;
+    onSelect?.();
+  }
+
+  function handleChip(chipText: string) {
     setNotes(chipText);
-    const currentLabel = label ?? 'no';
-    if (currentLabel === 'no' && mode === 'apply') {
-      // immediate POST + mark as not-applied (skipped)
-      setLabel('no');
-      setAppStatus('skipped');
-      const ok = await doPost('no', 'skipped', chipText);
-      if (ok) onRemove?.(row.job_id, row.run_id);
-    } else {
-      // just fill textarea; user still picks action
-      if (!label) {
-        setLabel(currentLabel);
-        await doPost(currentLabel, undefined, chipText);
-      }
-      // else just setting notes state is enough — next blur/action will persist
-    }
+  }
+
+  async function handleDismissNo() {
+    if (selectedChips.length === 0) return;
+    const notesText = selectedChips.join(', ');
+    setNotes(notesText);
+    setLabel('no');
+    setAppStatus('skipped');
+    const ok = await doPost('no', 'skipped', notesText);
+    if (ok) onDataChange?.();
   }
 
   const labelBtns: { value: Label; text: string }[] = mode === 'apply'
@@ -247,6 +258,7 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
 
   const cardClass = [
     'job-card',
+    selected ? 'state-selected' : '',
     isApplied ? 'state-applied' : '',
     isSkipped ? 'state-skipped' : '',        // "Not Applied" state
     isApplyLater ? 'state-apply-later' : '',
@@ -257,7 +269,11 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
   const hasJudge = 'judge_verdict' in row;
 
   return (
-    <div className={cardClass}>
+    <div
+      className={cardClass}
+      onClick={handleCardClick}
+      style={onSelect ? { cursor: 'pointer' } : undefined}
+    >
       <div className="card-header">
         <div className="card-title-row">
           <span className="job-title">{row.title}</span>
@@ -298,27 +314,6 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
         </div>
       )}
 
-      {hasJudge && (
-        <div className="collapsible">
-          <button className="collapse-btn" onClick={() => setReasoningOpen(o => !o)}>
-            {reasoningOpen ? '▼' : '▶'} Judge Reasoning
-          </button>
-          {reasoningOpen && (
-            <div className="collapse-content reasoning">{(row as ApplyQueueRow).reasoning}</div>
-          )}
-          {(row as ApplyQueueRow).concerns && (row as ApplyQueueRow).concerns!.length > 0 && (
-            <div className="concerns">
-              <span className="concerns-label">Concerns:</span>
-              <ul>
-                {(row as ApplyQueueRow).concerns!.map((c, i) => (
-                  <li key={i}>{c}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
       {applyRow && (
         <div className="artifact-actions">
           {applyRow.artifact_flags && applyRow.artifact_flags.length > 0 && (
@@ -343,12 +338,21 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
           )}
           <button
             type="button"
-            className="gen-btn"
+            className={`gen-btn${genLoading ? ' gen-btn-loading' : ''}`}
             onClick={handleGenerate}
             disabled={genLoading}
           >
-            {genLoading ? '…' : applyRow.cover_pdf_url || applyRow.resume_pdf_url ? 'Regenerate' : 'Generate'}
+            {genLoading
+              ? '⏳ Generating…'
+              : applyRow.cover_pdf_url || applyRow.resume_pdf_url
+              ? 'Regenerate'
+              : 'Generate'}
           </button>
+          {genLoading && (
+            <div className="gen-loading-msg">
+              Generating resume &amp; cover letter — this takes 1–2 minutes. Do not close or refresh.
+            </div>
+          )}
           {genError && (
             <span className="gen-error">
               {genError}{' '}
@@ -384,24 +388,6 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
                   summary={applyRow.cover_risk_summary}
                 />
               )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {applyRow && (
-        <div className="collapsible">
-          <button className="collapse-btn" onClick={() => setClOpen(o => !o)}>
-            {clOpen ? '▼' : '▶'} Cover Letter
-          </button>
-          {clOpen && (
-            <div className="collapse-content cover-letter">
-              {applyRow.cover_letter
-                ? <pre>{applyRow.cover_letter}</pre>
-                : applyRow.cover_pdf_url
-                ? <p className="cover-pdf-note">Cover letter is available as PDF (see link above).</p>
-                : <em>No cover letter generated yet.</em>
-              }
             </div>
           )}
         </div>
@@ -446,20 +432,51 @@ export function JobCard({ mode, row, onStatsUpdate, onRemove, onDataChange }: Jo
           ))}
         </div>
 
-        {/* Change 2: quick-fill chips — shown when any label is set */}
         {label && (
           <div className="note-chips">
-            {NOTE_CHIPS.map(chip => (
-              <button
-                key={chip}
-                className={`chip${notes === chip ? ' active' : ''}`}
-                onClick={() => handleChip(chip)}
-                disabled={saving}
-                title={label === 'no' && mode === 'apply' ? 'Fill note and mark Not Applied' : 'Fill note'}
-              >
-                {chip}
-              </button>
-            ))}
+            {label === 'no' && mode === 'apply' ? (
+              <>
+                <div className="chips-label">Select reason(s):</div>
+                <div className="chips-multi">
+                  {NO_CHIPS.map(chip => (
+                    <button
+                      key={chip}
+                      className={`chip${selectedChips.includes(chip) ? ' active' : ''}`}
+                      onClick={() =>
+                        setSelectedChips(prev =>
+                          prev.includes(chip)
+                            ? prev.filter(c => c !== chip)
+                            : [...prev, chip]
+                        )
+                      }
+                      disabled={saving}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="dismiss-btn"
+                  onClick={handleDismissNo}
+                  disabled={saving || selectedChips.length === 0}
+                >
+                  Dismiss{selectedChips.length > 0
+                    ? ` (${selectedChips.length} reason${selectedChips.length > 1 ? 's' : ''})`
+                    : ''}
+                </button>
+              </>
+            ) : (
+              YES_CHIPS.map(chip => (
+                <button
+                  key={chip}
+                  className={`chip${notes === chip ? ' active' : ''}`}
+                  onClick={() => handleChip(chip)}
+                  disabled={saving}
+                >
+                  {chip}
+                </button>
+              ))
+            )}
           </div>
         )}
 

@@ -15,6 +15,12 @@ const TABS = [
 export function App() {
   const [activeTab, setActiveTab] = useState('apply');
   const [stats, setStats] = useState<Stats | null>(null);
+  const [tabRefreshKeys, setTabRefreshKeys] = useState({ apply: 0, hard: 0, soft: 0 });
+
+  function handleTabChange(tab: string) {
+    setActiveTab(tab);
+    setTabRefreshKeys(k => ({ ...k, [tab]: k[tab as keyof typeof k] + 1 }));
+  }
 
   const fetchStats = useCallback(() => {
     getStats().then(setStats).catch(console.error);
@@ -39,12 +45,12 @@ export function App() {
         )}
       </header>
 
-      <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
+      <Tabs tabs={TABS} active={activeTab} onChange={handleTabChange} />
 
       <main className="tab-content">
-        {activeTab === 'apply' && <ApplyQueue onStatsUpdate={setStats} />}
-        {activeTab === 'hard' && <HardRejections onStatsUpdate={setStats} />}
-        {activeTab === 'soft' && <SoftRejections onStatsUpdate={setStats} />}
+        {activeTab === 'apply' && <ApplyQueue onStatsUpdate={setStats} refreshKey={tabRefreshKeys.apply} />}
+        {activeTab === 'hard' && <HardRejections onStatsUpdate={setStats} refreshKey={tabRefreshKeys.hard} />}
+        {activeTab === 'soft' && <SoftRejections onStatsUpdate={setStats} refreshKey={tabRefreshKeys.soft} />}
       </main>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getApplyQueue } from '../api';
 import type { ApplyQueueRow, Stats } from '../api';
+import { DetailPanel } from '../components/DetailPanel';
 import { JobCard } from '../components/JobCard';
 
 type StatusFilter = 'pending' | 'apply_later' | 'applied' | 'not_applied' | 'all';
@@ -17,12 +18,14 @@ const STATUS_LABELS: Record<StatusFilter, string> = {
 
 interface Props {
   onStatsUpdate: (s: Stats) => void;
+  refreshKey?: number;
 }
 
-export function ApplyQueue({ onStatsUpdate }: Props) {
+export function ApplyQueue({ onStatsUpdate, refreshKey }: Props) {
   const [rows, setRows] = useState<ApplyQueueRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
   const [bucketFilter, setBucketFilter] = useState<BucketFilter>('all');
@@ -31,15 +34,26 @@ export function ApplyQueue({ onStatsUpdate }: Props) {
   useEffect(() => {
     setLoading(true);
     getApplyQueue()
-      .then(setRows)
+      .then(data => {
+        setRows(data);
+        setSelectedJobId(null);
+      })
       .catch(e => setError((e as Error).message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshKey]);
 
   if (loading) return <div className="loading">Loading…</div>;
   if (error) return <div className="tab-error">Error: {error}</div>;
 
   const sources = Array.from(new Set(rows.map(r => r.source))).sort();
+
+  const statusCounts: Record<StatusFilter, number> = {
+    pending: rows.filter(r => r.application_status == null && r.label !== 'no').length,
+    apply_later: rows.filter(r => r.application_status === 'apply_later').length,
+    applied: rows.filter(r => r.application_status === 'applied').length,
+    not_applied: rows.filter(r => r.label === 'no' || r.application_status === 'skipped').length,
+    all: rows.length,
+  };
 
   const filtered = rows.filter(row => {
     if (bucketFilter !== 'all' && row.bucket !== bucketFilter) return false;
@@ -58,9 +72,14 @@ export function ApplyQueue({ onStatsUpdate }: Props) {
     }
   });
 
+  const selectedRow = selectedJobId
+    ? rows.find(r => r.job_id === selectedJobId) ?? null
+    : null;
+
   return (
-    <div>
-      <div className="filter-bar">
+    <div className="tab-body">
+      <div className="tab-main">
+        <div className="filter-bar">
         <div className="filter-group">
           <span className="filter-label">Status:</span>
           {(['pending', 'apply_later', 'applied', 'not_applied', 'all'] as StatusFilter[]).map(s => (
@@ -69,7 +88,7 @@ export function ApplyQueue({ onStatsUpdate }: Props) {
               className={`filter-btn${statusFilter === s ? ' active' : ''}`}
               onClick={() => setStatusFilter(s)}
             >
-              {STATUS_LABELS[s]}
+              {STATUS_LABELS[s]} <span className="filter-count">({statusCounts[s]})</span>
             </button>
           ))}
         </div>
@@ -97,26 +116,36 @@ export function ApplyQueue({ onStatsUpdate }: Props) {
             </button>
           ))}
         </div>
+        </div>
+
+        <div className="card-count">{filtered.length} jobs</div>
+
+        {filtered.map(row => (
+          <JobCard
+            key={`${row.job_id}-${row.run_id}`}
+            mode="apply"
+            row={row}
+            onStatsUpdate={onStatsUpdate}
+            selected={selectedJobId === row.job_id}
+            onSelect={() => setSelectedJobId(prev => prev === row.job_id ? null : row.job_id)}
+            onDataChange={() => {
+              getApplyQueue()
+                .then(data => { setRows(data); })
+                .catch(e => setError((e as Error).message));
+            }}
+          />
+        ))}
+
+        {filtered.length === 0 && <div className="empty">No jobs match this filter.</div>}
       </div>
 
-      <div className="card-count">{filtered.length} jobs</div>
-
-      {filtered.map(row => (
-        <JobCard
-          key={`${row.job_id}-${row.run_id}`}
+      {selectedRow && (
+        <DetailPanel
+          row={selectedRow}
           mode="apply"
-          row={row}
-          onStatsUpdate={onStatsUpdate}
-          onDataChange={() => {
-            getApplyQueue().then(setRows).catch(e => setError((e as Error).message));
-          }}
-          onRemove={(jobId, runId) =>
-            setRows(prev => prev.filter(r => !(r.job_id === jobId && r.run_id === runId)))
-          }
+          onClose={() => setSelectedJobId(null)}
         />
-      ))}
-
-      {filtered.length === 0 && <div className="empty">No jobs match this filter.</div>}
+      )}
     </div>
   );
 }
