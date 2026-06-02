@@ -1,14 +1,115 @@
-# THE BIBLE — v12 (2026-05-27)
+# THE BIBLE — v13 (2026-06-02)
 
 > Project: **job-hunter** — automated job discovery + filter + score + judge + cover letter pipeline for Sarath Konuru.
 >
-> This is the authoritative document. Supersedes v11 (2026-05-27), v10 (2026-05-27), v9 (2026-05-26), v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
+> This is the authoritative document. Supersedes v12 (2026-05-27), v11 (2026-05-27), v10 (2026-05-27), v9 (2026-05-26), v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
 >
 > Read this before writing code. Update this file when module status changes.
 >
 > Bible file policy: keep only two Bible files in the repo. `THE-BIBLE-v1.md`
 > is the original architecture snapshot. `THE-BIBLE-LATEST.md` is the single
 > rolling source of truth. Do not create per-version Bible archives.
+
+---
+
+## What changed since v12
+
+v13 is a quality, correctness, and reliability update. Twenty issues were identified through a
+corpus-level audit of 84 production meta.json files, log analysis across all pipeline runs, and
+deep code inspection. All changes ship together; a full batch run is required to measure the
+"after" metrics.
+
+**Wave 1 — Judge prompt: richer `frame_as`, banned phrases, fit test (Issues 3, 4, 6)**
+`src/judge/prompt.ts` received three coordinated changes. The `frame_as` field definition was
+expanded from "a 1-sentence concrete framing" to a 2–3 sentence structured brief specifying
+(1) role context at `target_role`, (2) adjacent evidence from canonical bullets, and (3) the
+execution angle. One-sentence compression was the root cause of both hedge-poisoned `frame_as`
+strings (17 confirmed in 84-job corpus) and the judge's excessive conservatism on `fabricate`
+directives (only 5 fabricates vs 70 acknowledges across 84 jobs). The `frame_as` guidance now
+includes the full banned phrase family so the judge cannot emit hedging language there. The
+output format example was updated to show a multi-sentence brief (LLMs anchor on examples).
+The `fabricate` plausibility test was rewritten from a detectability test ("would a cold HM
+notice?") to a fit test ("do the canonical bullets at `target_role` provide enough contextual
+fit?"). The old test was instructing the judge to protect against getting caught, not to maximise
+resume quality.
+
+**Wave 2 — Generator voice and positioning (Issue 2)**
+`src/resume-generator/prompt.ts` gained a `VOICE AND POSITIONING` section before the existing
+`BULLET QUALITY GATE`. The section requires confident, achievement-oriented bullets, strong
+action verbs, and result endings. The SKILL.md manual mode has always had this instruction;
+the pipeline prompt was missing it entirely. Prompt also gained an explicit prohibition on
+nested `\textbf{}` inside another `\textbf{}` (compile fix, see Wave 5).
+
+**Wave 3 — Swap-aware SKILLS atomicity and scoped cover-letter experience block (Issues 1, 8, 9)**
+`src/shared/utils.ts` (new file) adds `escapeRegexStr`, `applyTechSwaps`, and
+`applyScopedTechSwaps`. The last function applies each swap only within the employer section
+matching `target_role`; unscoped swaps apply globally. `replaceSkillsSection` in
+`src/resume-generator/index.ts` now accepts `techSwaps` and applies them deterministically to
+canonical SKILLS before restoring the section — preserving hallucination protection while
+allowing approved judge swaps to survive. The call site passes `input.tech_swaps`. The
+`skillsSectionEqual` helper in `scripts/audit-artifacts.ts` was updated to apply swaps to
+canonical before comparing (and uses `normalizeBlock` not raw `.trim()`), so correctly swapped
+SKILLS sections no longer trigger false "SKILLS polluted" flags. `coverLetterInputFromBundle`
+in `src/shared/artifact-bundle.ts` now calls `applyScopedTechSwaps` on the experience block
+before passing it to the cover letter generator, ensuring the cover letter LLM receives
+post-swap tech names rather than requiring it to reconcile two contradictory inputs.
+
+**Wave 4 — Jaccard attribution detection replaces 5-word run matching (Issue 7)**
+`src/risk-map/audit.ts::hasOverlap` was replaced with stop-word-filtered Jaccard content-word
+matching at threshold 0.45. The old 5-word consecutive run heuristic required near-verbatim
+bullet preservation that LLMs never produce (they paraphrase by design). Result: 30/84 jobs
+(36%) were flagged `resume_attribution_overrun` — almost certainly over-counted. The Jaccard
+approach checks whether a generated bullet shares ≥45% of unique content words with any
+canonical bullet at the same role. The overrun threshold (`fab > 3`) is intentionally unchanged
+pending a clean batch run to set it based on real detection data.
+
+**Wave 5 — PDF compile failures fixed (Issue 11)**
+`boldMetrics` in `src/resume-generator/index.ts` regex changed from `[^{}]*` to
+`(?:[^{}]|\{[^{}]*\})*`, fixing Class A failures where the LLM emitted nested
+`\textbf{\textbf{DB}}` causing orphaned braces. `src/resume-generator/saver.ts` now deletes any
+stale `resume.pdf` before compile so a PDF produced by the current pdflatex run counts as
+success even when pdflatex exits nonzero (nonstopmode Class B: unbalanced `\end{itemize}` writes
+a valid PDF but exits nonzero).
+
+**Wave 6 — Style lint expansion (Issue 10)**
+`src/shared/style-lint.ts` gained three patterns with zero false-positive risk:
+`aligning with your need for`, `as required by the role`, `gained hands-on exposure`. These
+appear in no legitimate professional writing and should be caught at the runtime gate, not only
+at the prompt level.
+
+**Wave 7 — Resilient generation: transient API errors and stream abort retry (Issues 15, 16)**
+`src/cover-letter/generator.ts` gained a separate transient-error retry counter. Empty content,
+terminated streams, and OpenRouter 5xx errors now use `apiErrorCount` (cap: 2, backoff: 3s/6s)
+and do not consume content-quality retry attempts. This fixes the confirmed pattern where
+`cyber-1-armor` failed on two consecutive attempts with `OpenRouter returned empty content`
+then succeeded on the third. `src/resume-generator/generator.ts` gained a single silent 5s
+retry for premium model stream aborts (`TypeError: terminated`) before falling back to Flash —
+targeting the pattern where OpenRouter slowness killed a stream at the 300s timeout.
+
+**Wave 8 — Risk map: correctness, coverage, and noise reduction (Issues 5, 13, 14, 19, 20)**
+Four coordinated changes to `config/tech-equivalence-risk-map.json`:
+(a) 13 Phase-8 entries were originally mutated from `adjacent` to `direct_equivalent`; the fix
+restores parallel `adjacent` + `direct_equivalent` entries so both indexes carry both
+relationship types and `lookupJdSkill` returns the best by lowest distance. (b) 28 new
+`direct_equivalent` entries added for terms appearing in 2025–2026 Java backend JDs: RDS, Aurora,
+ECS, ECR, CloudFront, Azure SQL, ACR, Azure Container Registry, AAD, Azure Active Directory, Key
+Vault, Pub/Sub, Cloud Run, GitLab CI, CircleCI, ArgoCD, Grafana, OpenTelemetry, Hibernate (short
+name), MariaDB, SNS, Postman, gRPC, OWASP, Jira, Confluence, Terraform, SNS. All entries carry
+`safe_language`, `disallowed_claims`, and `interview_defense`. (c) `requires_human_review` set to
+`false` on 148 `jd_target_index` entries (139 in `resume_source_index`) that are pure naming
+variants, full product names, or obvious synonyms generating pure badge noise. 35 entries kept
+`true` for concept-to-tool mappings where interview depth questions are plausible (EKS, Memcached,
+Jest, Flowable, Activiti, ETL scripting/Python, etc.). (d) New migration
+`migrations/011_ledger_truth_distance_numeric.sql` changes `fabrication_ledger.truth_distance_score`
+from `INTEGER` to `NUMERIC`, required because fractional Phase-8 scores (0.05–0.2) caused insert
+errors on the existing integer column.
+
+**Validation for v13.**
+`npm run build` passed. `npm test` passed: 24 test files passed, 1 skipped; 297 tests passed,
+8 skipped. `npm run audit:artifacts` passed with `skills_pollution: 0`. Small batch
+(`EXTRACT=1 SOURCE=jobright_api MAX=5`) completed. Single-job run after migration 011 confirmed
+fractional ledger inserts succeed. Full batch metrics pending — "after" column in the metrics
+table requires a fresh ≥20-job run.
 
 ---
 
@@ -520,9 +621,10 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 | Extractor | ✅ Green (strict schema + segmentation) | validation + segmentation coverage |
 | Scorer (5 components + bge embeddings) | ✅ Green | 44 tests |
 | LLM judge | ✅ Green (v5 additive planner + v10 hard blockers) | schema + prompt coverage |
-| Resume generator | ✅ Green (v5 consumer + v10 hard guards) | prompt, gap-directive, SKILLS atomicity coverage |
-| Cover letter generator | ✅ Green (v5 consumer + v10 hard guards) | prompt, truncation, style/directive coverage |
-| Risk map / audit | ✅ Green (role-attribution audit + overrun flag) | fabrication ledger + overrun flag coverage |
+| Resume generator | ✅ Green (v5 consumer + v13 voice/swap/compile guards) | prompt, gap-directive, SKILLS atomicity, swap-aware coverage |
+| Cover letter generator | ✅ Green (v5 consumer + v13 transient retry + swap experience block) | prompt, truncation, style/directive, transient retry coverage |
+| Risk map / audit | ✅ Green (Jaccard detection + expanded map) | fabrication ledger, overrun flag, Jaccard overlap, scoped swap coverage |
+| Shared utils | ✅ Green (new: applyTechSwaps, applyScopedTechSwaps) | scoped/unscoped swap tests |
 | Dedup module (Redis + pgvector) | ✅ Green | 7 tests |
 | Storage (Postgres + pgvector) | ✅ Green | 14 tests |
 | Storage v4.1 hardening | ✅ Applied | saveJob crash fixed, formatErr, markStorageDisabled |
@@ -534,7 +636,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 | Docker Compose (Postgres + Redis) | ✅ Built | `docker compose up -d` |
 | **Review UI (M9)** | ✅ **Built** | **Express API + Vite/React SPA, port 3001** |
 
-**Test totals: 279 tests green, 8 skipped** across 20 passing test files. UI has no automated tests (manual verification only per spec).
+**Test totals: 297 tests green, 8 skipped** across 24 passing test files. New test files cover shared utils (scoped swap), cover letter transient retry, skills-atomicity swap path, and gap-directive rendering updates. UI has no automated tests (manual verification only per spec).
 
 ### Designed but not built
 
@@ -613,6 +715,21 @@ LLM judge stage. Inputs: structured job fields + score breakdown (NOT raw JD tex
 
 Backward-compat rule: if `gap_directives` is missing or empty, generators behave exactly like v4. If a tech swap omits `target_role`, the swap remains unscoped.
 
+**v13 judge prompt changes (prompt only, no schema change):**
+- `frame_as` expanded from 1-sentence to 2–3 sentence structured brief: (1) role context at
+  `target_role`, (2) adjacent evidence from canonical bullets, (3) execution angle. The
+  1-sentence constraint was the root cause of both hedge-poisoned `frame_as` strings and
+  excessive conservatism on `fabricate` directives.
+- Banned phrase family added to `frame_as` guidance — judge may not emit hedging language
+  (foundational knowledge of, analogous to, comparable to, transferable skills, etc.) in
+  `frame_as`. The generator's style linter would reject these if they reached the output.
+- Output format example updated to show a multi-sentence `frame_as` brief.
+- Fabricate plausibility test rewritten: old test was "would a cold HM notice?" (detectability);
+  new test is "do the canonical bullets provide enough contextual fit?" (fit). The old test
+  caused 70 `acknowledge` vs 5 `fabricate` across 84 jobs. `acknowledge` directives are silently
+  dropped from the resume prompt — they only reach the cover letter. 70 acknowledges = zero
+  resume impact.
+
 Two retry layers remain: HTTP-level (1 retry on network error, 2s backoff) and validation-level (1 retry on Zod failure, 2s backoff). After the validation retry fails, v10 writes the raw payload plus schema error to `output/logs/judge_failures/{run_id}_{job_id}.json`; the capture path is best-effort and never crashes the pipeline.
 
 v10 judge hard blockers: prior-employer-only restrictions (for example `Ex-American Express only`) are WEAK unless the employer appears in the work-history block; active credentials the candidate does not have (Top Secret clearance, Series 7, CPA, PE license, etc.) are also WEAK. Fabricate directives must pick the role with strongest contextual fit, not merely the newest role.
@@ -642,6 +759,15 @@ v10 consistency and safety additions:
 - `looksTruncated()` retries bodies that do not end in sentence punctuation and fails cleanly if the retry is still truncated
 - `stripDashes()` removes em/en dash forms before LaTeX assembly
 - `hasBannedStylePhrase()` rejects bridge phrases such as "analogous to", "demonstrating transferable", "translate directly to", and "comparable to"
+
+**v13 cover-letter additions:**
+- Experience block passed to cover letter generator is now swap-aware: `applyScopedTechSwaps`
+  applies each swap only within the employer section matching `target_role`; unscoped swaps
+  apply globally. Eliminates the LLM receiving contradictory inputs (pre-swap experience block
+  vs `ACTIVE_TECH_SWAPS` instruction).
+- Transient API errors (empty content, terminated stream, OpenRouter 5xx) use a separate retry
+  counter and do not consume content-quality retry attempts. Confirmed fix for the pattern where
+  two consecutive `OpenRouter returned empty content` errors exhausted the retry budget.
 
 Live v10 validation (2026-05-27, `SOURCE=jobright_api MAX=10`) wrote 5 cover letters, 370–503 words, with `cover_letter_gen_failed=0` and `cover_letter_length_off=0`.
 
@@ -676,6 +802,19 @@ v10 hard guards:
   back to Flash on any premium failure. Post-processing also bolds numeric
   outcomes inside `\item` lines before save/compile.
 
+**v13 resume-generator additions:**
+- `VOICE AND POSITIONING` section added to `TOTAL_MODE_PROMPT`: never undersell, reframe tasks
+  as achievements, lead with strong action verbs, end every bullet with result/impact.
+- `replaceSkillsSection()` is now swap-aware: accepts optional `techSwaps`, applies them
+  deterministically to canonical SKILLS before restoring the section. Canonical is still the
+  hallucination-protection base; approved judge swaps now survive post-processing.
+  Call site passes `input.tech_swaps`.
+- `boldMetrics` regex fixed to handle one level of nested `\textbf{}` braces, eliminating
+  compile failures caused by LLM-generated `\textbf{\textbf{content}}`.
+- Generator prompt explicitly forbids nested `\textbf{}` inside another `\textbf{}`.
+- Premium model stream abort now retries once silently (5s backoff) before falling back to
+  Flash — handles transient OpenRouter slowness killing the stream at the 300s timeout.
+
 ### `dedup/` — BUILT
 
 Two complementary mechanisms.
@@ -706,6 +845,7 @@ Postgres + pgvector persistence.
 - `migrations/008_visa_enum.sql` — migrates `jobs.visa_sponsorship` from boolean-era semantics to the five-state text enum (`offered`, `denied`, `ead_eligible`, `payment_model_only`, `unmentioned`) and adds `jobs.visa_quote`.
 - `migrations/009_cover_letter_artifact_columns.sql` — adds missing cover-letter artifact columns on `cover_letters` for clean installs (`tex_path`, `pdf_path`, `meta_path`, `prompt_sha`, `canonical_sha`, token counts, `compile_status`, `generated_by`, `flags`).
 - `migrations/010_ledger_run_id_text.sql` — aligns `fabrication_ledger.run_id` from `UUID` to `TEXT` to match `runs.run_id` and support `manual-...` run ids.
+- `migrations/011_ledger_truth_distance_numeric.sql` — changes `fabrication_ledger.truth_distance_score` from `INTEGER` to `NUMERIC`, required for fractional risk-map truth-distance scores.
 - `test/persist.test.ts` — 14 tests. All pass against updated `finishRun` — disabled-state tests don't touch SQL, compile-time enforcement handles the new fields at the call site.
 
 ### `risk-map/` — BUILT (v2 / Bug F hardening)
@@ -725,6 +865,34 @@ v10 adds `applyResumeAttributionOverrunFlag()`: if
 `risk_summary.counts.fabricated_role_attribution > 3`, resume artifact flags get
 `resume_attribution_overrun`. The resume still writes to disk; the flag is a
 soft gate for human review before applying.
+
+**v13 risk-map changes:**
+- `hasOverlap` replaced with Jaccard content-word matching (threshold 0.45, stop-word filtered).
+  The old 5-word consecutive run check over-counted rewritten bullets as fabricated because
+  LLMs paraphrase. 30/84 jobs (36%) were flagged `resume_attribution_overrun` — almost certainly
+  inflated. Jaccard handles paraphrasing correctly. Overrun threshold (`fab > 3`) unchanged
+  pending first clean batch to calibrate from real detection data.
+- `requires_human_review` set to `false` on 148 `direct_equivalent` entries that are pure naming
+  variants or obvious synonyms (S3/AWS S3, React/ReactJS, REST APIs/REST, Version control/Git,
+  etc.). 35 entries kept `true` for concept-to-tool mappings. Reduces yellow badge noise from
+  every swap to only genuinely interview-questionable mappings.
+- 13 Phase-8 entries restored to additive structure: both `adjacent` and `direct_equivalent`
+  entries now coexist in both indexes, so `lookupJdSkill` returns the best by distance.
+- 28 new `direct_equivalent` entries for 2025–2026 Java JD vocabulary: RDS, Aurora, ECS, ECR,
+  CloudFront, Azure SQL, ACR, Azure Container Registry, AAD, Azure Active Directory, Key Vault,
+  Pub/Sub, Cloud Run, GitLab CI, CircleCI, ArgoCD, Grafana, OpenTelemetry, Hibernate, MariaDB,
+  SNS, Postman, gRPC, OWASP, Jira, Confluence, Terraform, SNS. Total `direct_equivalent`
+  entries: 200 (was 172).
+
+### `shared/` — BUILT
+
+**v13 shared additions:**
+- `src/shared/utils.ts` (new file): `escapeRegexStr`, `applyTechSwaps` (word-boundary-safe
+  lookarounds, handles multi-word tech names), `applyScopedTechSwaps` (applies each swap only
+  within the employer section containing `target_role`; unscoped swaps apply globally).
+- `src/shared/style-lint.ts`: three new banned patterns added — `aligning with your need for`,
+  `as required by the role`, `gained hands-on exposure`. Zero false-positive risk; these phrases
+  never appear in legitimate professional writing.
 
 ### `ui-server` + `ui/` — BUILT (new in v7)
 
@@ -877,6 +1045,15 @@ All previous improvements (1–10) carried forward from v5.
 ### Open — calibration
 
 2. **Scoring not calibrated on real data.** Weights (0.35/0.25/0.15/0.15/0.10) and threshold (0.50) are designed values. M8 is now done — real run history is accumulating. After ~50 labeled jobs from unattended runs, manually rank "would apply / maybe / no" and tune against ground truth. This is now unblocked.
+
+3. **Attribution overrun threshold needs recalibration after v13 Jaccard fix.**
+`src/risk-map/audit.ts` threshold `fab > 3` was calibrated against the old
+5-word-run detection, which over-counted rewritten bullets as fabricated. After
+running a full batch with the new Jaccard detection, inspect the distribution
+of `fabricated_role_attribution` counts in `meta.json` for jobs without
+`pdf_compile_failed` or `resume_gen_failed`. Set the threshold at the 80th
+percentile of those counts. Expected new threshold: somewhere in the 5–8 range.
+Do not change the threshold before seeing real data.
 
 ### Open — operational reminders
 
@@ -1207,6 +1384,10 @@ redis-cli --scan --pattern 'orchestrator:lock:*'
 - **Time-decayed sort** — Apply Queue sort order: jobs bucketed by age (< 24h, 24–72h, > 72h), sorted by score DESC within each bucket. Ensures freshest high-scoring jobs appear first.
 - **Banned bridge phrase** — tailoring language that reveals a fabricated or adjacent claim, such as "analogous to", "demonstrating transferable", "translate directly to", or "comparable to". Runtime style lint rejects these.
 - **SKILLS atomicity** — generated resumes must preserve the canonical SKILLS section exactly. v10 enforces this by replacing the generated SKILLS block with the canonical block before save.
+- **`frame_as`** — the 2–3 sentence brief in a `gap_directive` that tells the resume/cover-letter generators the role context, adjacent evidence, and execution angle for a fabricate or reframe directive. Formerly a 1-sentence string; expanded in v13 to prevent hedge-phrase contamination and under-specification.
+- **`applyScopedTechSwaps`** — shared utility that applies tech swaps to a plain-text experience block with `target_role` scoping. Scoped swaps (target_role non-null) apply only within the employer section containing the target_role string; unscoped swaps apply globally.
+- **Jaccard content-word matching** — the v13 replacement for the 5-word consecutive run heuristic in `auditRoleAttribution`. Measures whether a generated bullet shares ≥45% of unique non-stop content words with any canonical bullet at the same role. Handles LLM paraphrasing correctly.
+- **`requires_human_review`** — risk map flag on each `direct_equivalent` entry. When `true`, any resume containing a claim graded to that entry generates a yellow badge in the UI. Set to `false` for pure naming variants (S3/AWS S3, React/ReactJS, etc.) and `true` for concept-to-tool mappings where interview depth questions are plausible (EKS/Kubernetes, Memcached/Redis, ETL scripting/Python, etc.).
 
 ---
 
@@ -1225,6 +1406,7 @@ redis-cli --scan --pattern 'orchestrator:lock:*'
 - `migrations/004_ui_application_tracking.sql` — application_status + applied_at + apply_later constraint
 - `migrations/007_fabrication_ledger.sql` — fabrication ledger table
 - `migrations/008_visa_enum.sql` — five-state visa enum migration
+- `migrations/011_ledger_truth_distance_numeric.sql` — `fabrication_ledger.truth_distance_score` INTEGER → NUMERIC (required for fractional risk-map truth-distance scores)
 - `docker-compose.yml` — local services
 
 ---
@@ -1405,3 +1587,52 @@ Observed trigger: the `deepseek/deepseek-v4-pro` run
 Flash run produced 5 resumes and 6 cover letters. The likely Pro failure was
 valid LaTeX wrapped in extra model prose, combined with old validation that
 required the response to start exactly at `\documentclass`.
+
+### 18.7 — v13 quality, correctness, and reliability update (2026-06-02)
+
+Twenty issues identified through 84-job corpus analysis, log analysis, and code audit.
+Full issue list and root causes in `SESSION-HANDOFF.md` (2026-06-02).
+
+**Judge prompt (Issues 3, 4, 6):**
+- `frame_as` expanded from 1-sentence to 2–3 sentence structured brief (role context +
+  adjacent evidence + execution angle). Root cause of both banned-phrase contamination in
+  `frame_as` and excessive `acknowledge` output (70 acknowledges vs 5 fabricates / 84 jobs).
+- Output format example updated to multi-sentence brief — LLMs anchor on examples.
+- Banned phrase list added to `frame_as` guidance.
+- Fabricate plausibility test rewritten from detectability to fit test.
+
+**Resume generator (Issues 1, 2, 11):**
+- `VOICE AND POSITIONING` section added to `TOTAL_MODE_PROMPT`.
+- `replaceSkillsSection` now swap-aware — accepts `techSwaps`, applies to canonical before
+  restoring. Resolves active conflict where prompt instructed swaps in SKILLS but
+  `replaceSkillsSection` immediately overwrote them.
+- `boldMetrics` nested-brace regex fixed (Class A compile failures).
+- Prompt forbids nested `\textbf{}`.
+- Saver deletes stale PDF before compile (Class B: valid PDFs from nonstopmode runs).
+- Premium stream abort retries once (5s) before fallback.
+
+**Cover letter (Issues 9, 15):**
+- Experience block now receives scoped tech swaps before passing to generator.
+- Transient API errors (empty content, 5xx, terminated) use separate retry counter.
+
+**Shared (Issues 7, 8, 10):**
+- `src/shared/utils.ts` new: `escapeRegexStr`, `applyTechSwaps`, `applyScopedTechSwaps`.
+- `hasOverlap` in `audit.ts` replaced with Jaccard content-word matching (0.45 threshold).
+- `skillsSectionEqual` in `audit-artifacts.ts` uses `normalizeBlock` + swap-aware comparison.
+- `style-lint.ts` gained 3 new unambiguous banned patterns.
+
+**Risk map (Issues 5, 13, 14, 19, 20):**
+- 28 new `direct_equivalent` entries for 2025–2026 JD vocabulary. Total DE: 200.
+- 13 Phase-8 entries restored to additive structure (adjacent + direct_equivalent coexist).
+- 148 `requires_human_review` entries set to `false` (pure naming variants, full names,
+  obvious synonyms). 35 kept `true`. Reduces yellow badge noise dramatically.
+- Migration `011_ledger_truth_distance_numeric.sql`: `truth_distance_score` INTEGER → NUMERIC.
+
+**Metrics at v13 baseline (84-job corpus, pre-v13):**
+- `tech_swaps` fired: 4/84 jobs (5%)
+- `fabricate` directives: 5 total
+- `acknowledge` directives: 70 total
+- `resume_attribution_overrun` rate: 36% (30/84)
+- `pdf_compile_failed`: 4
+- `frame_as` banned phrase hits: 17
+- Expected to improve substantially on first v13 batch run.

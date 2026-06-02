@@ -14,6 +14,12 @@ description: >
   "update tech stack", "rmod", "total". Always propose changes and wait for
   explicit approval before applying.
 ---
+
+> **Pipeline note:** This skill is used only in manual chat-based tailoring (when you
+> type `total` or `rmod` in Claude chat). It is NOT loaded or used by the pipeline.
+> The pipeline's `src/resume-generator/prompt.ts` (`TOTAL_MODE_PROMPT`) replaced the
+> old SKILL.md + PIPELINE_OVERRIDE chain in v12. Keep this file for manual tailoring
+> use; do not modify it expecting pipeline behavior to change.
  
 # Resume Tailor
  

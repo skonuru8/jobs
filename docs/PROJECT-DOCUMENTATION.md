@@ -111,7 +111,8 @@ Annotated tree (key paths only):
 │   ├── 007_fabrication_ledger.sql       # fabrication risk audit ledger
 │   ├── 008_visa_enum.sql                # visa sponsorship enum migration
 │   ├── 009_cover_letter_artifact_columns.sql # missing cover artifact cols for fresh DBs
-│   └── 010_ledger_run_id_text.sql       # ledger run_id aligned to TEXT
+│   ├── 010_ledger_run_id_text.sql       # ledger run_id aligned to TEXT
+│   └── 011_ledger_truth_distance_numeric.sql # ledger score INTEGER → NUMERIC
 ├── scripts/
 │   ├── run-pipeline.ts            # main 19-stage pipeline runner
 │   ├── ui-server.ts               # Express 5 API + static UI server (port 3001)
@@ -594,7 +595,7 @@ Stages (high level):
 14. **Semantic dedup**: pgvector cosine check to avoid cross-site duplicates.
 15. **LLM judge**: verdict STRONG/MAYBE/WEAK.
 16. **Bucket routing**: COVER_LETTER / RESULTS / REVIEW_QUEUE / ARCHIVE.
-17. **Cover letter generation**: for COVER_LETTER and some REVIEW_QUEUE jobs; write to disk.
+17. **Cover letter generation**: for COVER_LETTER and some REVIEW_QUEUE jobs; write to disk. Experience block passed to cover letter generator is swap-aware (scoped per target_role). Transient API errors use a separate retry counter that does not consume content-quality retries.
 18. **Persist**: write DB records for jobs, filter_results, scores, judge_verdicts, cover_letters, seen_jobs; mark Redis seen.
 19. **Finish run**: update run stats, extraction attempt/success counts.
 
@@ -629,6 +630,9 @@ This section gives the concrete “where and how” for each stage: file/functio
   - migrations runner: `src/storage/migrate.ts` → `runMigrations()`
   - run record: `src/storage/persist.ts` → `saveRun()`
 - **Side effects**: Postgres schema updated (idempotent) and `runs` row inserted.
+- **Migration note**: `migrations/011_ledger_truth_distance_numeric.sql` changes
+  `fabrication_ledger.truth_distance_score` from INTEGER to NUMERIC, required
+  for fractional truth-distance scores (0.05–0.2) introduced in the risk map expansion.
 - **Failure mode**: on connect/query failure, pipeline logs and continues (persistence disabled).
 
 #### Stage 2 — Dedup init (Redis)
@@ -733,6 +737,8 @@ This section gives the concrete “where and how” for each stage: file/functio
   - LLM client: `src/cover-letter/client.ts`
   - generator: `src/cover-letter/generate.ts`
   - resume loader: `src/cover-letter/resume.ts`
+- **Resume generator note**: `replaceSkillsSection()` is now swap-aware: accepts tech swaps from the judge and applies them to canonical SKILLS before restoring the section. Canonical remains the hallucination-protection base; approved judge swaps survive post-processing. The `VOICE AND POSITIONING` section was added to `TOTAL_MODE_PROMPT`.
+- **Cover-letter note**: the experience block is swap-aware using scoped `target_role` swaps, and transient API errors retry separately from content-quality failures.
 - **When**:
   - Always for bucket `COVER_LETTER`
   - Also for `REVIEW_QUEUE` jobs with score ≥ `llm.cover_letter.review_queue_threshold` (default 0.60)
