@@ -42,7 +42,16 @@ function readCoverLetter(filePath: string | null): string | null {
 async function main() {
   const pool = getPool();
 
-  for (const mig of ['004_ui_application_tracking.sql', '005_tailored_artifacts.sql', '006_consolidate_artifacts.sql', '007_fabrication_ledger.sql']) {
+  for (const mig of [
+    '004_ui_application_tracking.sql',
+    '005_tailored_artifacts.sql',
+    '006_consolidate_artifacts.sql',
+    '007_fabrication_ledger.sql',
+    '008_visa_enum.sql',
+    '009_cover_letter_artifact_columns.sql',
+    '010_ledger_run_id_text.sql',
+    '011_ledger_truth_distance_numeric.sql',
+  ]) {
     const migrationPath = path.join(REPO_ROOT, 'migrations', mig);
     if (fs.existsSync(migrationPath)) {
       await pool.query(fs.readFileSync(migrationPath, 'utf-8'));

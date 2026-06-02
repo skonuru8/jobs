@@ -58,7 +58,9 @@ export async function generateResumeTex(
 
   for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
     const attempt = attempts[attemptIndex];
-    const attemptsForModel = usePremium && attempt.model === config.premium_model ? 1 : maxPerModel;
+    const attemptsForModel = usePremium && attempt.model === config.premium_model
+      ? attempt.stream ? 2 : 1
+      : maxPerModel;
     for (let i = 0; i < attemptsForModel; i++) {
       const premiumTag = usePremium && attempt.model === config.premium_model
         ? ` (premium: score=${input.score.total.toFixed(3)} ${input.judge_json.verdict})`
@@ -122,16 +124,22 @@ export async function generateResumeTex(
         };
       } catch (e) {
         lastErr = String(e);
-        logPremiumFailure(
-          usePremium,
-          attempt.model,
-          config.premium_model,
-          lastErr,
-          i < attemptsForModel - 1,
-          attempts[attemptIndex + 1]?.model,
-        );
-        if (i < attemptsForModel - 1) {
-          await new Promise(res => setTimeout(res, 2000));
+        const isStreamAbort = lastErr.includes("terminated") || lastErr.includes("aborted");
+        if (isStreamAbort && attempt.stream && i === 0) {
+          console.warn(`[resume] stream abort on first attempt of ${attempt.model}; retrying once after 5s`);
+          await new Promise(res => setTimeout(res, 5000));
+        } else {
+          logPremiumFailure(
+            usePremium,
+            attempt.model,
+            config.premium_model,
+            lastErr,
+            i < attemptsForModel - 1,
+            attempts[attemptIndex + 1]?.model,
+          );
+          if (i < attemptsForModel - 1) {
+            await new Promise(res => setTimeout(res, 2000));
+          }
         }
       }
     }

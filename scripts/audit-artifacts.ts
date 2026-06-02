@@ -1,6 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { applyTechSwaps } from "../src/shared/utils";
+
 const RUN_FOLDERS = [
   "2026-05-27T05-27-51_98a1eb2c",
   "2026-05-26T14-57-59_3add4764",
@@ -56,7 +58,6 @@ function main(): void {
   const repoRoot = process.cwd();
   const baselinePath = path.join(repoRoot, "config", "resume_master.tex");
   const baseline = fs.readFileSync(baselinePath, "utf8");
-  const baselineSkills = extractSkillsBlock(baseline);
   const baselineBullets = extractItems(baseline);
 
   const jobs: ArtifactAudit[] = [];
@@ -79,7 +80,8 @@ function main(): void {
       const droppedBullets = baselineBullets.filter(b => !resumeTex.includes(b)).length;
       const generatedBullets = extractItems(resumeTex);
       const addedClaims = generatedBullets.filter(b => !baselineBullets.includes(b)).length;
-      const resumeSkills = extractSkillsBlock(resumeTex);
+      const techSwaps = meta?.judge?.tailoring_hints?.tech_swaps as Array<{ from: string; to: string }> | undefined;
+      const skillsEqual = skillsSectionEqual(resumeTex, baseline, techSwaps);
       const resumeStyleHits = countMatches(resumeTex, BANNED_STYLE);
       const coverStyleHits = countMatches(coverTex, BANNED_STYLE);
       const resumeDashHits = countMatches(resumeTex, DASHES);
@@ -104,7 +106,7 @@ function main(): void {
         riskIssues.push("cover letter appears truncated or under length");
         fixCategories.add("validator/schema");
       }
-      if (resumeTex && normalizeBlock(resumeSkills) !== normalizeBlock(baselineSkills)) {
+      if (resumeTex && !skillsEqual) {
         riskIssues.push("SKILLS section differs from canonical");
         fixCategories.add("prompt rule");
       }
@@ -156,7 +158,7 @@ function main(): void {
           gained_skill_hits: gained,
           dropped_canonical_bullets: droppedBullets,
           added_or_modified_claims: addedClaims,
-          skills_section_equal: normalizeBlock(resumeSkills) === normalizeBlock(baselineSkills),
+          skills_section_equal: skillsEqual,
           style_hits: resumeStyleHits,
           dash_hits: resumeDashHits,
           fabricated_role_attribution: fabCount,
@@ -241,6 +243,17 @@ function extractItems(tex: string): string[] {
 
 function extractSkillsBlock(tex: string): string {
   return tex.match(/\\section\*\{SKILLS\}([\s\S]*?)\\section\*\{EXPERIENCE\}/)?.[1]?.trim() ?? "";
+}
+
+function skillsSectionEqual(
+  generatedTex: string,
+  canonicalTex: string,
+  techSwaps?: Array<{ from: string; to: string }>,
+): boolean {
+  const genSkills = extractSkillsBlock(generatedTex);
+  const canonSkills = extractSkillsBlock(canonicalTex);
+  const canonSwapped = applyTechSwaps(canonSkills, techSwaps);
+  return normalizeBlock(genSkills) === normalizeBlock(canonSwapped);
 }
 
 function normalizeBlock(text: string): string {

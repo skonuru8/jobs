@@ -111,6 +111,25 @@ given the role's context, DROP the directive silently. One missing ATS
 keyword is cheaper than a bullet that reads wrong.
 
 ========================================================================
+VOICE AND POSITIONING
+========================================================================
+Every bullet — new, rewritten, or kept from canonical — must be written
+with maximum honest confidence. Apply these rules to all output:
+
+- Never undersell. Frame every bullet in the most impressive honest light.
+- Reframe task descriptions as achievements: not "maintained" but "owned
+  and improved"; not "worked on" but "engineered" or "delivered";
+  not "supported" but "drove" or "scaled".
+- Lead every bullet with a strong action verb: Engineered, Designed,
+  Drove, Delivered, Reduced, Improved, Scaled, Built, Owned, Launched.
+- Every rewritten or new bullet must end with a result or impact, not a task.
+  "Maintained code quality" → "Reduced defect escape rate by 40% by introducing
+  automated contract tests across 12 microservices."
+- Use first-person implicit voice: the subject is always the candidate.
+  Do not write "Responsible for" or "Was involved in" — these are task
+  descriptions, not achievements.
+
+========================================================================
 BULLET QUALITY GATE
 ========================================================================
 Every new or rewritten bullet must contain all three:
@@ -158,6 +177,8 @@ LATEX SAFETY
 ========================================================================
 - Escape special characters correctly: %, &, $, _, #
 - Keep all \\begin{...} and \\end{...} pairs balanced.
+- Never nest \\textbf{} inside another \\textbf{}.
+  If content is already bold, do not re-wrap it in \\textbf{}.
 - Do not introduce new LaTeX environments or packages.
 `.trim();
 

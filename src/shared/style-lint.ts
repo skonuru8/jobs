@@ -14,6 +14,9 @@ const BANNED_STYLE_PATTERNS = [
   /while not having direct/i,
   /with limited .* exposure/i,
   /transferable skills/i,
+  /\baligning with your need for\b/i,
+  /\bas required by the role\b/i,
+  /\bgained hands-on exposure\b/i,
 ];
 
 export function findBannedStylePhrases(text: string): string[] {

@@ -6,6 +6,7 @@ import * as path from "path";
 
 import type { ArtifactBundleOk } from "@/shared/artifact-bundle";
 import { stripDashes } from "@/shared/dash-lint";
+import { applyTechSwaps } from "@/shared/utils";
 
 import { generateResumeTex, latexStructureOk } from "./generator";
 import { PROMPT_SHA } from "./prompt";
@@ -60,7 +61,9 @@ export async function generateAndSaveResume(
     return emptyOutcome(bundle, ctx, flags, gen, combinedMetaRel);
   }
 
-  let tex = boldMetrics(replaceSkillsSection(stripDashes(gen.tex), bundle.canonical_resume_tex));
+  let tex = boldMetrics(
+    replaceSkillsSection(stripDashes(gen.tex), bundle.canonical_resume_tex, input.tech_swaps),
+  );
 
   let wc = gen.word_count;
   if (wc < wMin) {
@@ -193,11 +196,20 @@ function emptyOutcome(
 
 export type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "./types";
 
-export function replaceSkillsSection(tex: string, canonicalTex: string): string {
-  const canonicalSkills = canonicalTex.match(
+export function replaceSkillsSection(
+  tex: string,
+  canonicalTex: string,
+  techSwaps?: Array<{ from: string; to: string }>,
+): string {
+  let canonicalSkills = canonicalTex.match(
     /(\\section\*\{SKILLS\}[\s\S]*?)(?=\\section\*\{EXPERIENCE\})/,
   )?.[1];
   if (!canonicalSkills) return tex;
+
+  if (techSwaps?.length) {
+    canonicalSkills = applyTechSwaps(canonicalSkills, techSwaps);
+  }
+
   return tex.replace(
     /\\section\*\{SKILLS\}[\s\S]*?(?=\\section\*\{EXPERIENCE\})/,
     canonicalSkills,
@@ -210,7 +222,8 @@ export function boldMetrics(tex: string): string {
     .map(line => {
       if (!line.includes("\\item")) return line;
       const protectedBold: string[] = [];
-      const masked = line.replace(/\\textbf\{[^{}]*\}/g, m => {
+      // Match \textbf{...} including one level of nested braces.
+      const masked = line.replace(/\\textbf\{(?:[^{}]|\{[^{}]*\})*\}/g, m => {
         protectedBold.push(m);
         return `@@BOLD_${protectedBold.length - 1}@@`;
       });

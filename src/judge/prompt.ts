@@ -130,7 +130,7 @@ Return JSON with exactly this shape:
       "jd_requirement": "Cassandra",
       "handling": "fabricate" | "reframe" | "acknowledge" | "ignore" | "forbid",
       "target_role": "Hitachi Vantara / Nokia" | null,
-      "frame_as": "NoSQL stores for high-throughput contract data alongside Cosmos DB" | null
+      "frame_as": "At Hitachi Vantara / Nokia, the role involved contract lifecycle management with Cosmos DB as the primary store. Candidate's canonical bullets reference time-series query optimization and schema design for telemetry data at that role. Surface the candidate's NoSQL query optimization work, frame as high-throughput contract data retrieval, do not claim Cassandra-specific features." | null
     }
   ],
   "why_apply": "1-2 sentences naming a specific reason this company/role fits the candidate, derived from JD and profile.",
@@ -163,17 +163,40 @@ emit a gap_directives entry with:
   - handling: one of [fabricate, reframe, acknowledge, ignore, forbid]
   - target_role: the exact employer/role string from the candidate's experience
     where the directive applies (null for handling=ignore or forbid)
-  - frame_as: a 1-sentence concrete framing the generators should use
+  - frame_as: A 2-3 sentence brief structured as:
+      (1) Role context at target_role — what kind of work, domain, tech stack at that role
+      (2) Adjacent evidence — which canonical bullets at that role can be drawn from
+      (3) Execution angle — what to surface, what language to use, what NOT to claim
+    Never compress into one sentence. Never use hedging language (see banned list below).
     (null for handling=ignore or forbid)
+
+    BANNED phrases in frame_as — never use these in any frame_as string:
+    - "foundational knowledge of", "working knowledge of", "exposure to",
+      "transitional knowledge of", "deepening understanding"
+    - "analogous to", "comparable to", "akin to", "parallel to", "similar to"
+    - "transferable skills", "demonstrates transferable", "demonstrating transferable"
+    - "directly applicable to", "translate directly to", "immediately useful in"
+    - "syntactically equivalent to", "whose syntax", "while not having direct"
+    - "with limited exposure", "aligning with your need for", "as required by the role"
+    Write frame_as as if briefing a senior writer who will produce a confident bullet.
+    Hedging language signals a gap confession. A gap confession in frame_as will cause
+    the generated resume bullet to fail the style linter and require a retry.
 
 Handling guide:
   - fabricate: candidate has no real adjacent experience for this JD requirement.
     Pick a target_role where the requirement can be written into a new bullet
     that reads naturally given the canonical bullets at that role.
 
-    Plausibility test: would a hiring manager reading the resume cold notice
-    that this bullet does not fit the role? If yes, pick a different target_role
-    or downgrade handling to "acknowledge" or "ignore".
+    Fit test: do the canonical bullets at target_role provide enough contextual
+    fit for this requirement to read naturally alongside them?
+    Check: does the role's domain, scale, and stack make this requirement
+    plausible given what the role already contains?
+    If yes → use fabricate. Write a strong 2-3 sentence frame_as giving the role
+    context, the adjacent evidence, and the execution angle.
+    If no plausible home exists across ALL roles → use acknowledge.
+    Do NOT downgrade to acknowledge because the requirement is absent from
+    the resume — absence is the entire point of fabricate. The generator will
+    add the content; your job is to identify the best role to attach it to.
 
     target_role should be the role with strongest contextual fit, not just the
     most recent. A sole-engineer Node.js healthcare startup is a poor target

@@ -23,6 +23,29 @@ describe("replaceSkillsSection", () => {
     expect(out).not.toContain("Cypress");
     expect(out).toContain("tailored experience");
   });
+
+  it("restores canonical skills section with approved tech swaps applied", () => {
+    const canonical = [
+      "\\section*{SKILLS}",
+      "\\textbf{Cloud:} AWS S3, AWS Lambda\\\\",
+      "\\textbf{Messaging:} AWS SQS\\\\",
+      "\\section*{EXPERIENCE}",
+      "canonical experience",
+    ].join("\n");
+    const generated = [
+      "\\section*{SKILLS}",
+      "\\textbf{Cloud:} AWS S3, AWS Lambda, Cypress\\\\",
+      "\\section*{EXPERIENCE}",
+      "tailored experience",
+    ].join("\n");
+
+    const out = replaceSkillsSection(generated, canonical, [{ from: "AWS S3", to: "S3" }]);
+    const skills = out.match(/\\section\*\{SKILLS\}[\s\S]*?(?=\\section\*\{EXPERIENCE\})/)?.[0] ?? "";
+    expect(skills).toContain("S3");
+    expect(skills).not.toContain("AWS S3");
+    expect(skills).not.toContain("Cypress");
+    expect(out).toContain("tailored experience");
+  });
 });
 
 describe("boldMetrics", () => {

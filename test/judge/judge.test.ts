@@ -258,8 +258,9 @@ describe("SYSTEM_PROMPT", () => {
   });
 
   it("tells judge to choose plausible fabrication target roles", () => {
-    expect(systemPrompt).toContain("Plausibility test");
+    expect(systemPrompt).toContain("Fit test");
     expect(systemPrompt).toContain("strongest contextual fit");
+    expect(systemPrompt).toContain("absence is the entire point of fabricate");
   });
 });
 

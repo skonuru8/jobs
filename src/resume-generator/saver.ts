@@ -27,11 +27,15 @@ export async function writeTexAndCompile(
   }
 
   let lastLog = "";
+  const pdfAbs = path.join(jobFolderAbs, "resume.pdf");
+  if (fs.existsSync(pdfAbs)) {
+    fs.unlinkSync(pdfAbs);
+  }
+
   for (let attempt = 0; attempt < 2; attempt++) {
     const r = await runPdflatex(texAbs, jobFolderAbs);
     lastLog = r.log;
-    const pdfAbs = path.join(jobFolderAbs, "resume.pdf");
-    if (r.ok && fs.existsSync(pdfAbs)) {
+    if (fs.existsSync(pdfAbs)) {
       cleanupAuxFiles(jobFolderAbs, "resume");
       return { tex_path: texAbs, pdf_path: pdfAbs };
     }

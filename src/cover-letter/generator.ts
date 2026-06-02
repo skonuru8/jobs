@@ -53,8 +53,10 @@ export async function generateCoverLetter(
   );
 
   const maxAttempts = (config.retries ?? 1) + 1;
+  const maxApiErrors = 2;
   let lastErr: string | undefined;
   let currentUserPrompt = userPrompt;
+  let apiErrorCount = 0;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -101,7 +103,17 @@ export async function generateCoverLetter(
         output_tokens:  result.output_tokens,
       };
     } catch (e) {
-      lastErr = String(e);
+      const msg = String(e);
+      lastErr = msg;
+      const isTransient = msg.includes("empty content") ||
+                          msg.includes("terminated") ||
+                          msg.includes("OpenRouter API error 5");
+      if (isTransient && apiErrorCount < maxApiErrors) {
+        apiErrorCount++;
+        attempt--;
+        await new Promise(r => setTimeout(r, 3000 * apiErrorCount));
+        continue;
+      }
       if (attempt < maxAttempts - 1) {
         await new Promise(r => setTimeout(r, 2000));
       }

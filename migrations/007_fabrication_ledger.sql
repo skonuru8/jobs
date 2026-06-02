@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS fabrication_ledger (
   canonical_skill_found    TEXT,
   generated_skill_or_claim TEXT NOT NULL,
   change_type              TEXT NOT NULL,
-  truth_distance_score     INT NOT NULL,
+  truth_distance_score     NUMERIC NOT NULL,
   fabrication_risk         TEXT NOT NULL,
   location                 TEXT NOT NULL DEFAULT 'unknown',
   human_review_required    BOOLEAN NOT NULL DEFAULT FALSE,

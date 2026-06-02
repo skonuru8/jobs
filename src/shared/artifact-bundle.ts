@@ -9,6 +9,7 @@ import type { JudgeResult, JudgeFields, JudgeGap, GapDirective, TechSwap } from 
 import type { ScoreResult } from "@/scorer/types";
 import type { CoverLetterInput } from "@/cover-letter/types";
 import { lookupJdSkill } from "@/risk-map";
+import { applyScopedTechSwaps } from "@/shared/utils";
 
 export { makeJobSlug, slugify } from "./slug";
 
@@ -213,7 +214,10 @@ export function coverLetterInputFromBundle(bundle: ArtifactBundleOk): CoverLette
       location_line: formatProfileLocationLine(bundle.profile),
     },
     resume:           null,
-    experience_block: bundle.experience_block,
+    experience_block: applyScopedTechSwaps(
+      bundle.experience_block,
+      bundle.judge_json.tailoring_hints?.tech_swaps as TechSwap[] | undefined,
+    ),
     gap_directives:   bundle.judge_json.gap_directives,
     tech_swaps:       bundle.judge_json.tailoring_hints?.tech_swaps as TechSwap[] | undefined,
   };

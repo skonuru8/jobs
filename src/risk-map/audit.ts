@@ -91,7 +91,7 @@ function extractBoldTechCandidates(bullet: string): string[] {
  * fabricated_role_attribution.
  *
  * Matching heuristic: a generated bullet is "new" if no canonical bullet in
- * the same role shares >= 5 consecutive normalized words with it.
+ * the same role has enough content-word Jaccard overlap with it.
  */
 export interface RoleAttributionFinding {
   role: string;
@@ -116,12 +116,23 @@ export function auditRoleAttribution(
   }
 
   const hasOverlap = (genNorm: string, canonNorms: string[]): boolean => {
-    const genWords = genNorm.split(" ").filter(w => w.length > 0);
+    const STOP = new Set([
+      "the", "a", "an", "and", "or", "to", "of", "in", "on", "at", "for", "with", "by",
+      "is", "was", "were", "been", "be", "has", "have", "had", "their", "this", "that",
+      "from", "into", "using", "used", "our", "its", "across", "within", "between",
+    ]);
+    const contentWords = (s: string): Set<string> =>
+      new Set(s.split(" ").filter(w => w.length > 2 && !STOP.has(w)));
+
+    const genWords = contentWords(genNorm);
+    if (genWords.size === 0) return true;
+
     for (const canon of canonNorms) {
-      for (let i = 0; i + 5 <= genWords.length; i++) {
-        const slice = genWords.slice(i, i + 5).join(" ");
-        if (canon.includes(slice)) return true;
-      }
+      const canonWords = contentWords(canon);
+      if (canonWords.size === 0) continue;
+      const intersection = [...genWords].filter(w => canonWords.has(w)).length;
+      const union = new Set([...genWords, ...canonWords]).size;
+      if (union > 0 && intersection / union >= 0.45) return true;
     }
     return false;
   };
