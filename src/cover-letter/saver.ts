@@ -151,11 +151,15 @@ export async function generateAndSaveCoverLetter(
   let compileStatus: "ok" | "failed" = "ok";
   if (config.compile_pdf !== false) {
     let log = "";
+    const expectedPdf = path.join(jobFolderAbs, "cover_letter.pdf");
+    // Delete stale PDF before compile so existence check reflects this run.
+    if (fs.existsSync(expectedPdf)) {
+      fs.unlinkSync(expectedPdf);
+    }
     for (let attempt = 0; attempt < 2; attempt++) {
       const r = await runPdflatex(texAbs, jobFolderAbs);
       log = r.log;
-      const expectedPdf = path.join(jobFolderAbs, "cover_letter.pdf");
-      if (r.ok && fs.existsSync(expectedPdf)) {
+      if (fs.existsSync(expectedPdf)) {
         pdfAbs = expectedPdf;
         compileStatus = "ok";
         cleanupAuxFiles(jobFolderAbs, "cover_letter");
