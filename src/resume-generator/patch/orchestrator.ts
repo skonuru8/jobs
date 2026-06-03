@@ -1,3 +1,15 @@
+/**
+ * orchestrator.ts — End-to-end patch tailoring flow for resume generation.
+ *
+ * Coordinates patch planning, deterministic application, coverage retry, and
+ * final warning synthesis so patch mode can return resume artifacts shaped like
+ * full generation mode without regenerating whole document.
+ *
+ * Called by: resume-generator/generator.ts
+ * Writes to: nothing
+ * Side effects: up to two LLM calls, text lint checks, LaTeX structure validation
+ */
+
 import { stripLatex } from "@/cover-letter/resume";
 import { findBannedStylePhrases } from "@/shared/style-lint";
 
@@ -8,6 +20,17 @@ import { verifyPatchCoverage } from "./coverage";
 import { activeGapDirectives, generatePatchOps, PATCH_PROMPT_SHA } from "./generator";
 import { extractRoleBlocks } from "./parser";
 
+/**
+ * Generates tailored resume TeX by applying LLM-planned patch ops to canonical source.
+ *
+ * Flow makes at most two planner attempts. First missed-coverage result feeds a
+ * retry hint back into planner, then final output is linted and annotated with
+ * warnings instead of hard-failing for recoverable issues like partial coverage.
+ *
+ * @param input - Resume generation inputs including canonical TeX and judge output.
+ * @param config - Resume generation config supplying model and token limits.
+ * @returns Resume generation result shaped like standard generator output.
+ */
 export async function generatePatchedResumeTex(
   input: ResumeGenInput,
   config: ResumeGenConfig,
@@ -92,6 +115,12 @@ export async function generatePatchedResumeTex(
   };
 }
 
+/**
+ * Counts visible words in TeX after stripping markup commands.
+ *
+ * @param tex - Resume LaTeX source to measure.
+ * @returns Approximate plain-text word count used in artifact metadata.
+ */
 function countWordsTex(tex: string): number {
   const plain = stripLatex(tex);
   return plain.split(/\s+/).filter(Boolean).length;

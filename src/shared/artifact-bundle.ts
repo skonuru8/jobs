@@ -1,5 +1,14 @@
 /**
- * Build the LLM input bundle for resume + cover letter generation.
+ * artifact-bundle.ts — Normalized generation payload assembly for job artifacts.
+ *
+ * Converts sanitized job data, scoring output, judge output, and canonical resume
+ * source into stable JSON structures used by resume and cover-letter generators.
+ * It also enriches required skills with risk metadata and constrains prompt inputs
+ * to smaller, safer subsets.
+ *
+ * Called by: pipeline stages that prepare resume and cover-letter generation
+ * Writes to: nothing
+ * Side effects: SHA hashing and risk-map lookups
  */
 
 import * as crypto from "crypto";
@@ -11,40 +20,89 @@ import type { CoverLetterInput } from "@/cover-letter/types";
 import { lookupJdSkill } from "@/risk-map";
 import { applyScopedTechSwaps } from "@/shared/utils";
 
+/**
+ * Re-exported slug helpers for artifact folder naming.
+ * `makeJobSlug` — builds a stable `{date}_{company}_{role}_{id8}` folder name.
+ * `slugify`     — lowercases and kebab-cases a string to a max length.
+ */
 export { makeJobSlug, slugify } from "./slug";
 
-/** Judge fields persisted for generators + job_description.md */
+/**
+ * Judge fields persisted into generator inputs and artifact metadata files.
+ */
 export type ArtifactJudgeJson = {
+  /** Judge verdict string, or `null` when judge stage did not produce fields. */
   verdict:     string | null;
+  /** Human-readable judge reasoning carried into downstream prompts. */
   reasoning:   string | null;
+  /** Concerns the judge wants downstream generators to respect or avoid. */
   concerns:    string[];
+  /** Optional judge confidence in 0-1 range when available from model output. */
   confidence?: number | null;
+  /** Positive job/profile matches worth reinforcing in generated artifacts. */
   key_matches?: string[];
+  /** Gap records that explain missing or weak evidence against job requirements. */
   gaps?:       JudgeGap[];
+  /** Actionable gap-handling directives for cover letter or resume tailoring. */
   gap_directives?: GapDirective[];
+  /** Optional motivation angle for why the candidate should apply. */
   why_apply?:  string | null;
+  /** Structured tailoring hints such as tech swaps from judge output. */
   tailoring_hints?: JudgeFields["tailoring_hints"];
 };
 
 export interface ArtifactBundleOk {
+  /** Success discriminator for callers narrowing bundle shape. */
   ok: true;
+  /** Sanitized job record used as source of truth for generators. */
   job: Job;
+  /** Candidate profile that generators may reference directly. */
   profile: Profile;
+  /** Canonical LaTeX resume source before any per-job tailoring. */
   canonical_resume_tex: string;
+  /** Short SHA derived from canonical resume text for cache identity. */
   canonical_sha: string;
+  /** Prompt-safe job JSON plus risk-map enrichment for required skills. */
   jd_json: Record<string, unknown>;
+  /** Judge output normalized into nullable, generator-safe fields. */
   judge_json: ArtifactJudgeJson;
+  /** Total score plus component breakdown used in prompts and metadata. */
   score: { total: number; components: ScoreResult["components"] };
   /** Verbatim EXPERIENCE slice for cover letter attribution safety. */
   experience_block: string;
 }
 
-export type ArtifactBundle = ArtifactBundleOk | { ok: false; reason: string };
+/**
+ * Result of artifact bundle assembly.
+ * - `ArtifactBundleOk` — complete payload ready for generation modules
+ * - `{ ok: false; reason: string }` — validation failed; caller should skip generation
+ */
+export type ArtifactBundle = ArtifactBundleOk | {
+  /** Failure discriminator for callers narrowing bundle shape. */
+  ok: false;
+  /** Short machine-readable explanation of why bundle assembly was rejected. */
+  reason: string;
+};
 
+/**
+ * Detects whether judge output carries extended context beyond verdict and reasoning.
+ *
+ * @param j - Normalized judge payload stored in artifact metadata.
+ * @returns `true` when key matches, gaps, directives, or tailoring hints are present.
+ */
 export function hasExtendedJudgeContext(j: ArtifactJudgeJson): boolean {
   return Boolean(j.key_matches?.length || j.gaps?.length || j.gap_directives?.length || j.tailoring_hints);
 }
 
+/**
+ * Builds slim job-description JSON for prompt contexts that do not need full job detail.
+ *
+ * Keeps only high-signal fields plus short skill and responsibility summaries to limit
+ * prompt bloat while preserving enough context for resume and cover-letter tailoring.
+ *
+ * @param jd - Full job-description JSON assembled earlier in pipeline.
+ * @returns Reduced job-description object safe for prompt injection.
+ */
 export function buildSlimJdForPrompts(jd: Record<string, unknown>): Record<string, unknown> {
   const skills = (jd.required_skills as Array<{ name?: string }> | undefined) ?? [];
   const resp = (jd.responsibilities as string[] | undefined) ?? [];
@@ -57,6 +115,16 @@ export function buildSlimJdForPrompts(jd: Record<string, unknown>): Record<strin
   };
 }
 
+/**
+ * Builds slim profile JSON that emphasizes matched and expert skills.
+ *
+ * Filters profile skills to those that either directly match required job skills or carry
+ * expert confidence, then keeps only prompt-relevant profile fields.
+ *
+ * @param profile - Candidate profile used as source of resume and cover-letter facts.
+ * @param jdRequiredNames - Required skill names from job description for matching.
+ * @returns Reduced profile object with prompt-safe skill and location context.
+ */
 export function buildSlimProfileForPrompts(profile: Profile, jdRequiredNames: string[]): Record<string, unknown> {
   const requiredSet = new Set(jdRequiredNames.map(s => s.toLowerCase()));
   const relevant = profile.skills.filter(s =>
@@ -75,12 +143,28 @@ export function buildSlimProfileForPrompts(profile: Profile, jdRequiredNames: st
   };
 }
 
+/**
+ * Assembles normalized artifact input bundle from job, score, judge, and resume sources.
+ *
+ * Validates that critical upstream outputs exist before generation begins. On success it
+ * computes stable identifiers, enriches required skills with risk-map entries, and packages
+ * all downstream inputs into one object.
+ *
+ * @param args - Upstream pipeline outputs needed to prepare generation inputs.
+ * @returns Success bundle for generators, or failure reason when prerequisites are missing.
+ */
 export function buildArtifactBundle(args: {
+  /** Sanitized job payload selected for generation. */
   sanitized: Job;
+  /** Score output, required for gating and metadata. */
   scoreResult: ScoreResult | null;
+  /** Judge output, optional but normalized when present. */
   judgeResult: JudgeResult | null;
+  /** Candidate profile used for prompt assembly. */
   profile: Profile;
+  /** Canonical resume LaTeX source used as immutable generation baseline. */
   canonical_resume_tex: string;
+  /** Verbatim EXPERIENCE block extracted for attribution-safe cover letters. */
   experience_block: string;
 }): ArtifactBundle {
   const { sanitized, scoreResult, judgeResult, profile, canonical_resume_tex, experience_block } = args;
@@ -139,6 +223,12 @@ export function buildArtifactBundle(args: {
   };
 }
 
+/**
+ * Normalizes nullable judge output into generator-safe persisted JSON.
+ *
+ * @param judgeResult - Raw judge result from evaluation stage, or `null` when skipped.
+ * @returns Judge fields flattened into nullable metadata structure.
+ */
 function judgeJsonFromResult(judgeResult: JudgeResult | null): ArtifactJudgeJson {
   const f = judgeResult?.fields;
   if (!f) {
@@ -157,7 +247,15 @@ function judgeJsonFromResult(judgeResult: JudgeResult | null): ArtifactJudgeJson
   };
 }
 
-/** Map bundle → cover letter module input. */
+/**
+ * Maps artifact bundle data into cover-letter module input schema.
+ *
+ * Applies any scoped tech swaps to the EXPERIENCE block so cover-letter generation sees
+ * the same terminology adjustments expected elsewhere in the tailored artifact set.
+ *
+ * @param bundle - Successful artifact bundle produced for a single job.
+ * @returns Cover-letter input payload with normalized job, profile, and evidence fields.
+ */
 export function coverLetterInputFromBundle(bundle: ArtifactBundleOk): CoverLetterInput {
   const j = bundle.job;
   const meta = j.meta;
@@ -223,10 +321,22 @@ export function coverLetterInputFromBundle(bundle: ArtifactBundleOk): CoverLette
   };
 }
 
+/**
+ * Removes URL scheme noise from profile links before prompt or artifact use.
+ *
+ * @param url - Raw URL string from profile contact metadata.
+ * @returns URL without protocol or leading `www.` prefix.
+ */
 function stripUrlScheme(url: string): string {
   return url.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
 }
 
+/**
+ * Formats job location into a compact prompt-safe display line.
+ *
+ * @param job - Sanitized job whose parsed location fields may include cities and countries.
+ * @returns Comma-joined location text, or `null` when no structured location exists.
+ */
 function formatJobLocationLine(job: Job): string | null {
   const cities = job.location?.cities?.filter(Boolean) ?? [];
   const countries = job.location?.countries?.filter(Boolean) ?? [];
@@ -234,6 +344,15 @@ function formatJobLocationLine(job: Job): string | null {
   return parts.length ? parts.join(", ") : null;
 }
 
+/**
+ * Formats candidate location plus work-arrangement preference for prompt contexts.
+ *
+ * Prefers explicit `work_arrangement_note` from profile contact data. When absent, falls
+ * back to acceptable location types so prompts still express remote/hybrid/onsite intent.
+ *
+ * @param profile - Candidate profile with contact and location preference data.
+ * @returns Display string combining city, state, and arrangement note or fallback.
+ */
 export function formatProfileLocationLine(profile: Profile): string {
   const c = profile.contact;
   const note = c.work_arrangement_note?.trim();
@@ -247,6 +366,15 @@ export function formatProfileLocationLine(profile: Profile): string {
   return `${c.city}, ${c.state}  (${fallback})`;
 }
 
+/**
+ * Reads requisition ID from mixed-source job metadata keys.
+ *
+ * Upstream job sources do not agree on casing or naming, so this helper checks the known
+ * variants and returns the first non-empty string.
+ *
+ * @param meta - Job metadata object from sanitized job payload.
+ * @returns Normalized requisition ID, or `null` when no usable value exists.
+ */
 function readReqId(meta: Job["meta"]): string | null {
   const m = meta as unknown as Record<string, unknown>;
   const x = m.req_id ?? m.requisition_id ?? m.requisitionId;

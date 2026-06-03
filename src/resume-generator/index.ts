@@ -1,5 +1,13 @@
 /**
- * index.ts — public API: generateAndSaveResume
+ * index.ts — Resume artifact orchestration entrypoint.
+ *
+ * Chooses patch vs full-regeneration mode, normalizes generator results into
+ * persisted artifact metadata, applies final cleanup transforms, and returns a
+ * single outcome object to pipeline or manual callers.
+ *
+ * Called by: `scripts/run-pipeline.ts`, `src/artifacts/manual-generate.ts`
+ * Writes to: resume `.tex` / `.pdf` files through `writeTexAndCompile`
+ * Side effects: file writes, LaTeX compilation, console logging
  */
 
 import * as path from "path";
@@ -16,14 +24,26 @@ import { writeTexAndCompile } from "./saver";
 import type { ResumeGenConfig, ResumeGenInput } from "./types";
 
 export interface ResumeArtifactOutcome {
+  /** Absolute `.tex` artifact path, or `null` when generation or save failed. */
   tex_path:   string | null;
+  /** Absolute compiled `.pdf` artifact path, or `null` when compile skipped or failed. */
   pdf_path:   string | null;
+  /** Absolute metadata file path when persisted by caller, or `null` on early failure. */
   meta_path:  string | null;
+  /** Metadata payload mirrored into `meta.json` by upstream persistence layer. */
   meta:       Record<string, unknown>;
+  /** Pipeline flags explaining non-fatal warnings or terminal failure reasons. */
   flags:      string[];
+  /** Final rendered word count used for length gating and downstream reporting. */
   word_count: number;
 }
 
+/**
+ * Converts artifact bundle into generator-facing input shape.
+ *
+ * @param bundle - Fully assembled artifact bundle for one job.
+ * @returns Resume generation input with judge-derived directives copied into optional overrides.
+ */
 function toResumeInput(bundle: ArtifactBundleOk): ResumeGenInput {
   return {
     job: bundle.job,
@@ -38,6 +58,21 @@ function toResumeInput(bundle: ArtifactBundleOk): ResumeGenInput {
   };
 }
 
+/**
+ * Generates, validates, and saves resume artifacts for one job folder.
+ *
+ * This is pipeline-facing orchestration: it selects resume mode, applies final
+ * text cleanup, emits warning flags, writes files, and assembles metadata that
+ * downstream cache and UI layers can reason about deterministically.
+ *
+ * @param bundle - Canonical artifact bundle for current job.
+ * @param config - Resume-generation and compile settings.
+ * @param repoRoot - Repository root used to convert persisted paths into relative metadata paths.
+ * @param jobFolderAbs - Absolute destination folder for generated resume artifacts.
+ * @param ctx - Run identity and caller provenance metadata.
+ * @returns Resume artifact outcome with paths, flags, metadata, and word count.
+ * @throws {Error} Does not intentionally throw; file-write errors are converted into flagged outcomes.
+ */
 export async function generateAndSaveResume(
   bundle: ArtifactBundleOk,
   config: ResumeGenConfig,
@@ -181,6 +216,17 @@ export async function generateAndSaveResume(
   return outcome;
 }
 
+/**
+ * Builds failure-shaped outcome object for early exits before persistence succeeds.
+ *
+ * @param bundle - Artifact bundle whose job metadata must still appear in result.
+ * @param ctx - Run identity and caller provenance metadata.
+ * @param flags - Failure flags accumulated so far.
+ * @param gen - Terminal generator metadata, including model choice and token counts.
+ * @param metaRel - Relative `meta.json` path expected by callers even on failure.
+ * @param signature - Resume signature snapshot used for cache-aware metadata.
+ * @returns Resume artifact outcome with null file paths and failure metadata payload.
+ */
 function emptyOutcome(
   bundle: ArtifactBundleOk,
   ctx: { runId: string; bucket: string; generatedBy: "pipeline" | "manual" },
@@ -219,6 +265,17 @@ function emptyOutcome(
 
 export type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "./types";
 
+/**
+ * Restores canonical SKILLS section after full regeneration, with optional tech swaps applied.
+ *
+ * This prevents model drift from inventing or deleting skills while still
+ * allowing scoped terminology normalization requested by judge output.
+ *
+ * @param tex - Generated resume LaTeX whose SKILLS section may need replacement.
+ * @param canonicalTex - Canonical resume LaTeX that owns authoritative SKILLS content.
+ * @param techSwaps - Optional replacements to apply to canonical SKILLS content before reinsertion.
+ * @returns Resume LaTeX with authoritative SKILLS section restored when both sections can be located.
+ */
 export function replaceSkillsSection(
   tex: string,
   canonicalTex: string,
@@ -239,6 +296,12 @@ export function replaceSkillsSection(
   );
 }
 
+/**
+ * Wraps standalone metric phrases in `\\textbf{}` without rebolding existing bold spans.
+ *
+ * @param tex - Resume LaTeX whose bullet lines may contain plain numeric outcomes.
+ * @returns LaTeX with recognized metrics bolded inside item lines only.
+ */
 export function boldMetrics(tex: string): string {
   return tex
     .split("\n")

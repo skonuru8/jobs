@@ -1,6 +1,31 @@
+/**
+ * apply.ts — Deterministic patch-op applier for canonical resume TeX.
+ *
+ * Replays validated patch ops against canonical source, re-parsing role blocks
+ * before each mutation so byte offsets stay correct after prior insertions or
+ * rewrites. Module never invents structure; it only splices bullet text inside
+ * existing parsed role blocks.
+ *
+ * Called by: patch orchestrator
+ * Writes to: nothing
+ * Side effects: none
+ */
+
 import { extractRoleBlocks, findRoleBlock } from "./parser";
 import type { PatchOp } from "./types";
 
+/**
+ * Applies validated patch ops to canonical resume LaTeX.
+ *
+ * Function always starts from canonical source and re-parses after each op so
+ * earlier splices cannot corrupt later byte offsets. Missing roles or missing
+ * target bullets are skipped rather than throwing because planner output is
+ * best-effort and validation may still allow roleish mismatches.
+ *
+ * @param canonicalTex - Pristine canonical resume LaTeX to mutate.
+ * @param ops - Validated patch ops in desired application order.
+ * @returns Patched LaTeX string after all applicable ops are spliced in.
+ */
 export function applyPatchOps(canonicalTex: string, ops: PatchOp[]): string {
   let tex = canonicalTex;
   for (const op of ops) {
@@ -29,6 +54,12 @@ export function applyPatchOps(canonicalTex: string, ops: PatchOp[]): string {
   return tex;
 }
 
+/**
+ * Normalizes bullet text before insertion or rewrite.
+ *
+ * @param item - Raw item text from patch planner.
+ * @returns Bullet string guaranteed to start with `\item`.
+ */
 function formatItem(item: string): string {
   const trimmed = item.trim();
   return trimmed.startsWith("\\item") ? trimmed : `\\item ${trimmed}`;

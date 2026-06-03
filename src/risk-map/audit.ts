@@ -1,14 +1,27 @@
+/**
+ * audit.ts — Audit tailored artifacts for unsupported claims and role attribution drift.
+ *
+ * Compares generated resume or cover-letter text against canonical resume evidence and
+ * tech-equivalence mappings, then emits summary counts plus ledger rows for storage.
+ * It also flags bullets that move technologies into roles where canonical history does
+ * not support them.
+ *
+ * Called by: tailoring pipeline before persistence and review gating
+ * Writes to: nothing directly
+ * Side effects: scans generated text, canonical text, and risk-map registry in memory
+ */
+
 import { getAllJdTargetKeys, lookupJdSkill } from "./lookup";
 import type { LedgerEntryInput, RiskSummary } from "./types";
 
 /**
- * Split a tex string into role-scoped bullet blocks.
- * A "role block" is keyed by the nearest preceding employer-header line.
- * Returns a map of { roleKey -> string[] of bullet texts }.
+ * Splits LaTeX experience section into role-scoped bullet groups for attribution checks.
  *
- * Employer-header detection: lines containing \textbf{...} followed by \hfill
- * or by a date pattern. Sub-project headers (\textbf{Project: X}) become
- * separate keys under the parent employer (e.g., "Hitachi Vantara / Nokia").
+ * Role matching depends on nearby employer and sub-project headers so later audit steps
+ * can ask whether claim appeared under same role in canonical resume.
+ *
+ * @param tex - Canonical or generated LaTeX resume text.
+ * @returns Role-keyed bullet map where each value preserves bullet text order.
  */
 function extractBulletsByRole(tex: string): Map<string, string[]> {
   const result = new Map<string, string[]>();
@@ -52,9 +65,13 @@ function extractBulletsByRole(tex: string): Map<string, string[]> {
 }
 
 /**
- * Normalize a bullet for fuzzy comparison: lowercase, strip LaTeX commands,
- * collapse whitespace. Used to decide whether a generated bullet matches any
- * canonical bullet in the same role.
+ * Normalizes bullet text before fuzzy overlap comparison.
+ *
+ * Removes lightweight LaTeX formatting so matching focuses on semantic content rather
+ * than markup differences between canonical and generated artifacts.
+ *
+ * @param s - Raw bullet text extracted from LaTeX.
+ * @returns Lowercased, whitespace-collapsed comparison string.
  */
 function normalizeBulletForCompare(s: string): string {
   return s
@@ -67,6 +84,15 @@ function normalizeBulletForCompare(s: string): string {
     .trim();
 }
 
+/**
+ * Extracts bolded technology tokens that generator intentionally emphasized.
+ *
+ * Bolded terms often represent explicit skills, so audit keeps them even when registry
+ * lookup misses them. Filters out short, numeric, or duplicate fragments to avoid noise.
+ *
+ * @param bullet - Generated bullet text that may contain `\\textbf{...}` markers.
+ * @returns Distinct technology candidates in display order.
+ */
 function extractBoldTechCandidates(bullet: string): string[] {
   const seen = new Set<string>();
   const candidates: string[] = [];
@@ -85,20 +111,28 @@ function extractBoldTechCandidates(bullet: string): string[] {
 }
 
 /**
- * For each role in the generated tex, find bullets that do not match any
- * canonical bullet in the same role. Within each new bullet, find tech tokens
- * from the supplied registry. Each such (role, bullet, tech) triple is a
- * fabricated_role_attribution.
- *
- * Matching heuristic: a generated bullet is "new" if no canonical bullet in
- * the same role has enough content-word Jaccard overlap with it.
+ * Role-attribution audit hit for technology mentioned under unsupported role context.
  */
 export interface RoleAttributionFinding {
+  /** Employer or employer/sub-project key where generated claim appears. */
   role: string;
+  /** Truncated generated bullet text used for reviewer context and ledger storage. */
   bullet: string;
+  /** Technology token that appears newly attributed to this role. */
   tech: string;
 }
 
+/**
+ * Finds technologies that appear in new generated bullets under roles lacking canonical support.
+ *
+ * This protects against plausible-sounding resume edits that move real skills into wrong job,
+ * which is often harder to spot than fully fabricated claims.
+ *
+ * @param canonicalTex - Untailored canonical LaTeX resume used as attribution ground truth.
+ * @param generatedTex - Tailored LaTeX artifact being audited.
+ * @param techRegistry - Known job-description target skills to scan for, or empty to use global registry.
+ * @returns List of role/bullet/tech findings that should be recorded as fabricated role attribution.
+ */
 export function auditRoleAttribution(
   canonicalTex: string,
   generatedTex: string,
@@ -164,13 +198,28 @@ export function auditRoleAttribution(
 }
 
 interface AuditInput {
+  /** Tailored artifact text to inspect for risky claims. */
   tailoredText:  string;
+  /** Canonical artifact text used as evidence baseline. */
   canonicalText: string;
+  /** Application job identifier persisted with each ledger row. */
   jobId:         string;
+  /** Pipeline run identifier, or `null` when audit runs outside batch pipeline. */
   runId:         string | null;
+  /** Artifact family determines storage labeling for audit rows. */
   artifactType:  "resume" | "cover_letter";
 }
 
+/**
+ * Audits tailored artifact text against canonical evidence and risk-map mappings.
+ *
+ * Produces both aggregate counts for reviewer summaries and normalized ledger rows for
+ * persistence. Claims absent from canonical support are downgraded to fabrication even if
+ * mapping table would otherwise classify them more optimistically.
+ *
+ * @param input - Tailored text, canonical source text, and run metadata for audit.
+ * @returns Summary counts plus ledger rows ready for persistence.
+ */
 export function auditTailoredArtifact(input: AuditInput): {
   summary: RiskSummary;
   ledger:  LedgerEntryInput[];
@@ -256,6 +305,16 @@ export function auditTailoredArtifact(input: AuditInput): {
   };
 }
 
+/**
+ * Adds overrun flag when too many role-attribution violations appear in one artifact.
+ *
+ * Threshold intentionally stays low because repeated role drift is strong signal that
+ * tailoring has started inventing chronology rather than tightening phrasing.
+ *
+ * @param flags - Mutable artifact flag list that will be updated in place.
+ * @param summary - Relationship counts from audit summary.
+ * @returns Nothing; mutates `flags` when threshold is exceeded.
+ */
 export function applyResumeAttributionOverrunFlag(
   flags: string[],
   summary: Pick<RiskSummary, "counts">,
@@ -266,6 +325,16 @@ export function applyResumeAttributionOverrunFlag(
   }
 }
 
+/**
+ * Tests whether needle appears as standalone skill token within larger text block.
+ *
+ * Boundary matching avoids false positives from partial-word overlaps such as vendor names
+ * embedded inside unrelated longer strings.
+ *
+ * @param haystack - Lowercased text corpus to search.
+ * @param needle - Skill or phrase to detect.
+ * @returns `true` when phrase appears with non-alphanumeric boundaries.
+ */
 function termPresent(haystack: string, needle: string): boolean {
   if (!needle) return false;
   const esc = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -273,6 +342,16 @@ function termPresent(haystack: string, needle: string): boolean {
   return pat.test(haystack);
 }
 
+/**
+ * Guesses which resume section contains audited term for downstream reviewer context.
+ *
+ * Section routing is heuristic, but good enough for storage and review UI where exact line
+ * provenance is less important than narrowing search area.
+ *
+ * @param tex - Tailored artifact text to inspect.
+ * @param term - Claim or skill to locate.
+ * @returns Best-fit section label, or `unknown` when no section contains term.
+ */
 function guessLocation(tex: string, term: string): LedgerEntryInput["location"] {
   const sections: Array<[LedgerEntryInput["location"], RegExp]> = [
     ["summary",    /summary([\s\S]*?)(?=skills|experience|projects|education|$)/i],

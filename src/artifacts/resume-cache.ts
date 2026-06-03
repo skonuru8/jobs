@@ -1,3 +1,13 @@
+/**
+ * resume-cache.ts — Resume artifact cache lookup for manual and pipeline runs.
+ *
+ * Reuses prior tailored resume artifacts only when canonical input, prompt
+ * lineage, directive hashes, and blocking-risk flags all still match current
+ * generation intent.
+ *
+ * Called by: manual-generate.ts, pipeline artifact generation flows
+ * Side effects: reads persisted artifact row, meta.json, and on-disk tex/pdf existence
+ */
 import * as fs from "fs";
 import * as path from "path";
 
@@ -7,6 +17,17 @@ import type { ResumeGenConfig } from "@/resume-generator/types";
 import { buildResumeSignature } from "@/resume-generator/signature";
 import { getLatestTailoredResumeForJob } from "@/storage/persist";
 
+/**
+ * Finds reusable tailored resume artifact for current job and generation config.
+ *
+ * Cache acceptance is intentionally strict: any compile failure, human-review
+ * export status, missing file, or signature mismatch forces fresh generation.
+ *
+ * @param repoRoot - Repository root used to resolve stored relative artifact paths.
+ * @param bundle - Validated artifact bundle for current job snapshot.
+ * @param config - Resume generation config whose mode and prompts affect signature.
+ * @returns Cached resume artifact outcome when prior artifact is safe to reuse, otherwise `null`.
+ */
 export async function findCachedResumeOutcome(
   repoRoot: string,
   bundle: ArtifactBundleOk,
@@ -92,10 +113,26 @@ export const BLOCKING_CACHE_FLAGS = new Set([
   "resume_gen_failed",
 ]);
 
+/**
+ * Checks whether any persisted artifact flags disqualify cache reuse.
+ *
+ * @param flags - Combined artifact and metadata flags from prior generation.
+ * @returns `true` when at least one flag requires regenerating the resume.
+ */
 function hasBlockingCacheFlag(flags: string[]): boolean {
   return flags.some(f => BLOCKING_CACHE_FLAGS.has(f));
 }
 
+/**
+ * Reads prior artifact metadata JSON when cache lookup needs fine-grained fields.
+ *
+ * Metadata parse failure is treated as cache miss rather than hard error because
+ * regeneration is safer than trusting incomplete cache state.
+ *
+ * @param repoRoot - Repository root used to resolve stored relative meta paths.
+ * @param metaPath - Persisted meta.json path from artifact storage, if any.
+ * @returns Parsed metadata object or `null` when path is absent, unreadable, or invalid JSON.
+ */
 function readMeta(repoRoot: string, metaPath: string | null): Record<string, unknown> | null {
   if (!metaPath) return null;
   const abs = resolveRepoPath(repoRoot, metaPath);
@@ -106,6 +143,13 @@ function readMeta(repoRoot: string, metaPath: string | null): Record<string, unk
   }
 }
 
+/**
+ * Resolves stored artifact paths against repo root when they are not absolute.
+ *
+ * @param repoRoot - Repository root used by local artifact storage.
+ * @param p - Stored artifact path, absolute or repo-relative.
+ * @returns Absolute filesystem path for existence checks and file reads.
+ */
 function resolveRepoPath(repoRoot: string, p: string): string {
   return path.isAbsolute(p) ? p : path.join(repoRoot, p);
 }

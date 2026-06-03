@@ -1,5 +1,13 @@
 /**
- * saver.ts — inject cover letter body into LaTeX template, compile, single job folder.
+ * saver.ts — persist generated cover letters into LaTeX/PDF artifacts.
+ *
+ * Converts bundle-derived cover letter input into final template substitutions,
+ * validates generated prose for obvious LaTeX hazards, writes artifact files,
+ * and records metadata for downstream pipeline consumers.
+ *
+ * Called by: pipeline artifact generation flows, manual artifact generation
+ * Writes to: job artifact folder (`cover_letter.tex`, optional `cover_letter.pdf`, compile logs)
+ * Side effects: filesystem writes, optional `pdflatex` invocation, date generation
  */
 
 import * as fs   from "fs";
@@ -19,14 +27,35 @@ import { COVER_PROMPT_SHA } from "./prompt";
 import type { CoverLetterConfig, CoverLetterResult } from "./types";
 
 export interface CoverArtifactOutcome {
+  /** Absolute path to generated `.tex` artifact, or null when generation failed early. */
   tex_path:   string | null;
+  /** Absolute path to compiled `.pdf` artifact, or null when compile skipped or failed. */
   pdf_path:   string | null;
+  /** Absolute path where cover-letter metadata should be persisted by caller. */
   meta_path:  string | null;
+  /** Metadata payload describing prompt provenance, status, and artifact paths. */
   meta:       Record<string, unknown>;
+  /** Artifact flags describing recoverable generation or compile problems. */
   flags:      string[];
+  /** Final cover letter body word count used for QA thresholds. */
   word_count: number;
 }
 
+/**
+ * Generates cover letter prose from artifact bundle context and writes templated outputs.
+ *
+ * Uses slimmed JD/profile context when extended judge metadata is available, then
+ * injects generated prose into the LaTeX template, optionally compiles a PDF, and
+ * returns artifact metadata plus any quality flags the caller should persist.
+ *
+ * @param bundle - Fully hydrated artifact bundle for one job/application pair.
+ * @param config - Cover letter generation and compile configuration.
+ * @param repoRoot - Repository root used to resolve template and relative artifact paths.
+ * @param jobFolderAbs - Absolute artifact folder for this job run.
+ * @param ctx - Run metadata used in returned artifact provenance.
+ * @returns Generated artifact paths, metadata payload, flags, and word count summary.
+ * @throws {Error} Propagates filesystem, generator, or `pdflatex` errors not converted into flags.
+ */
 export async function generateAndSaveCoverLetter(
   bundle: ArtifactBundleOk,
   config: CoverLetterConfig,
@@ -203,6 +232,15 @@ export async function generateAndSaveCoverLetter(
   };
 }
 
+/**
+ * Removes transient LaTeX auxiliary files after a successful compile.
+ *
+ * Keeps failures non-fatal because auxiliary cleanup should never invalidate
+ * an otherwise valid artifact run.
+ *
+ * @param dir - Artifact directory containing compile outputs.
+ * @param basename - Shared filename stem for aux/log/out files.
+ */
 function cleanupAuxFiles(dir: string, basename: string): void {
   for (const ext of [".aux", ".log", ".out"]) {
     const p = path.join(dir, `${basename}${ext}`);
@@ -212,10 +250,21 @@ function cleanupAuxFiles(dir: string, basename: string): void {
   }
 }
 
+/**
+ * Counts whitespace-delimited words for rough cover-letter length validation.
+ *
+ * @param s - Generated prose body to measure.
+ * @returns Approximate word count used for QA flags.
+ */
 function countWords(s: string): number {
   return s.split(/\s+/).filter(Boolean).length;
 }
 
+/**
+ * Formats current date for the LaTeX template's letter header.
+ *
+ * @returns Locale-formatted US date like `June 3, 2026`.
+ */
 function formatLetterDate(): string {
   return new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -224,6 +273,15 @@ function formatLetterDate(): string {
   });
 }
 
+/**
+ * Picks a neutral salutation target from raw job description text.
+ *
+ * Defaults to `Manager` because many postings omit a named contact and the
+ * template expects only the noun following `Dear Hiring ...`.
+ *
+ * @param bundle - Artifact bundle containing raw job description text.
+ * @returns `Manager` or `Team` based on detected recruiting phrasing.
+ */
 function deriveSalutation(bundle: ArtifactBundleOk): string {
   const raw = (bundle.job.description_raw ?? "").slice(0, 12000);
   if (/\bhiring\s+manager\b/i.test(raw)) return "Manager";
@@ -233,11 +291,27 @@ function deriveSalutation(bundle: ArtifactBundleOk): string {
   return "Manager";
 }
 
+/**
+ * Converts optional company location into template-ready LaTeX line break content.
+ *
+ * @param loc - Human-readable job location line, if available.
+ * @returns Escaped LaTeX string prefixed with line break markup, or empty string.
+ */
 function formatCompanyLocationLine(loc: string | null | undefined): string {
   if (!loc?.trim()) return "";
   return `\\\\\n${escapeLatexPlain(loc.trim())}`;
 }
 
+/**
+ * Escapes LaTeX-sensitive characters in generated body prose.
+ *
+ * Keeps newlines intact so paragraph structure survives template insertion.
+ *
+ * @param raw - Generated cover letter body before template insertion.
+ * @returns LaTeX-safe body text suitable for `<<BODY>>`.
+ * @example
+ * escapeLatexBody("Built C# services & ETL")
+ */
 export function escapeLatexBody(raw: string): string {
   let s = raw;
   s = s.replace(/\\/g, "\\textbackslash{}");
@@ -251,10 +325,28 @@ export function escapeLatexBody(raw: string): string {
   return s;
 }
 
+/**
+ * Escapes LaTeX-sensitive characters for single-line template fields.
+ *
+ * Collapses newlines into spaces because contact/header placeholders must stay
+ * on one logical line inside the LaTeX template.
+ *
+ * @param raw - Plain text field value such as company name or contact info.
+ * @returns LaTeX-safe single-line string.
+ */
 export function escapeLatexPlain(raw: string): string {
   return escapeLatexBody(raw).replace(/\n/g, " ");
 }
 
+/**
+ * Detects likely raw LaTeX leakage in generated prose before templating.
+ *
+ * This is deliberately conservative: unmatched braces or command-like tokens
+ * are treated as suspicious because provider output should be plain prose only.
+ *
+ * @param body - Generated cover letter prose body.
+ * @returns `true` when the body appears to contain raw LaTeX markup.
+ */
 function bodyHasLatexLeak(body: string): boolean {
   const open = (body.match(/\{/g) ?? []).length;
   const close = (body.match(/\}/g) ?? []).length;
@@ -262,6 +354,15 @@ function bodyHasLatexLeak(body: string): boolean {
   return open > 0 || close > 0 || hasCommand;
 }
 
+/**
+ * Performs final sanity checks on rendered LaTeX before writing artifacts.
+ *
+ * Uses lightweight heuristics instead of full parsing because the compile step
+ * is the authoritative validator and this check only flags obvious corruption.
+ *
+ * @param tex - Fully substituted LaTeX document.
+ * @returns `true` when document markers and brace balance look plausible.
+ */
 function finalTexValid(tex: string): boolean {
   const open = (tex.match(/\{/g) ?? []).length;
   const close = (tex.match(/\}/g) ?? []).length;
@@ -272,17 +373,34 @@ function finalTexValid(tex: string): boolean {
   );
 }
 
+/**
+ * Builds metadata payload stored alongside generated cover letter artifacts.
+ *
+ * @param args - Artifact provenance, generation result, and optional relative paths.
+ * @returns Serializable metadata object written into per-job artifact records.
+ */
 function buildMeta(args: {
+  /** Source bundle supplying score, job, and judge context. */
   bundle: ArtifactBundleOk;
+  /** Run-level provenance fields copied into artifact metadata. */
   ctx: { runId: string; bucket: string; generatedBy: "pipeline" | "manual" };
+  /** Raw cover letter generation result from model orchestration. */
   clResult: CoverLetterResult;
+  /** Artifact flags accumulated during generation and compile checks. */
   flags: string[];
+  /** Final compile state string stored in metadata for downstream triage. */
   compileStatus: string;
+  /** Final measured word count of generated body text. */
   wordCount: number;
+  /** Canonical resume hash used to tie artifact back to source resume state. */
   canonicalSha: string;
+  /** Human-readable job location line persisted in `job_meta`. */
   jobLocationLine: string | null;
+  /** Optional repo-relative path to generated `.tex` artifact. */
   texRel?: string | null;
+  /** Optional repo-relative path to generated `.pdf` artifact. */
   pdfRel?: string | null;
+  /** Optional repo-relative path to persisted artifact metadata file. */
   metaRel?: string | null;
 }): Record<string, unknown> {
   const { bundle, ctx, clResult, flags, compileStatus, wordCount, canonicalSha } = args;

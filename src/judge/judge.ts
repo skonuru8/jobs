@@ -1,5 +1,13 @@
 /**
- * judge.ts — LLM judge stage. Bible §5 stages 13–14.
+ * judge.ts — judge-stage orchestration for job-fit verdict generation.
+ *
+ * Renders judge prompts, calls model with bounded retry behavior, validates
+ * structured JSON output, and captures failure payloads for later debugging.
+ * Also exposes final-bucket routing logic shared by pipeline consumers.
+ *
+ * Called by: scripts/run-pipeline.ts
+ * Writes to: `output/logs/judge_failures/*.json` on validation failure
+ * Side effects: LLM API calls, retry delays, filesystem writes for bad payload capture
  */
 
 import { complete, ReasoningConfig } from "./client";
@@ -17,13 +25,27 @@ import type { JudgeInput, JudgeResult, FinalBucket, JudgeFields } from "./types"
 import type { Profile } from "@/filter/types";
 
 export interface JudgeConfig {
+  /** Provider model identifier to send to `complete`. */
   model:       string;
+  /** Max completion tokens reserved for judge JSON response. */
   max_tokens:  number;
+  /** Sampling temperature for verdict generation. */
   temperature: number;
+  /** Reserved throttle value for caller-level pacing between jobs. */
   throttle_ms: number;
+  /** Optional provider-specific reasoning config forwarded to client call. */
   reasoning?:  ReasoningConfig;
 }
 
+/**
+ * Supplies safe fallback profile when caller omits live profile data.
+ *
+ * Judge stage still needs consistent prompt structure for manual runs and
+ * legacy callers, so this profile preserves schema without inventing candidate
+ * strengths that could bias verdict.
+ *
+ * @returns Minimal profile object compatible with `buildSystemPrompt`.
+ */
 function defaultProfileForJudge(): Profile {
   return {
     meta: {
@@ -64,6 +86,17 @@ function defaultProfileForJudge(): Profile {
   };
 }
 
+/**
+ * Runs judge stage end to end and returns validated structured result.
+ *
+ * First prompt attempt may be retried once for transient HTTP failure and once
+ * more after schema-validation failure. Invalid final payloads are captured to
+ * disk so prompt/schema regressions can be audited without crashing pipeline.
+ *
+ * @param input - Normalized job facts, scorer output, and optional resume/profile context.
+ * @param config - Model and generation settings for judge call.
+ * @returns Success payload with parsed fields, or error payload with audit metadata.
+ */
 export async function judge(
   input:  JudgeInput,
   config: JudgeConfig,
@@ -149,6 +182,16 @@ export async function judge(
   };
 }
 
+/**
+ * Persists raw invalid judge payload for later debugging.
+ *
+ * File writes are best-effort only; any failure here is swallowed because
+ * observability must not convert recoverable judge miss into pipeline crash.
+ *
+ * @param input - Judge input used to derive stable run/job identifiers.
+ * @param raw - Raw model response that failed validation.
+ * @param error - Validation error explaining why payload was rejected.
+ */
 function writeJudgeFailurePayload(input: JudgeInput, raw: string, error: string): void {
   try {
     const runId = sanitizeId(input.run_id ?? "manual");
@@ -172,10 +215,26 @@ function writeJudgeFailurePayload(input: JudgeInput, raw: string, error: string)
   }
 }
 
+/**
+ * Converts arbitrary run/job labels into filename-safe tokens.
+ *
+ * @param value - Raw identifier from caller or job metadata.
+ * @returns Sanitized string limited to 120 characters and safe for log filenames.
+ */
 function sanitizeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || "unknown";
 }
 
+/**
+ * Retries single async operation once after short fixed delay.
+ *
+ * Used only for provider calls where transient HTTP/network failures are more
+ * common than deterministic prompt/schema failures.
+ *
+ * @param fn - Async operation to execute and, on failure, retry once.
+ * @returns Result of first successful invocation.
+ * @throws Rethrows second failure from `fn` after retry delay expires.
+ */
 async function _withHttpRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
@@ -185,6 +244,16 @@ async function _withHttpRetry<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * Maps judge result and deterministic score to pipeline routing bucket.
+ *
+ * Keeps routing policy centralized so UI and batch pipeline agree on when to
+ * generate artifacts versus only surfacing result or archiving it.
+ *
+ * @param judgeResult - Validated or failed judge-stage outcome.
+ * @param totalScore - Deterministic total score on 0-1 scale from scorer stage.
+ * @returns Final bucket controlling artifact generation and UI visibility.
+ */
 export function getBucket(
   judgeResult: JudgeResult,
   totalScore:  number,

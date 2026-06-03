@@ -1,32 +1,14 @@
 /**
  * run-pipeline.ts — Milestone 6 end-to-end pipeline.
  *
- * Bible §5 stages wired in order:
- *   Stage 3  — sanitizeJob
- *   Stage 4  — hardFilter       (REJECTs dropped here)
- *   Stage 5  — fetchJobPage     (PASS jobs only)
- *   Stage 6  — postFetchChecks  (with real description_raw)
- *   Stage 7  — extract          (LLM → structured fields)
- *   Stage 10 — normalizeSkills  (alias map lookup)
- *   Stage 11 — scoreJob         (deterministic 5-component scoring)
- *   Stage 12 — gate             (score >= threshold → GATE_PASS, else ARCHIVE)
- *   Stage 13 — judge            (LLM verdict: STRONG | MAYBE | WEAK)
- *   Stage 14 — route            (COVER_LETTER | RESULTS | REVIEW_QUEUE | ARCHIVE)
- *   Stage 15 — tailored resume + cover letter (parallel → output/applications/<slug>/)
+ * Runs full scrape-to-artifacts pipeline for a single source, including
+ * filtering, extraction, scoring, judging, artifact generation, dedup, and
+ * persistence. This is orchestration entrypoint for unattended pipeline runs
+ * and manual local runs from repo root.
  *
- * Run from project root:
- *   npx tsx scripts/run-pipeline.ts
- *
- * Options (env vars):
- *   SOURCE=linkedin     default: dice
- *   MAX=50              default: 20
- *   HEADED=1            show browser window (Playwright sources)
- *   JSONL=/path/file    skip scrape, read existing JSONL directly
- *   EXTRACT=1           enable LLM extraction (default: off — costs API calls)
- *   SCORE=1             enable scoring (auto-enabled when EXTRACT=1)
- *   JUDGE=1             enable LLM judge (auto-enabled when EXTRACT=1)
- *   COVER=1             enable cover letter generation (auto-enabled when EXTRACT=1)
- *   QUERY="java developer"  Dice search query (default: "full stack developer")
+ * Called by: `npx tsx scripts/run-pipeline.ts`, cron/manual shell wrappers
+ * Writes to: `scraper/output/*.jsonl`, `output/applications/**`, `output/logs/runs/**`
+ * Side effects: scraper subprocess spawn, LLM/API calls, Redis/Postgres I/O, filesystem writes
  */
 
 import { spawnSync }     from "child_process";
@@ -147,6 +129,16 @@ const RUN_LOG_PATH = installRunLog(REPO_ROOT, SOURCE, RUN_ID, RUN_STARTED_AT);
 // Main
 // ---------------------------------------------------------------------------
 
+/**
+ * Loads runtime config, prepares shared context, and executes full pipeline run.
+ *
+ * Keeps startup validation separate from per-job processing so fatal config or
+ * infrastructure issues fail fast before any scraper, LLM, or persistence work
+ * begins. Also owns run-level teardown for dedup and storage connections.
+ *
+ * @returns Promise that resolves after pipeline summary, persistence, and cleanup complete.
+ * @throws Exits process via `die()` for missing required config or runtime prerequisites.
+ */
 async function main(): Promise<void> {
   if (RUN_LOG_PATH) {
     log(`Run log: ${RUN_LOG_PATH}`);
@@ -369,6 +361,20 @@ async function main(): Promise<void> {
 // Scraper spawn
 // ---------------------------------------------------------------------------
 
+/**
+ * Runs scraper CLI for requested source and returns freshest JSONL output path.
+ *
+ * Centralizes subprocess argument wiring so pipeline and scraper CLI stay in
+ * lockstep about source-specific options such as Dice search filters.
+ *
+ * @param source - Scraper source key such as `dice` or `linkedin`.
+ * @param maxJobs - Maximum number of listings scraper should emit.
+ * @param headed - Whether Playwright-backed sources should show browser UI.
+ * @param query - Dice search query text. Ignored for non-Dice sources.
+ * @param postedWithin - Optional Dice recency window passed through verbatim.
+ * @returns Absolute path to newest source JSONL file under `scraper/output`.
+ * @throws Exits process via `die()` when scraper fails or no JSONL is produced.
+ */
 function runScraper(
   source:        string,
   maxJobs:       number,
@@ -408,6 +414,12 @@ function runScraper(
 }
 
 
+/**
+ * Finds newest scraper JSONL for source by file modification time.
+ *
+ * @param source - Scraper source prefix used in JSONL filenames.
+ * @returns Absolute JSONL path when at least one matching file exists; otherwise `null`.
+ */
 function findNewestJsonl(source: string): string | null {
   if (!fs.existsSync(SCRAPER_OUT_DIR)) return null;
   const files = fs
@@ -452,6 +464,36 @@ interface JobResult {
   artifact_output_tokens?: number;
 }
 
+/**
+ * Processes one JSONL scrape artifact through full post-scrape pipeline.
+ *
+ * Preserves original input order while still running expensive fetch/extract/
+ * judge/artifact work concurrently. Splits work into reject, dedup, and pass
+ * lanes so cheap eliminations happen before any LLM or persistence cost.
+ *
+ * @param jsonlPath - Absolute path to scraper output file for this run.
+ * @param profile - Validated candidate profile used by filters, scoring, and judge.
+ * @param aliases - Skill alias map for extractor normalization.
+ * @param extractorConfig - LLM extractor runtime settings.
+ * @param judgeConfigArg - LLM judge runtime settings.
+ * @param coverLetterConfigArg - Cover-letter generation settings.
+ * @param resumeGeneratorConfigArg - Tailored resume generation settings.
+ * @param scoringWeights - Weight vector for deterministic score components.
+ * @param scoringThreshold - Minimum total score required to reach judge stage.
+ * @param profileEmbedding - Precomputed candidate embedding reused across jobs.
+ * @param resumeText - Optional plain-text resume fallback for legacy flows.
+ * @param canonicalResumeTex - Canonical LaTeX source required for artifact generation.
+ * @param experienceBlock - Pre-extracted experience summary used in artifact prompts.
+ * @param rolesList - Canonical roles summary supplied to judge prompt.
+ * @param canonicalSkillsText - Canonical skills section supplied to judge prompt.
+ * @param nowIso - Run timestamp used by post-fetch checks.
+ * @param repoRoot - Repository root for resolving outputs and cache paths.
+ * @param runIdForArtifacts - Run identifier stored in generated artifact metadata.
+ * @param runFolderName - Output subfolder name for this run's application artifacts.
+ * @param doResumeArtifact - Whether resume artifact generation is enabled for qualifying jobs.
+ * @param doCoverArtifact - Whether cover-letter generation is enabled for qualifying jobs.
+ * @returns Ordered list of `JobResult` entries matching original JSONL order.
+ */
 async function processJobs(
   jsonlPath:           string,
   profile:             unknown,
@@ -767,6 +809,7 @@ async function processJobs(
     });
 
     // Stage 13–14 — LLM judge + routing (GATE_PASS only)
+    // Judge decides STRONG/MAYBE/WEAK verdict → FinalBucket. ARCHIVE jobs skip here entirely.
     let judgeResult: JudgeResult | undefined;
     let bucket: FinalBucket | undefined = routing.isArchived ? "ARCHIVE" : undefined;
     let finalVerdict = routing.isArchived ? "ARCHIVE" : routing.gateVerdict;
@@ -836,6 +879,8 @@ async function processJobs(
     }
 
     // Stage 15 — Tailored resume + cover letter (parallel)
+    // Only COVER_LETTER bucket and REVIEW_QUEUE jobs scoring >= rvqThreshold qualify.
+    // Resume: signature cache checked first; patch_tailoring mode by default.
     let coverLetterPath: string | null  = null;
     let coverLetterWords: number | null = null;
     let resumePdfPath: string | null = null;
@@ -1140,6 +1185,17 @@ async function processJobs(
 // Output
 // ---------------------------------------------------------------------------
 
+/**
+ * Prints human-readable run summary for CLI operators.
+ *
+ * Keeps bucket, score, and flag reporting in one place so unattended logs and
+ * manual runs expose same triage signal after pipeline completion.
+ *
+ * @param results - Ordered per-job pipeline outcomes for current run.
+ * @param source - Source label shown in summary header.
+ * @param threshold - Active score gate threshold used for Stage 12.
+ * @returns Nothing. Writes formatted summary to stdout.
+ */
 function printResults(results: JobResult[], source: string, threshold: number): void {
   const SEP = "─".repeat(90);
 
@@ -1304,28 +1360,50 @@ function printResults(results: JobResult[], source: string, threshold: number): 
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Counts repeated strings and sorts descending by frequency.
+ *
+ * @param items - Labels, reasons, or flags to aggregate.
+ * @returns Tuple list of `[value, count]`, highest count first.
+ */
 function tally(items: string[]): [string, number][] {
   const map: Record<string, number> = {};
   for (const item of items) map[item] = (map[item] ?? 0) + 1;
   return Object.entries(map).sort((a, b) => b[1] - a[1]);
 }
 
+/**
+ * Pads or truncates text for fixed-width console summary columns.
+ *
+ * @param s - Raw text to fit into display column.
+ * @param len - Target visible width in characters.
+ * @returns String padded with spaces or truncated with ellipsis.
+ */
 function pad(s: string, len: number): string {
   if (!s) s = "";
   return s.length > len ? s.slice(0, len - 1) + "…" : s.padEnd(len);
 }
 
+/**
+ * Computes arithmetic mean for possibly empty numeric list.
+ *
+ * @param nums - Numeric values to average.
+ * @returns Mean of all values, or `0` when list is empty.
+ */
 function avg(nums: number[]): number {
   return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
 }
 
 /**
- * Map extractor's security_clearance enum to job-filter's enum.
- * Extractor: "none" | "required" | "preferred" | "unknown"
- * Filter:    "none" | "public_trust" | "secret" | "top_secret"
+ * Maps extractor clearance enum onto hard-filter clearance vocabulary.
  *
- * "required" → "secret"   (triggers CLEARANCE_REQUIRED reject if clearance_eligible: false)
- * "preferred"/"unknown" → "none" + clearance_unclear flag
+ * Normalizes softer extractor states into conservative downstream semantics:
+ * a hard `required` becomes `secret`, while vague signals fall back to `none`
+ * plus `clearance_unclear` so filters and reviewers can treat them cautiously.
+ *
+ * @param extractorValue - Extractor output such as `required` or `unknown`.
+ * @param job - Mutable sanitized job whose `meta.flags` may receive uncertainty marker.
+ * @returns Filter-compatible clearance string.
  */
 function mapClearance(extractorValue: string, job: any): string {
   switch (extractorValue) {
@@ -1347,15 +1425,41 @@ function mapClearance(extractorValue: string, job: any): string {
   }
 }
 
+/**
+ * Writes pipeline log line to stderr with stable prefix for grep-able run logs.
+ *
+ * @param msg - Already-formatted message body.
+ * @returns Nothing. Emits to stderr.
+ */
 function log(msg: string): void {
   process.stderr.write(`[pipeline] ${msg}\n`);
 }
 
+/**
+ * Terminates pipeline immediately with prefixed fatal error message.
+ *
+ * @param msg - Human-readable fatal error detail.
+ * @returns Never returns.
+ * @throws Exits process with status code `1`.
+ */
 function die(msg: string): never {
   process.stderr.write(`[pipeline] ERROR: ${msg}\n`);
   process.exit(1);
 }
 
+/**
+ * Mirrors stdout and stderr into per-run logfile for later audit/debug.
+ *
+ * Uses write monkey-patching instead of logger plumbing so existing `console`
+ * and `process.stderr.write` calls across pipeline and imported modules land in
+ * same file without invasive refactors.
+ *
+ * @param repoRoot - Repository root used to resolve default log directory.
+ * @param source - Source label embedded in logfile name.
+ * @param runId - Unique pipeline run identifier.
+ * @param startedAt - Run start timestamp used for foldering and filenames.
+ * @returns Absolute logfile path, or `null` when run logging is disabled.
+ */
 function installRunLog(repoRoot: string, source: string, runId: string, startedAt: Date): string | null {
   if (process.env.PIPELINE_DISABLE_RUN_LOG === "1") return null;
 

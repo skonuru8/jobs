@@ -1,17 +1,25 @@
 /**
- * prompt.ts — lean autonomous pipeline prompt for resume tailoring.
+ * prompt.ts — System prompt and addendum renderers for full resume regeneration.
  *
- * Replaces the SKILL.md + PIPELINE_OVERRIDE chain. The judge has already
- * done the analysis; this prompt covers execution only.
+ * Holds canonical full-regeneration system prompt, stable prompt hash, and
+ * renderer helpers that serialize judge directives into deterministic prompt
+ * sections without leaking pipeline-only formatting concerns into callers.
  *
- * Render functions are unchanged from previous version — same inputs,
- * same outputs, same headers ("JUDGE TECH SWAPS", "JUDGE GAP DIRECTIVES").
+ * Called by: `generator.ts`, signature builders, prompt tests
+ * Writes to: nothing
+ * Side effects: crypto hashing at module load
  */
 
 import * as crypto from "crypto";
 
 import type { GapDirective, TechSwap } from "@/judge/types";
 
+/**
+ * Full-regeneration system prompt that constrains autonomous resume tailoring behavior.
+ *
+ * Signature and cache layers hash this string, so wording changes invalidate
+ * cached resume artifacts by design.
+ */
 export const TOTAL_MODE_PROMPT = `
 You are a resume tailoring engine running in autonomous pipeline mode.
 The judge has already analyzed this job and decided what to change.
@@ -189,12 +197,27 @@ LATEX SAFETY
 - Do not introduce new LaTeX environments or packages.
 `.trim();
 
+/**
+ * Stable 12-character SHA-256 prefix for `TOTAL_MODE_PROMPT`.
+ *
+ * Used in artifact metadata and cache signatures so prompt changes force fresh generation.
+ */
 export const PROMPT_SHA = crypto
   .createHash("sha256")
   .update(TOTAL_MODE_PROMPT, "utf8")
   .digest("hex")
   .slice(0, 12);
 
+/**
+ * Renders human-readable gap directives block for resume prompt payload.
+ *
+ * Only directive families the resume generator understands are emitted. Empty
+ * or irrelevant directive lists collapse to an empty string so callers can
+ * concatenate safely.
+ *
+ * @param directives - Optional judge directives scoped to resume tailoring.
+ * @returns Prompt fragment headed by `JUDGE GAP DIRECTIVES`, or empty string when unused.
+ */
 export function renderResumeGapDirectives(directives: GapDirective[] | undefined): string {
   if (!directives || directives.length === 0) return "";
 
@@ -221,6 +244,12 @@ export function renderResumeGapDirectives(directives: GapDirective[] | undefined
   return out;
 }
 
+/**
+ * Renders scoped tech-swap instructions for resume prompt payload.
+ *
+ * @param swaps - Optional judge-provided stack substitutions, optionally limited to one role.
+ * @returns Prompt fragment headed by `JUDGE TECH SWAPS`, or empty string when unused.
+ */
 export function renderResumeScopedTechSwaps(swaps: TechSwap[] | undefined): string {
   if (!swaps || swaps.length === 0) return "";
 
@@ -236,6 +265,13 @@ export function renderResumeScopedTechSwaps(swaps: TechSwap[] | undefined): stri
   return out;
 }
 
+/**
+ * Concatenates tech swaps and gap directives into final prompt addendum.
+ *
+ * @param directives - Optional gap directives for bullet rewrites or forbids.
+ * @param swaps - Optional tech-swap instructions for scoped term replacement.
+ * @returns Trimmed prompt addendum safe to append after core JSON payload sections.
+ */
 export function renderResumeJudgeAddendum(
   directives: GapDirective[] | undefined,
   swaps: TechSwap[] | undefined,

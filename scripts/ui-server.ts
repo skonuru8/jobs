@@ -1,7 +1,12 @@
 /**
  * ui-server.ts — Express API server for the Job Hunter Review UI.
- * Start: npx tsx scripts/ui-server.ts
- * Port:  3001
+ *
+ * Serves built frontend assets plus REST endpoints for queue review, labeling,
+ * artifact generation, and resume inspection against pipeline persistence data.
+ *
+ * Called by: `npx tsx scripts/ui-server.ts`, local UI workflows
+ * Writes to: Postgres label rows, generated artifact folders via manual generation
+ * Side effects: runs DB migrations, reads artifact/meta files from disk, starts HTTP server on port 3001
  */
 
 import express from 'express';
@@ -22,6 +27,9 @@ loadEnv({ path: path.join(REPO_ROOT, '.env') });
  * Cover letter content is stored on disk (content col is NULL in DB).
  * The stored file_path may reference an old repo location; resolve it
  * by trying the stored path first, then substituting the current repo root.
+ *
+ * @param filePath - Stored markdown path from artifact row, possibly from older repo root.
+ * @returns Cover letter markdown content when readable; otherwise `null`.
  */
 function readCoverLetter(filePath: string | null): string | null {
   if (!filePath) return null;
@@ -39,6 +47,13 @@ function readCoverLetter(filePath: string | null): string | null {
   return null;
 }
 
+/**
+ * Boots review API server, applies required schema migrations, and mounts all
+ * endpoints needed by frontend queue triage workflow.
+ *
+ * @returns Promise that resolves once server starts listening.
+ * @throws Rejects on startup failures such as DB connectivity or migration errors.
+ */
 async function main() {
   const pool = getPool();
 
@@ -72,6 +87,7 @@ async function main() {
   // -------------------------------------------------------------------------
   // GET /api/apply-queue
   // -------------------------------------------------------------------------
+  // `GET /api/apply-queue` — list latest actionable jobs with artifact links and risk metadata.
   app.get('/api/apply-queue', async (_req, res) => {
     try {
       const result = await pool.query(`
@@ -185,6 +201,7 @@ async function main() {
   // -------------------------------------------------------------------------
   // GET /api/rejections-hard
   // -------------------------------------------------------------------------
+  // `GET /api/rejections-hard` — list hard-filter rejects for review and labeling.
   app.get('/api/rejections-hard', async (_req, res) => {
     try {
       const result = await pool.query(`
@@ -211,6 +228,7 @@ async function main() {
   // -------------------------------------------------------------------------
   // GET /api/rejections-soft
   // -------------------------------------------------------------------------
+  // `GET /api/rejections-soft` — list archived soft rejects with score and judge context.
   app.get('/api/rejections-soft', async (_req, res) => {
     try {
       const result = await pool.query(`
@@ -239,6 +257,7 @@ async function main() {
   // -------------------------------------------------------------------------
   // GET /api/stats
   // -------------------------------------------------------------------------
+  // `GET /api/stats` — return dashboard counters for total or today-scoped queue state.
   app.get('/api/stats', async (req, res) => {
     try {
       const scope = String(req.query.scope ?? 'total');
@@ -298,6 +317,7 @@ async function main() {
   // -------------------------------------------------------------------------
   // POST /api/label
   // -------------------------------------------------------------------------
+  // `POST /api/label` — upsert reviewer label, notes, and application status for one job.
   app.post('/api/label', async (req, res) => {
     try {
       const { job_id, run_id, label, application_status, notes } = req.body as {
@@ -342,6 +362,7 @@ async function main() {
   // -------------------------------------------------------------------------
   // POST /api/jobs/:job_id/generate — resume + cover letter (manual)
   // -------------------------------------------------------------------------
+  // `POST /api/jobs/:job_id/generate` — manually regenerate tailored resume and cover artifacts.
   app.post('/api/jobs/:job_id/generate', async (req, res) => {
     try {
       if (!process.env.OPENROUTER_API_KEY) {
@@ -376,6 +397,7 @@ async function main() {
   // -------------------------------------------------------------------------
   // GET /api/run-history
   // -------------------------------------------------------------------------
+  // `GET /api/run-history` — return recent pipeline runs with status and volume counts.
   app.get('/api/run-history', async (_req, res) => {
     try {
       const result = await pool.query(`
@@ -407,6 +429,7 @@ async function main() {
   // -------------------------------------------------------------------------
   // GET /api/applied-jobs
   // -------------------------------------------------------------------------
+  // `GET /api/applied-jobs` — list labeled applied jobs with artifact download links.
   app.get('/api/applied-jobs', async (_req, res) => {
     try {
       const result = await pool.query(`
@@ -507,6 +530,7 @@ async function main() {
   // -------------------------------------------------------------------------
   // GET /api/jobs/:job_id/resume-tex
   // -------------------------------------------------------------------------
+  // `GET /api/jobs/:job_id/resume-tex` — return latest tailored resume TeX plus canonical source.
   app.get('/api/jobs/:job_id/resume-tex', async (req, res) => {
     try {
       const { job_id } = req.params;
@@ -557,6 +581,7 @@ async function main() {
   });
 
   // SPA fallback for production
+  // `GET /*` — serve SPA index fallback when built frontend exists.
   app.use((_req, res) => {
     const distIndex = path.join(__dirname, '../ui/dist/index.html');
     if (fs.existsSync(distIndex)) {

@@ -1,3 +1,14 @@
+/**
+ * combined-meta.ts — writes consolidated per-job artifact metadata.
+ *
+ * Builds `meta.json` beside generated resume and cover letter artifacts so UI,
+ * audits, and replay tooling can inspect one normalized payload instead of
+ * recomputing fields from multiple sources.
+ *
+ * Called by: application artifact generation flows
+ * Writes to: `meta.json` inside per-job artifact folder
+ * Side effects: creates destination folder and writes one JSON file
+ */
 import * as fs   from "fs";
 import * as path from "path";
 
@@ -6,11 +17,29 @@ import type { CoverArtifactOutcome } from "@/cover-letter/saver";
 import type { ResumeArtifactOutcome } from "@/resume-generator/index";
 
 export interface ArtifactGenCtx {
+  /** Run id associated with artifact generation; may point to orchestrated or manual flow. */
   runId: string;
+  /** Judge bucket assigned to job and copied into combined metadata. */
   bucket: string;
+  /** Origin of artifact generation request. */
   generatedBy: "pipeline" | "manual";
 }
 
+/**
+ * Writes normalized artifact metadata for one job folder.
+ *
+ * Relative paths are stored instead of absolute paths so bundles remain portable
+ * across machines and archive locations.
+ *
+ * @param jobFolderAbs - Absolute destination folder for this job's artifacts.
+ * @param repoRoot - Repository root used to relativize artifact file paths.
+ * @param bundle - Validated artifact bundle containing job, score, and judge data.
+ * @param resumeOutcome - Resume generation result, or `null` when resume was skipped.
+ * @param coverOutcome - Cover letter generation result, or `null` when cover letter was skipped.
+ * @param ctx - Run metadata that links artifacts back to pipeline or manual execution.
+ * @returns Absolute path to written `meta.json` file.
+ * @throws {Error} Propagates filesystem errors from directory creation or file write.
+ */
 export function writeCombinedMeta(
   jobFolderAbs: string,
   repoRoot: string,
@@ -67,11 +96,30 @@ export function writeCombinedMeta(
   return metaPath;
 }
 
+/**
+ * Extracts requisition identifier from heterogeneous scraper metadata shapes.
+ *
+ * Supports historical key variants so downstream metadata stays stable while
+ * upstream scrapers evolve independently.
+ *
+ * @param meta - Raw job metadata object from scraper output.
+ * @returns Trimmed requisition id, or `null` when no usable field exists.
+ */
 function readReqId(meta: { [k: string]: unknown }): string | null {
   const x = meta.req_id ?? meta.requisition_id ?? (meta as { requisitionId?: unknown }).requisitionId;
   return typeof x === "string" && x.trim() ? x.trim() : null;
 }
 
+/**
+ * Converts resume generation outcome into normalized `resume` block for `meta.json`.
+ *
+ * Emits explicit skip and failure placeholders so consumers can distinguish
+ * "not generated" from "generated but unusable" without inspecting other files.
+ *
+ * @param o - Resume generation outcome, or `null` when stage never ran.
+ * @param rel - Helper that converts absolute paths into repository-relative paths.
+ * @returns JSON-safe object describing resume artifact status and metadata.
+ */
 function resumeBlock(
   o: ResumeArtifactOutcome | null,
   rel: (p: string | null | undefined) => string | null,
@@ -136,6 +184,16 @@ function resumeBlock(
   };
 }
 
+/**
+ * Converts cover letter generation outcome into normalized `cover_letter` block.
+ *
+ * Keeps schema aligned with resume metadata so downstream readers can handle
+ * skips, failures, and successful exports with predictable keys.
+ *
+ * @param o - Cover letter generation outcome, or `null` when stage never ran.
+ * @param rel - Helper that converts absolute paths into repository-relative paths.
+ * @returns JSON-safe object describing cover letter artifact status and metadata.
+ */
 function coverBlock(
   o: CoverArtifactOutcome | null,
   rel: (p: string | null | undefined) => string | null,

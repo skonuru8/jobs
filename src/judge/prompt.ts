@@ -1,5 +1,12 @@
 /**
- * prompt.ts — system prompt and user prompt builder for the LLM judge.
+ * prompt.ts — prompt builders for structured job-fit judgment.
+ *
+ * Assembles dynamic system instructions from candidate profile and canonical
+ * resume context, then formats compact job/scorer payloads for judge model
+ * calls. Also stamps prompt versions and stable hashes for audit trails.
+ *
+ * Called by: judge.ts, judge prompt tests
+ * Side effects: none beyond SHA-256 hashing in memory
  */
 
 import * as crypto from "crypto";
@@ -7,8 +14,21 @@ import * as crypto from "crypto";
 import type { Profile } from "@/filter/types";
 import type { JudgeInput } from "./types";
 
+/**
+ * Schema version for judge prompt contract and expected JSON response shape.
+ * Bump only when prompt semantics or output fields change in a nontrivial way.
+ */
 export const PROMPT_VERSION = "v5";
 
+/**
+ * Converts profile object into compact narrative block judge can reason over.
+ *
+ * Keeps only top slices of skills, titles, and preferences so system prompt
+ * stays informative without ballooning token count.
+ *
+ * @param profile - Live candidate profile selected for this pipeline run.
+ * @returns Multi-line profile summary embedded near top of system prompt.
+ */
 export function buildCandidateProfileSection(profile: Profile): string {
   const expert = profile.skills
     .filter(s => s.confidence === "expert")
@@ -34,6 +54,17 @@ export function buildCandidateProfileSection(profile: Profile): string {
 - Preferred domains: ${domains}.`;
 }
 
+/**
+ * Builds full system prompt that defines verdict rules and downstream schema.
+ *
+ * Optional canonical work-history and skills sections are appended only when
+ * provided so judge can ground tailoring directives in exact resume evidence.
+ *
+ * @param profile - Candidate profile that supplies base fit context.
+ * @param rolesList - Canonical work-history excerpt grouped by role, if available.
+ * @param canonicalSkills - Verbatim canonical skills section used to suppress false gaps.
+ * @returns Full system prompt sent as system message to judge model.
+ */
 export function buildSystemPrompt(
   profile: Profile,
   rolesList?: string,
@@ -254,10 +285,29 @@ must reflect those constraints. Do not write reframe language that violates them
 NEVER produce a tailoring_hints.tech_swaps entry where the map says swap_allowed === false.`;
 }
 
+/**
+ * Produces short audit hash for exact system prompt text.
+ *
+ * Stored with judge results so prompt changes can be correlated with output
+ * differences without persisting full prompt bodies in metadata tables.
+ *
+ * @param systemPrompt - Fully rendered system prompt text sent to provider.
+ * @returns First 12 hex characters of SHA-256 digest for compact traceability.
+ */
 export function computeSystemPromptSha(systemPrompt: string): string {
   return crypto.createHash("sha256").update(systemPrompt, "utf8").digest("hex").slice(0, 12);
 }
 
+/**
+ * Formats job facts and deterministic score context into user message content.
+ *
+ * Normalizes optional JD fields into explicit text so judge model does not
+ * infer missing values, and caps prompt noise by trimming long skill and
+ * responsibility lists.
+ *
+ * @param input - Judge-stage payload containing normalized job and scorer data.
+ * @returns User prompt instructing model to return contract-compliant JSON only.
+ */
 export function buildJudgePrompt(input: JudgeInput): string {
   const { job, score } = input;
 

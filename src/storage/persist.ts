@@ -21,6 +21,10 @@
  *      until needed by other callers.
  *   6. markRunExitCode: called by orchestrator runner on child exit and by
  *      the ghost reaper for dead runs (exit_code = -1).
+ *
+ * Called by: pipeline orchestrator, replay/import flows, artifact persistence paths
+ * Writes to: Postgres tables `runs`, `jobs`, `filter_results`, `scores`, `judge_verdicts`, `seen_jobs`, `tailored_resumes`, `cover_letters`, `fabrication_ledger`
+ * Side effects: DB reads/writes, console logging on persistence failures, in-memory storage-disable flag
  */
 
 import type { Pool, PoolClient } from "pg";
@@ -35,17 +39,34 @@ import type { LedgerEntryInput } from "../risk-map/types.js";
 
 let _disabled = false;
 
+/**
+ * Permanently disables storage writes for current process after fatal DB setup failure.
+ *
+ * Pipeline continues using filesystem artifacts when database becomes unavailable.
+ *
+ * @param reason - Optional human-readable reason logged once when storage is disabled.
+ * @returns Nothing.
+ */
 export function markStorageDisabled(reason?: string): void {
   if (_disabled) return;   // idempotent
   _disabled = true;
   if (reason) console.warn(`[storage] Disabled: ${reason}`);
 }
 
+/**
+ * Reports whether persistence functions should attempt database access.
+ *
+ * @returns `true` when storage is enabled for this process; otherwise `false`.
+ */
 export function isStorageAvailable(): boolean {
   return !_disabled;
 }
 
-/** Test helper — reset module state between tests. */
+/**
+ * Resets module-level storage disable flag for isolated test cases.
+ *
+ * @returns Nothing.
+ */
 export function _resetDisabledForTesting(): void {
   _disabled = false;
 }
@@ -54,6 +75,15 @@ export function _resetDisabledForTesting(): void {
 // Error formatting
 // ---------------------------------------------------------------------------
 
+/**
+ * Normalizes unknown thrown values into concise log strings.
+ *
+ * Handles plain errors, driver error objects with codes, and `AggregateError`
+ * shapes returned by failed connection attempts.
+ *
+ * @param e - Unknown caught value from persistence code.
+ * @returns Human-readable error string safe for console logging.
+ */
 export function formatErr(e: unknown): string {
   if (!e) return "unknown error";
   const err = e as { message?: string; errors?: unknown[]; code?: string };
@@ -75,6 +105,15 @@ export function formatErr(e: unknown): string {
 // Runs
 // ---------------------------------------------------------------------------
 
+/**
+ * Creates run row when storage is enabled.
+ *
+ * Duplicate run ids are ignored so replay paths can rehydrate state without
+ * tripping uniqueness constraints.
+ *
+ * @param run - Run metadata captured at pipeline start.
+ * @returns Promise that resolves after insert attempt or immediate skip.
+ */
 export async function saveRun(run: RunRecord): Promise<void> {
   if (_disabled) return;
   try {
@@ -89,6 +128,13 @@ export async function saveRun(run: RunRecord): Promise<void> {
   }
 }
 
+/**
+ * Finalizes aggregate run statistics after pipeline completion.
+ *
+ * @param runId - Unique run identifier to update.
+ * @param stats - Summary counters and completion timestamp for finished run.
+ * @returns Promise that resolves after update attempt or immediate skip.
+ */
 export async function finishRun(runId: string, stats: RunStats): Promise<void> {
   if (_disabled) return;
   try {
@@ -125,6 +171,9 @@ export async function finishRun(runId: string, stats: RunStats): Promise<void> {
  *
  * Non-throwing: a missed heartbeat is acceptable — the reaper uses a 5min
  * stale window, so a single failed update won't incorrectly reap a live run.
+ *
+ * @param runId - Unique run identifier whose heartbeat should be refreshed.
+ * @returns Promise that resolves after update attempt or immediate skip.
  */
 export async function updateHeartbeat(runId: string): Promise<void> {
   if (_disabled) return;
@@ -146,6 +195,11 @@ export async function updateHeartbeat(runId: string): Promise<void> {
  *
  * The reaper path also sets finished_at because the child never called
  * finishRun — the run row would otherwise sit with finished_at IS NULL forever.
+ *
+ * @param runId - Unique run identifier to mark.
+ * @param exitCode - Process exit code, or sentinel `-1` for reaped ghost runs.
+ * @param isGhost - When `true`, also stamps `finished_at` because child never exited cleanly.
+ * @returns Promise that resolves after update attempt or immediate skip.
  */
 export async function markRunExitCode(
   runId: string,
@@ -179,6 +233,9 @@ export async function markRunExitCode(
  *
  * Hits the partial index: runs_unfinished_idx ON runs(last_heartbeat)
  * WHERE finished_at IS NULL
+ *
+ * @param staleMinutes - Heartbeat age threshold in minutes before run is considered abandoned.
+ * @returns Promise resolving to unfinished run identifiers eligible for ghost cleanup.
  */
 export async function getUnfinishedRuns(
   staleMinutes = 5,
@@ -203,6 +260,9 @@ export async function getUnfinishedRuns(
 /**
  * getRunStats — used by the orchestrator monitor to check extraction
  * success rates after a run completes.
+ *
+ * @param runId - Unique run identifier to inspect.
+ * @returns Promise resolving to stored run stats, or `null` when absent or storage unavailable.
  */
 export async function getRunStats(runId: string): Promise<RunStats | null> {
   if (_disabled) return null;
@@ -236,6 +296,15 @@ export async function getRunStats(runId: string): Promise<RunStats | null> {
 // The 5 INSERTs (jobs / filter_results / scores / judge_verdicts / seen_jobs)
 // ---------------------------------------------------------------------------
 
+/**
+ * Persists one fully processed job and related derived records in single transaction.
+ *
+ * Swallows connection and SQL errors so database outages do not break pipeline
+ * completion; JSONL and artifact files remain fallback source of truth.
+ *
+ * @param job - Normalized job record containing scraped, filtered, scored, and judged state.
+ * @returns Promise that resolves after transactional save attempt or immediate skip.
+ */
 export async function saveJob(job: JobRecord): Promise<void> {
   if (_disabled) return;
 
@@ -369,7 +438,14 @@ export async function saveJob(job: JobRecord): Promise<void> {
 // Tailored resume + cover letter rows (artifact pipeline)
 // ---------------------------------------------------------------------------
 
-/** True if this job already has a tailored resume or cover letter row. */
+/**
+ * Checks whether any artifact row already exists for job.
+ *
+ * Used by callers that only need presence test before heavier artifact work.
+ *
+ * @param jobId - Stable job identifier shared across runs.
+ * @returns Promise resolving to `true` when either tailored resume or cover letter exists.
+ */
 export async function jobHasAnyArtifacts(jobId: string): Promise<boolean> {
   if (_disabled) return false;
   try {
@@ -387,7 +463,14 @@ export async function jobHasAnyArtifacts(jobId: string): Promise<boolean> {
   }
 }
 
-/** True only when the latest resume and cover rows both point at usable files. */
+/**
+ * Checks whether latest resume and cover letter rows both reference usable outputs.
+ *
+ * Failed compile rows do not count as complete, even if paths exist.
+ *
+ * @param jobId - Stable job identifier shared across runs.
+ * @returns Promise resolving to `true` only when both latest artifacts are usable.
+ */
 export async function jobHasCompleteArtifacts(jobId: string): Promise<boolean> {
   if (_disabled) return false;
   try {
@@ -428,22 +511,42 @@ export async function jobHasCompleteArtifacts(jobId: string): Promise<boolean> {
 }
 
 export interface TailoredResumeInsert {
+  /** Job identifier that owns generated resume artifact. */
   job_id:          string;
+  /** Run that produced artifact, or `null` for legacy/manual backfills without run linkage. */
   run_id:          string | null;
+  /** Absolute or repo-relative `.tex` output path for tailored resume. */
   tex_path:        string;
+  /** Optional compiled PDF path when LaTeX compilation succeeded. */
   pdf_path:        string | null;
+  /** Path to per-job `meta.json` file that references this artifact. */
   meta_path:       string;
+  /** Final resume word count, or `null` when generation failed before counting. */
   word_count:      number | null;
+  /** LLM model that generated or patched resume content. */
   model:           string;
+  /** Stable prompt hash for cache and audit traceability. */
   prompt_sha:      string;
+  /** Hash of canonical resume source used as patch/regeneration base. */
   canonical_sha:   string;
+  /** Input token count reported by provider, or `null` when unavailable. */
   input_tokens:    number | null;
+  /** Output token count reported by provider, or `null` when unavailable. */
   output_tokens:   number | null;
+  /** Compile outcome string persisted for cache and UI decisions. */
   compile_status:  string;
+  /** Caller classifying whether pipeline or manual flow generated artifact. */
   generated_by:    string;
+  /** Artifact warning or failure flags captured during generation. */
   flags:           string[];
 }
 
+/**
+ * Inserts tailored resume artifact row after filesystem export succeeds.
+ *
+ * @param row - Flattened resume artifact record ready for DB insertion.
+ * @returns Promise that resolves after insert attempt or immediate skip.
+ */
 export async function insertTailoredResumeArtifact(row: TailoredResumeInsert): Promise<void> {
   if (_disabled) return;
   try {
@@ -476,21 +579,40 @@ export async function insertTailoredResumeArtifact(row: TailoredResumeInsert): P
 }
 
 export interface LatestTailoredResumeForCache {
+  /** Run that produced cached artifact, or `null` for legacy/manual records. */
   run_id: string | null;
+  /** Latest tailored resume `.tex` path, if one exists. */
   tex_path: string | null;
+  /** Latest tailored resume PDF path, if compilation succeeded. */
   pdf_path: string | null;
+  /** Path to combined metadata file tied to cached artifact. */
   meta_path: string | null;
+  /** Stored resume word count used by cache metadata and UI. */
   word_count: number | null;
+  /** Model that produced cached artifact. */
   model: string | null;
+  /** Prompt hash tied to cached artifact generation. */
   prompt_sha: string | null;
+  /** Canonical resume hash used when artifact was produced. */
   canonical_sha: string | null;
+  /** Provider-reported input token count, if stored. */
   input_tokens: number | null;
+  /** Provider-reported output token count, if stored. */
   output_tokens: number | null;
+  /** Compile outcome for cached artifact. */
   compile_status: string | null;
+  /** Generation flags persisted with cached artifact. */
   flags: string[] | null;
+  /** Timestamp used to choose latest artifact candidate. */
   generated_at: string;
 }
 
+/**
+ * Fetches newest tailored resume row for cache reuse decisions.
+ *
+ * @param jobId - Stable job identifier shared across runs.
+ * @returns Promise resolving to latest tailored resume row, or `null` when absent.
+ */
 export async function getLatestTailoredResumeForJob(jobId: string): Promise<LatestTailoredResumeForCache | null> {
   if (_disabled) return null;
   try {
@@ -512,24 +634,46 @@ export async function getLatestTailoredResumeForJob(jobId: string): Promise<Late
 }
 
 export interface CoverLetterArtifactInsert {
+  /** Job identifier that owns generated cover letter artifact. */
   job_id:          string;
+  /** Run identifier that produced artifact. */
   run_id:          string;
+  /** Plain-text cover letter body when stored separately from file exports. */
   content:         string | null;
+  /** Optional non-LaTeX export path for direct document output. */
   file_path:       string | null;
+  /** Optional `.tex` source path when LaTeX export exists. */
   tex_path:        string | null;
+  /** Optional compiled PDF path when LaTeX compilation succeeded. */
   pdf_path:        string | null;
+  /** Path to per-job `meta.json` file that references this artifact. */
   meta_path:       string | null;
+  /** Final cover letter word count, or `null` when generation failed before counting. */
   word_count:      number | null;
+  /** LLM model that generated cover letter content. */
   model:           string;
+  /** Stable prompt hash for cache and audit traceability. */
   prompt_sha:      string;
+  /** Hash of canonical resume source paired with this cover letter. */
   canonical_sha:   string;
+  /** Input token count reported by provider, or `null` when unavailable. */
   input_tokens:    number | null;
+  /** Output token count reported by provider, or `null` when unavailable. */
   output_tokens:   number | null;
+  /** Compile outcome string persisted for UI and replay decisions. */
   compile_status:  string;
+  /** Caller classifying whether pipeline or manual flow generated artifact. */
   generated_by:    string;
+  /** Artifact warning or failure flags captured during generation. */
   flags:           string[];
 }
 
+/**
+ * Inserts cover letter artifact row after filesystem export succeeds.
+ *
+ * @param row - Flattened cover letter artifact record ready for DB insertion.
+ * @returns Promise that resolves after insert attempt or immediate skip.
+ */
 export async function insertCoverLetterArtifact(row: CoverLetterArtifactInsert): Promise<void> {
   if (_disabled) return;
   try {
@@ -563,9 +707,19 @@ export async function insertCoverLetterArtifact(row: CoverLetterArtifactInsert):
   }
 }
 
-/** Latest tailored resume + cover letter rows for a job_id (by generated_at). */
+/**
+ * Reads newest tailored resume and cover letter rows for one job.
+ *
+ * Used by artifact viewers and cache decisions that need current file pointers
+ * without loading full row history.
+ *
+ * @param jobId - Stable job identifier shared across runs.
+ * @returns Promise resolving to latest resume and cover pointers, each nullable independently.
+ */
 export async function getLatestArtifactsForJob(jobId: string): Promise<{
+  /** Latest tailored resume row summary, or `null` when no resume artifact exists. */
   resume: { tex_path: string | null; pdf_path: string | null; generated_at: string } | null;
+  /** Latest cover letter row summary, or `null` when no cover artifact exists. */
   cover:  { tex_path: string | null; pdf_path: string | null; generated_at: string } | null;
 }> {
   if (_disabled) return { resume: null, cover: null };
@@ -598,6 +752,15 @@ export async function getLatestArtifactsForJob(jobId: string): Promise<{
 // Fabrication ledger
 // ---------------------------------------------------------------------------
 
+/**
+ * Inserts fabrication risk ledger rows in one transaction.
+ *
+ * Caller is expected to pre-validate row semantics; this layer only guarantees
+ * best-effort persistence and rollback on partial SQL failure.
+ *
+ * @param rows - Ledger entries to insert for generated claims or skill rewrites.
+ * @returns Promise that resolves after transactional insert attempt or immediate skip.
+ */
 export async function insertLedgerEntries(rows: LedgerEntryInput[]): Promise<void> {
   if (rows.length === 0) return;
   if (_disabled) return;
@@ -634,6 +797,13 @@ export async function insertLedgerEntries(rows: LedgerEntryInput[]): Promise<voi
 // Dedup helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Checks durable seen-jobs table used for cross-run deduplication.
+ *
+ * @param source - Scraper source namespace.
+ * @param jobId - Source-local job identifier.
+ * @returns Promise resolving to `true` when job was previously persisted.
+ */
 export async function isSeenInDB(source: string, jobId: string): Promise<boolean> {
   if (_disabled) return false;
   try {

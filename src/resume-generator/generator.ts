@@ -1,5 +1,13 @@
 /**
- * generator.ts — LLM tailored resume (.tex).
+ * generator.ts — Full-regeneration resume LaTeX generation path.
+ *
+ * Builds prompt payloads, chooses premium vs fallback models, validates the
+ * returned LaTeX, and salvages truncated documents when full regeneration is
+ * the selected resume mode.
+ *
+ * Called by: `index.ts`, resume-generator tests
+ * Writes to: nothing
+ * Side effects: LLM API calls, console logging, retry backoff sleeps
  */
 
 import { complete } from "@/cover-letter/client";
@@ -15,6 +23,20 @@ import { findBannedStylePhrases } from "@/shared/style-lint";
 import { PROMPT_SHA, TOTAL_MODE_PROMPT, renderResumeJudgeAddendum } from "./prompt";
 import type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "./types";
 
+/**
+ * Generates fully tailored resume LaTeX by asking model to rewrite canonical document.
+ *
+ * This path keeps canonical preamble structure but allows model to reorder and
+ * rewrite content inside document. It retries across premium and fallback
+ * models, rejects malformed or hedge-heavy output, and can salvage truncated
+ * LaTeX only after all configured attempts fail.
+ *
+ * @param input - Canonical resume plus judge/profile/job context used to build user prompt.
+ * @param config - Model-selection, retry, and completion settings for this generation attempt.
+ * @param shortRetryHint - Optional corrective instruction appended only on retry scenarios.
+ * @returns Resume generation result with accepted LaTeX or terminal error metadata.
+ * @throws {Error} Propagates unexpected errors only if they escape internal completion loop logic.
+ */
 export async function generateResumeTex(
   input: ResumeGenInput,
   config: ResumeGenConfig,
@@ -190,6 +212,17 @@ export async function generateResumeTex(
   };
 }
 
+/**
+ * Emits premium-path fallback logs only when active attempt belongs to premium model.
+ *
+ * @param usePremium - Whether current run qualified for premium-first generation.
+ * @param model - Model used for failed attempt.
+ * @param premiumModel - Configured premium model identifier, if any.
+ * @param reason - Short terminal or retryable failure summary.
+ * @param willRetryPremium - Whether same premium model will be retried before falling back.
+ * @param fallbackModel - Next non-premium model that will receive control, if any.
+ * @returns Nothing.
+ */
 function logPremiumFailure(
   usePremium: boolean,
   model: string,
@@ -211,6 +244,12 @@ function logPremiumFailure(
   console.warn(`[resume] premium model failed; no fallback remaining: ${reason.slice(0, 240)}`);
 }
 
+/**
+ * Removes duplicate `(model, stream)` combinations while preserving first-seen order.
+ *
+ * @param attempts - Candidate completion plans assembled from premium and fallback config.
+ * @returns Stable attempt list with duplicate plans removed.
+ */
 function dedupeAttempts(attempts: Array<{ model: string; stream: boolean }>): Array<{ model: string; stream: boolean }> {
   const seen = new Set<string>();
   return attempts.filter(a => {
@@ -221,6 +260,17 @@ function dedupeAttempts(attempts: Array<{ model: string; stream: boolean }>): Ar
   });
 }
 
+/**
+ * Builds user message payload that combines canonical resume, job data, judge output, and retries.
+ *
+ * Slim prompt payloads are used only when judge context is rich enough to avoid
+ * sending the full profile/JD. Retry hints are appended as a separate critical
+ * addendum so they do not pollute first-attempt prompt hashes.
+ *
+ * @param input - Resume-generation input bundle for prompt rendering.
+ * @param shortHint - Optional concise retry instruction added after judge addendum.
+ * @returns Multisection prompt body consumed by `TOTAL_MODE_PROMPT`.
+ */
 function buildUserMessage(input: ResumeGenInput, shortHint?: string): string {
   const useSlim = hasExtendedJudgeContext(input.judge_json);
   const jdNames = (input.job.required_skills ?? []).map(s => s.name);
@@ -271,6 +321,12 @@ function buildUserMessage(input: ResumeGenInput, shortHint?: string): string {
   return parts.join("\n");
 }
 
+/**
+ * Removes accidental Markdown fences from model output before LaTeX validation.
+ *
+ * @param s - Raw model text that may be wrapped in fenced code blocks.
+ * @returns Trimmed text without outer Markdown fences.
+ */
 function stripFences(s: string): string {
   return s
     .replace(/^```(?:latex|tex)?\s*/i, "")
@@ -278,6 +334,12 @@ function stripFences(s: string): string {
     .trim();
 }
 
+/**
+ * Extracts best LaTeX slice starting at `\\documentclass` from model output.
+ *
+ * @param s - Fence-stripped model output.
+ * @returns Full document slice when both boundaries exist, otherwise best-effort truncated tail.
+ */
 function extractLatexDocument(s: string): string {
   const start = s.indexOf("\\documentclass");
   if (start < 0) return s;
@@ -292,6 +354,9 @@ function extractLatexDocument(s: string): string {
  * 2) close still-open environments in LIFO order
  * 3) close the document
  * Recovered output is usually short → resume_too_short fires downstream as a signal.
+ *
+ * @param partial - Truncated LaTeX text accepted only as last-resort salvage input.
+ * @returns Recovered LaTeX with obvious trailing damage removed and document closed.
  */
 function recoverTruncatedLatex(partial: string): string {
   const lines = partial.split("\n");
@@ -321,11 +386,26 @@ function recoverTruncatedLatex(partial: string): string {
   return out.trim();
 }
 
+/**
+ * Estimates rendered word count by stripping LaTeX commands first.
+ *
+ * @param tex - LaTeX document to analyze.
+ * @returns Plain-text word count used for downstream min/max flagging.
+ */
 function countWordsTex(tex: string): number {
   const plain = stripLatex(tex);
   return plain.split(/\s+/).filter(Boolean).length;
 }
 
+/**
+ * Performs lightweight LaTeX sanity checks before compile stage.
+ *
+ * This is intentionally cheaper than full compilation and only guards against
+ * obviously broken outputs that should already be flagged before persistence.
+ *
+ * @param tex - Generated LaTeX document candidate.
+ * @returns `true` when brace imbalance is small and document boundaries exist.
+ */
 export function latexStructureOk(tex: string): boolean {
   const open = (tex.match(/\{/g) ?? []).length;
   const close = (tex.match(/\}/g) ?? []).length;

@@ -1,6 +1,11 @@
 /**
- * Manual artifact generation (resume + cover) for UI / API.
- * Shares logic with the pipeline; requires OPENROUTER_API_KEY and Postgres.
+ * manual-generate.ts — Manual artifact generation entrypoint for UI and API flows.
+ *
+ * Builds same resume and cover-letter artifacts as pipeline runs, but for an
+ * operator-triggered single job using latest persisted job snapshot and local config.
+ *
+ * Called by: UI/API manual generation endpoints and scripts
+ * Side effects: reads config/profile/canonical resume, writes artifacts/logs/meta, hits LLMs, inserts DB rows
  */
 
 import * as fs   from "fs";
@@ -29,14 +34,30 @@ import { findCachedResumeOutcome } from "@/artifacts/resume-cache";
 import { auditTailoredArtifact, applyResumeAttributionOverrunFlag, isRiskMapLoaded, loadRiskMap } from "@/risk-map";
 
 export interface ManualGenerateResult {
+  /** Whether manual generation finished without fatal preflight or persistence errors. */
   ok: boolean;
   /** True when force was false and rows already exist (HTTP 409). */
   conflict?: boolean;
+  /** Human-readable failure reason for UI/API callers. */
   error?: string;
+  /** Resume artifact metadata returned to callers when generation reached resume stage. */
   resume?: Record<string, unknown> | null;
+  /** Cover-letter artifact metadata returned to callers when generation reached cover stage. */
   cover?:  Record<string, unknown> | null;
 }
 
+/**
+ * Generates resume and cover-letter artifacts for one job outside scheduled pipeline runs.
+ *
+ * This path deliberately reuses pipeline builders, validators, persistence, and
+ * risk auditing so manual generation does not drift from production artifact rules.
+ *
+ * @param repoRoot - Repository root containing config, output, and canonical resume files.
+ * @param jobId - Persisted job identifier whose latest scored snapshot should be rendered.
+ * @param options - Manual-run controls such as forcing regeneration instead of cache reuse.
+ * @returns Outcome payload for UI/API callers with artifact metadata or failure reason.
+ * @throws {Error} Propagates unexpected filesystem, database, or generator errors not handled as user-facing failures.
+ */
 export async function manualGenerateArtifacts(
   repoRoot: string,
   jobId: string,
@@ -267,6 +288,18 @@ export async function manualGenerateArtifacts(
   };
 }
 
+/**
+ * Creates append-only diagnostic logger for one manual generation run.
+ *
+ * Logging must never block artifact generation, so write failures are swallowed
+ * after path sanitization and directory creation.
+ *
+ * @param repoRoot - Repository root used when `OUTPUT_DIR` is not set.
+ * @param jobId - Job identifier incorporated into log filename for traceability.
+ * @param runFolderName - Manual run folder name mirrored in artifact output layout.
+ * @param generatedAt - Timestamp that pins both folder and log file naming.
+ * @returns Function that appends timestamped diagnostic lines to run log.
+ */
 function createManualGenerationLog(
   repoRoot: string,
   jobId: string,

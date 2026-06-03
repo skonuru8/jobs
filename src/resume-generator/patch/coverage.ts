@@ -1,13 +1,43 @@
+/**
+ * coverage.ts — Heuristic directive-coverage audit for patch mode.
+ *
+ * Checks whether fabricate/reframe directives appear to land inside targeted
+ * role blocks after patch application by scanning for directive keywords in the
+ * patched role text. Audit is intentionally lightweight: it is safety net for
+ * retrying missed directives, not semantic truth judge.
+ *
+ * Called by: patch orchestrator
+ * Writes to: nothing
+ * Side effects: none
+ */
+
 import type { GapDirective } from "@/judge/types";
 
 import { extractRoleBlocks, findRoleBlock } from "./parser";
 import type { PatchCoverage } from "./types";
 
+/**
+ * Low-signal tokens ignored during keyword extraction for coverage checks.
+ *
+ * These words are common enough to create false positives without improving
+ * confidence that directive-specific evidence actually landed in output.
+ */
 const STOPWORDS = new Set([
   "with", "from", "that", "this", "your", "role", "using", "have", "into",
   "and", "for", "the", "are", "was", "were", "will", "their", "across",
 ]);
 
+/**
+ * Audits whether patch output appears to cover active fabricate/reframe directives.
+ *
+ * Coverage passes when at least one extracted keyword from directive requirement
+ * or framing hint appears inside target role block. Missing target roles or zero
+ * keyword overlap are both treated as misses for retry purposes.
+ *
+ * @param tex - Patched resume LaTeX to inspect.
+ * @param directives - Raw gap directives from judge output.
+ * @returns Coverage counts plus list of still-missed `jd_requirement` strings.
+ */
 export function verifyPatchCoverage(tex: string, directives: GapDirective[]): PatchCoverage {
   const active = directives.filter(d =>
     (d.handling === "fabricate" || d.handling === "reframe") && d.target_role,
@@ -35,6 +65,15 @@ export function verifyPatchCoverage(tex: string, directives: GapDirective[]): Pa
   };
 }
 
+/**
+ * Extracts bounded set of meaningful lowercase keywords from directive text.
+ *
+ * Capped keyword list keeps audit cheap and reduces false positives from long
+ * directive phrasing. TeX commands are stripped so coverage focuses on content.
+ *
+ * @param text - Directive requirement plus optional framing hint.
+ * @returns Up to eight de-duplicated keywords suitable for substring checks.
+ */
 function keywords(text: string): string[] {
   return [...new Set(
     text
