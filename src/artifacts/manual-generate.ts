@@ -22,10 +22,10 @@ import {
   insertCoverLetterArtifact,
   insertTailoredResumeArtifact,
   insertLedgerEntries,
-  jobHasCompleteArtifacts,
 } from "@/storage/persist";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
+import { findCachedResumeOutcome } from "@/artifacts/resume-cache";
 import { auditTailoredArtifact, applyResumeAttributionOverrunFlag, isRiskMapLoaded, loadRiskMap } from "@/risk-map";
 
 export interface ManualGenerateResult {
@@ -50,15 +50,6 @@ export async function manualGenerateArtifacts(
 
   if (!isRiskMapLoaded()) {
     loadRiskMap(repoRoot);
-  }
-
-  if (options?.force === false && (await jobHasCompleteArtifacts(jobId))) {
-    manualLog("conflict complete_artifacts_exist");
-    return {
-      ok: false,
-      conflict: true,
-      error: "Complete artifacts already exist for this job. Set force to true to regenerate.",
-    };
   }
 
   const snapshot = await fetchLatestJobSnapshotForArtifacts(jobId);
@@ -135,6 +126,7 @@ export async function manualGenerateArtifacts(
     retries:     (config.llm.resume_generator?.retries ?? 1) as number,
     word_count_min: config.llm.resume_generator?.word_count_min as number | undefined,
     word_count_max: config.llm.resume_generator?.word_count_max as number | undefined,
+    mode: (config.llm.resume_generator?.mode ?? "patch_tailoring") as ResumeGenConfig["mode"],
   };
 
   const jobSlug = makeJobSlug(
@@ -158,8 +150,15 @@ export async function manualGenerateArtifacts(
 
   writeJobDescription(bundle, jobFolderAbs);
 
+  const cachedResumeOutcome = options?.force === true
+    ? null
+    : await findCachedResumeOutcome(repoRoot, bundle, resumeGeneratorConfig);
+  if (cachedResumeOutcome) {
+    manualLog(`resume cache_hit tex=${cachedResumeOutcome.tex_path}`);
+  }
+
   const [resumeOutcome, coverOutcome] = await Promise.all([
-    generateAndSaveResume(bundle, resumeGeneratorConfig, repoRoot, jobFolderAbs, ctx),
+    cachedResumeOutcome ?? generateAndSaveResume(bundle, resumeGeneratorConfig, repoRoot, jobFolderAbs, ctx),
     generateAndSaveCoverLetter(bundle, coverLetterConfig, repoRoot, jobFolderAbs, ctx),
   ]);
   manualLog(
@@ -235,7 +234,7 @@ export async function manualGenerateArtifacts(
       input_tokens:    (resumeOutcome.meta.input_tokens as number | null) ?? null,
       output_tokens:   (resumeOutcome.meta.output_tokens as number | null) ?? null,
       compile_status:  String(resumeOutcome.meta.compile_status ?? "failed"),
-      generated_by:    "manual",
+      generated_by:    String(resumeOutcome.meta.generated_by ?? "manual"),
       flags:           resumeOutcome.flags,
     });
   }

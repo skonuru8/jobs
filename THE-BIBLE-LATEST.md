@@ -1,14 +1,75 @@
-# THE BIBLE — v13 (2026-06-02)
+# THE BIBLE — v14 (2026-06-03)
 
 > Project: **job-hunter** — automated job discovery + filter + score + judge + cover letter pipeline for Sarath Konuru.
 >
-> This is the authoritative document. Supersedes v12 (2026-05-27), v11 (2026-05-27), v10 (2026-05-27), v9 (2026-05-26), v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
+> This is the authoritative document. Supersedes v13 (2026-06-02), v12 (2026-05-27), v11 (2026-05-27), v10 (2026-05-27), v9 (2026-05-26), v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
 >
 > Read this before writing code. Update this file when module status changes.
 >
 > Bible file policy: keep only two Bible files in the repo. `THE-BIBLE-v1.md`
 > is the original architecture snapshot. `THE-BIBLE-LATEST.md` is the single
 > rolling source of truth. Do not create per-version Bible archives.
+
+---
+
+## What changed since v13
+
+v14 is a resume artifact cost-control update. It replaces default full-resume
+LLM regeneration with patch-only tailoring, and adds a signature-aware resume
+skip gate that reuses unchanged artifacts without calling the resume LLM.
+
+**Wave 1 — Patch tailoring is now the default resume mode.**
+`config/config.json` sets `llm.resume_generator.mode = "patch_tailoring"`.
+`src/resume-generator/types.ts` now exposes `ResumeMode =
+"patch_tailoring" | "full_regen"`. `src/resume-generator/index.ts` routes
+resume generation by mode: patch mode calls `generatePatchedResumeTex`, while
+`full_regen` still calls the existing total-mode full LaTeX generator.
+Post-processing is unchanged after either path: `stripDashes`,
+`replaceSkillsSection`, `boldMetrics`, structure checks, save, compile, audit,
+combined metadata, and DB persistence all run through the same public
+`generateAndSaveResume` contract.
+
+**Wave 2 — Patch mode uses JSON ops, not full LaTeX generation.**
+New files under `src/resume-generator/patch/` implement the patch pipeline:
+`parser.ts` extracts EXPERIENCE role blocks and 1-indexed item lines;
+`generator.ts` sends only active `fabricate`/`reframe` directives, referenced
+role blocks, slim JD, and tech swaps to the LLM; `apply.ts` deterministically
+splices `insert_first`, `insert_after`, and `rewrite` ops into canonical TeX;
+`coverage.ts` verifies directive coverage inside the target role block; and
+`orchestrator.ts` coordinates generation, one retry, coverage failure flags, and
+patch metadata. Patch mode deliberately does not edit SUMMARY or SKILLS; SKILLS
+remain owned by the existing canonical restore + tech swap post-process.
+
+**Wave 3 — Signature-aware resume skip gate.**
+`src/resume-generator/signature.ts` builds the resume signature:
+`canonical_sha`, `directives_hash`, `tech_swaps_hash`, mode-specific
+`prompt_sha`, and `resume_mode`. `src/artifacts/resume-cache.ts` reads the latest
+`tailored_resumes` row plus the prior combined `meta.json`. If the signature
+matches and the prior files still exist, pipeline/manual generation reuse the
+existing resume with `generated_by: "cached"` and zero resume LLM tokens.
+Cache hits are rejected for blocking flags (`resume_patch_coverage_failed`,
+`resume_too_short`, `resume_too_long`, `tex_malformed`,
+`banned_phrase_in_output`, `pdf_compile_failed`,
+`resume_attribution_overrun`, `resume_gen_failed`) or `export_status:
+"needs_review"`. Manual `{ force: true }` bypasses the cache.
+
+**Wave 4 — Metadata and UI diff source updated.**
+`src/applications/combined-meta.ts` now forwards resume signature and patch
+details into `meta.json`: `resume_mode`, `directives_hash`, `tech_swaps_hash`,
+`patch_prompt_sha`, `patch_ops`, `patch_coverage`, `patch_retry_count`, and
+`patch_failed_directives`. No DB migration was added; the DB already stores
+`canonical_sha`, `prompt_sha`, artifact paths, flags, and `meta_path`.
+`src/storage/persist.ts` adds `getLatestTailoredResumeForJob()` to read the
+cache-relevant row. `scripts/ui-server.ts` now compares tailored resumes against
+`config/resume_master.tex` before falling back to `config/resume.tex`, matching
+the generation source.
+
+**Validation for v14.**
+`npm test` passed: 27 test files passed, 1 skipped; 310 tests passed, 8 skipped.
+`npm run build` passed. New coverage includes patch role parsing, deterministic
+op application, role-scoped coverage, mode-specific signatures, and invalid
+patch JSON returning a failed resume result instead of aborting the artifact
+batch.
 
 ---
 
@@ -177,13 +238,16 @@ diagnostic file. Manual UI/API artifact generation now writes a compact
 output folder, models, flags, and generator errors.
 
 **Wave 3 — Failed manual artifacts can be regenerated from the UI/API.**
-`src/storage/persist.ts::jobHasCompleteArtifacts()` checks the latest resume row
-and latest cover row and returns true only when both have usable paths and are
-not failed. `src/artifacts/manual-generate.ts` now conflicts only when
-`force=false` and complete artifacts already exist. This lets the UI Generate
-button repair jobs where resume or cover generation failed. The `JobCard`
+`src/storage/persist.ts::jobHasCompleteArtifacts()` was added to check the latest
+resume row and latest cover row and return true only when both have usable paths
+and are not failed. At v11, `src/artifacts/manual-generate.ts` used that result
+to conflict on `force=false` only when complete artifacts already existed. This
+let the UI Generate button repair jobs where resume or cover generation failed. The `JobCard`
 component passes `force=true` only when the card already has a resume or cover
-PDF and the user is intentionally regenerating.
+PDF and the user is intentionally regenerating. v14 supersedes this for resume
+reuse: manual generation now uses the signature-aware resume cache, and
+`force=true` bypasses that cache instead of participating in a complete-artifact
+conflict check.
 
 **Wave 4 — Resume generation is more tolerant of DeepSeek Pro wrapping.**
 `src/resume-generator/generator.ts` now extracts the LaTeX document from the
@@ -449,7 +513,13 @@ Unchanged from v1. This is a personal job-hunting automation for one user (Sarat
 
 **Updated deploy story:** `git pull && npm install && npm start`
 
-The output is a triaged set of cover letters in `output/cover-letters/{run_id}/COVER_LETTER/` ready to send, plus a smaller set in `output/cover-letters/{run_id}/REVIEW_QUEUE/` that need human review of the judge's concerns before sending. Logs accumulate in `output/logs/`. Everything else lands in Postgres for searchability and gets archived.
+The output is a triaged set of application artifacts under
+`output/applications/{YYYY-MM-DD}/{run_label}/{slug}/`: tailored resume, cover
+letter, job description, and combined `meta.json`. Legacy cover-letter-only
+paths under `output/cover-letters/{run_id}/...` may exist historically, but the
+current apply workflow uses the application artifact folders plus Postgres/UI
+metadata. Logs accumulate in `output/logs/`. Everything else lands in Postgres
+for searchability and gets archived.
 
 ---
 
@@ -464,7 +534,13 @@ The output is a triaged set of cover letters in `output/cover-letters/{run_id}/C
 │   ├── extractor/
 │   ├── scorer/
 │   ├── judge/
+│   ├── resume-generator/
 │   ├── cover-letter/
+│   ├── artifacts/
+│   ├── applications/
+│   ├── risk-map/
+│   ├── shared/
+│   ├── pipeline/
 │   ├── dedup/
 │   ├── storage/
 │   └── orchestrator/
@@ -531,7 +607,7 @@ The pipeline is a 19-stage flow inside one `main()` function in `scripts/run-pip
 | 13 | Threshold gate: score ≥ 0.50 → GATE_PASS, else ARCHIVE | scoring disabled |
 | 14 | LLM judge — STRONG / MAYBE / WEAK + reasoning + concerns + optional v5 `gap_directives[]` + scoped `tailoring_hints.tech_swaps[]`; final validation failures are captured under `output/logs/judge_failures/` | judge disabled |
 | 15 | Bucket routing: STRONG+score≥0.70→COVER_LETTER, STRONG+score<0.70→RESULTS, MAYBE→REVIEW_QUEUE, WEAK→ARCHIVE | — |
-| 16 | Artifact generation (resume + cover letter) for COVER_LETTER jobs and eligible REVIEW_QUEUE jobs → write `.tex`/`.pdf`/`meta.json` under `output/applications/{YYYY-MM-DD}/{run_label}/{slug}/`; resume output is dash-cleaned, style-linted, and canonical-SKILLS-locked before save | artifact flags disabled or bucket below threshold |
+| 16 | Artifact generation (resume + cover letter) for COVER_LETTER jobs and eligible REVIEW_QUEUE jobs → write `.tex`/`.pdf`/`meta.json` under `output/applications/{YYYY-MM-DD}/{run_label}/{slug}/`; resume generation first checks the signature-aware cache, then runs `patch_tailoring` by default or `full_regen` when configured; resume output is dash-cleaned, style-linted, and canonical-SKILLS-locked before save | artifact flags disabled, bucket below threshold, or resume cache signature unchanged |
 | 17 | Persist all of the above to Postgres in one transaction; mark seen in Redis | `SKIP_PERSIST=1` / `SKIP_DEDUP=1` |
 | 18 | Optional: integrity check comparing Redis seen-set vs Postgres `seen_jobs` | `VERIFY=1` not set |
 | 19 | Finish run record — `jobs_total`, `jobs_passed`, `jobs_gated`, `jobs_covered`, `extractions_attempted`, `extractions_succeeded` derived from results array | `SKIP_PERSIST=1` |
@@ -587,6 +663,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 - `scraper/output/results_{source}_{run_id}.jsonl` — pipeline results after all stages
 - `output/cover-letters/{run_id}/COVER_LETTER/{title-slug}_{job_id_short}.md` — STRONG+score≥0.70
 - `output/cover-letters/{run_id}/REVIEW_QUEUE/{title-slug}_{job_id_short}.md` — MAYBE or STRONG+score<0.70 above review_queue_threshold
+- `output/applications/{YYYY-MM-DD}/{run_label}/{slug}/` — current resume + cover-letter artifact folder. Contains `resume.tex`, optional `resume.pdf`, `cover_letter.tex`, optional `cover_letter.pdf`, `job_description.md`, and combined `meta.json`.
 - `output/logs/orchestrator.log` — rolling log. All run lifecycle events (start/finish/exit code) and monitor warnings. Primary operational log.
 - `output/logs/reaper.log` — rolling log. Ghost reaper sweep events only. Separate from orchestrator.log to keep the main log clean.
 - `output/logs/runs/{YYYY-MM-DD}/log_{timestamp}_{run-folder}_{source}_{runid}.log` — per-run stdout+stderr captured verbatim. Orchestrator child runs and direct `scripts/run-pipeline.ts` invocations both create source-labeled logs. `tail -f` to watch a live run.
@@ -621,7 +698,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 | Extractor | ✅ Green (strict schema + segmentation) | validation + segmentation coverage |
 | Scorer (5 components + bge embeddings) | ✅ Green | 44 tests |
 | LLM judge | ✅ Green (v5 additive planner + v10 hard blockers) | schema + prompt coverage |
-| Resume generator | ✅ Green (v5 consumer + v13 voice/swap/compile guards) | prompt, gap-directive, SKILLS atomicity, swap-aware coverage |
+| Resume generator | ✅ Green (v14 patch tailoring + signature cache; v13 voice/swap/compile guards) | prompt, gap-directive, patch parser/apply/coverage/signature, invalid patch JSON, SKILLS atomicity |
 | Cover letter generator | ✅ Green (v5 consumer + v13 transient retry + swap experience block) | prompt, truncation, style/directive, transient retry coverage |
 | Risk map / audit | ✅ Green (Jaccard detection + expanded map) | fabrication ledger, overrun flag, Jaccard overlap, scoped swap coverage |
 | Shared utils | ✅ Green (new: applyTechSwaps, applyScopedTechSwaps) | scoped/unscoped swap tests |
@@ -636,7 +713,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 | Docker Compose (Postgres + Redis) | ✅ Built | `docker compose up -d` |
 | **Review UI (M9)** | ✅ **Built** | **Express API + Vite/React SPA, port 3001** |
 
-**Test totals: 297 tests green, 8 skipped** across 24 passing test files. New test files cover shared utils (scoped swap), cover letter transient retry, skills-atomicity swap path, and gap-directive rendering updates. UI has no automated tests (manual verification only per spec).
+**Test totals: 310 tests green, 8 skipped** across 27 passing test files plus 1 skipped file. New v14 coverage includes patch role parsing, deterministic patch application, role-scoped coverage, mode-specific signatures, and invalid patch JSON failure handling. UI still has no automated tests (manual verification only per spec).
 
 ### Designed but not built
 
@@ -659,7 +736,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 - `resume_master.tex` — canonical resume. v10 refreshed from `resume_fin.tex`; parser-compatible after the role extractor learned optional `\vspace{}` between employer headers and role lines.
 - `profile.json` — Sarath's structured profile (v2). 84 visible canonical skills, 7 target titles. **Authoritative.** Min comp confirmed at $110k.
 - `skills.json` — 93 canonical skill entries, 408 aliases. `buildAliasMap()` flattens to lookup map.
-- `config.json` — locked models (`deepseek/deepseek-v4-flash` for extractor, judge, cover letter, and resume generator primary), optional resume fallback Flash alias, and optional premium resume route (`premium_model=deepseek/deepseek-v4-pro`, `premium_min_score=0.70`, `premium_stream=true`). Pro is not the normal fallback; it is tried first only for high-value STRONG jobs, with streaming, then Flash handles any premium failure. Also owns throttle_ms=100 (extractor + judge), scoring weights (0.35/0.25/0.15/0.15/0.10), gate threshold 0.50 (`scoring.gate_threshold`), cover-letter `max_tokens=3000`, cover-letter `retries=1`. Note: `config.json` also contains a `pipeline.schedule` block (`pipeline.sources`, etc.) — this is **legacy/unused**; the actual cron schedules are hardcoded in `src/orchestrator/scheduler.ts`, which is the single source of truth for when and how the pipeline runs.
+- `config.json` — locked models (`deepseek/deepseek-v4-flash` for extractor, judge, cover letter, and resume generator primary), resume generator mode (`patch_tailoring` by default, `full_regen` available), optional resume fallback Flash alias, and optional premium resume route (`premium_model=deepseek/deepseek-v4-pro`, `premium_min_score=0.70`, `premium_stream=true`). Pro is not the normal fallback; it is tried first only for high-value STRONG jobs in full-regeneration mode, with streaming, then Flash handles any premium failure. Also owns throttle_ms=100 (extractor + judge), scoring weights (0.35/0.25/0.15/0.15/0.10), gate threshold 0.50 (`scoring.gate_threshold`), cover-letter `max_tokens=3000`, cover-letter `retries=1`. Note: `config.json` also contains a `pipeline.schedule` block (`pipeline.sources`, etc.) — this is **legacy/unused**; the actual cron schedules are hardcoded in `src/orchestrator/scheduler.ts`, which is the single source of truth for when and how the pipeline runs.
 - `cookies/` — gitignored. Dice + Jobright browser cookies. Dice is now public-only since the search page needs no auth, but Jobright still requires cookies.
 
 ### `job-filter/` — BUILT
@@ -784,8 +861,10 @@ v5 prompt consumption is additive:
 - optional `gap_directives[]` drive fabricate/reframe/forbid guidance
 - absent fields fall back to the exact v4 behavior
 
-No new LLM call was added; the same single resume-generation call now receives
-more structured judge context.
+Before v14, the same single full-resume generation call received more structured
+judge context. Since v14, default resume generation is patch-based: one slim
+patch LLM call returns JSON ops only, and `full_regen` remains available when
+explicitly configured.
 
 v10 hard guards:
 
@@ -815,6 +894,25 @@ v10 hard guards:
 - Premium model stream abort now retries once silently (5s backoff) before falling back to
   Flash — handles transient OpenRouter slowness killing the stream at the 300s timeout.
 
+**v14 resume-generator additions:**
+- `ResumeGenConfig.mode` controls the path: `patch_tailoring` (default) or `full_regen`.
+- Patch mode omits full canonical LaTeX, SUMMARY, SKILLS, and profile JSON from the LLM prompt.
+  It sends active `fabricate`/`reframe` directives, referenced EXPERIENCE role blocks with
+  1-indexed items, slim JD, and informational tech swaps.
+- Patch LLM output must be JSON ops only: `insert_first`, `insert_after`, or `rewrite`.
+  There is no delete op.
+- `applyPatchOps()` deterministically splices ops into canonical TeX. If the model references
+  a missing role or item, that op is ignored rather than corrupting unrelated sections.
+- `verifyPatchCoverage()` is role-scoped. Global keyword hits do not satisfy a directive.
+  One retry is attempted; remaining misses add `resume_patch_coverage_failed`.
+- Patch failures do not automatically fall back to `full_regen`. They fail loud through flags
+  and metadata.
+- `buildResumeSignature()` computes `canonical_sha`, sorted `directives_hash`, sorted
+  `tech_swaps_hash`, mode-specific `prompt_sha`, and `resume_mode`.
+- Resume cache hits in pipeline/manual generation reuse prior paths with
+  `generated_by: "cached"` and `input_tokens/output_tokens = 0` for the resume. Cache hits are
+  rejected when prior flags indicate an unsafe or review-needed artifact.
+
 ### `dedup/` — BUILT
 
 Two complementary mechanisms.
@@ -831,10 +929,16 @@ Postgres + pgvector persistence.
 
 - `src/storage/db.ts` — `pg.Pool` singleton with `describeErr` formatting on the error listener.
 - `src/storage/persist.ts` — `saveRun`, `finishRun`, `saveJob`, `isSeenInDB`. All non-throwing. v4.1: `pool.connect()` inside try block, `markStorageDisabled`, `formatErr`. v5.1 additions: `updateHeartbeat` (Postgres helper — available for callers; the orchestrator runner writes heartbeats via its own inline SQL rather than calling this function), `markRunExitCode` (same — available but runner writes exit code via its own SQL; ghost reaper calls this directly), `getUnfinishedRuns` (ghost reaper query — hits partial index), `getRunStats` (monitor post-run check).
-- v11 adds `jobHasCompleteArtifacts(job_id)`, used by manual generation to
-  distinguish "some stale/failed artifact row exists" from "latest resume and
-  latest cover are both healthy." This is what lets the UI repair failed manual
-  generations instead of being blocked by partial history.
+- v11 added `jobHasCompleteArtifacts(job_id)` to distinguish "some stale/failed
+  artifact row exists" from "latest resume and latest cover are both healthy."
+  v14 no longer uses that coarse check as the resume skip gate. Manual and
+  pipeline generation now call `getLatestTailoredResumeForJob()` plus
+  `resume-cache.ts` to compare the full resume signature before reusing a prior
+  resume.
+- v14 adds `getLatestTailoredResumeForJob(job_id)`, returning cache-relevant
+  fields from the latest tailored resume row: artifact paths, `meta_path`,
+  `canonical_sha`, `prompt_sha`, tokens, model, compile status, flags, and
+  `generated_at`.
 - Persistence note: the silent-error swallow / `markStorageDisabled` / "continuing without persistence" behavior remains in place by locked decision. The `005_tailored_artifacts.sql` cleanup removed the most common migration-replay cascade, but the gating model itself is unchanged.
 - `src/storage/migrate.ts` — runs SQL files in `migrations/` in alphabetical order.
 - `src/storage/integrity.ts` — `verifyIntegrity`. Gated on `VERIFY=1`.
@@ -911,10 +1015,14 @@ soft gate for human review before applying.
 **Cover letter file resolution:** `cover_letters.content` is always NULL (pipeline writes to disk only). The server reads from `cover_letters.file_path`, with a path-substitution fallback from `/Downloads/project/` to `/Downloads/jobs/` to handle the historical repo rename.
 
 **Manual generation:** `POST /api/jobs/:job_id/generate` calls
-`src/artifacts/manual-generate.ts`. If `force=false`, it conflicts only when
-the latest resume and cover are both complete. Missing/failed resume or cover
-artifacts can be generated again from the same UI card. Every attempt writes a
-compact `output/logs/runs/{YYYY-MM-DD}/manual_{timestamp}_{run-folder}_{jobid}.log`.
+`src/artifacts/manual-generate.ts`. v14 removed the old complete-artifacts
+conflict as the resume reuse mechanism. Manual generation now builds the same
+artifact bundle as the pipeline and checks the resume signature cache. If
+`force=true`, the cache is bypassed and a fresh resume is generated. If
+`force` is unset/false and the signature matches a healthy prior resume, that
+resume is reused while the cover letter is still regenerated. Every attempt
+writes a compact
+`output/logs/runs/{YYYY-MM-DD}/manual_{timestamp}_{run-folder}_{jobid}.log`.
 
 **`ui/`** — Vite + React 18 + TypeScript SPA. No router, no state library, no CSS framework. Key design decisions:
 - `JobCard.tsx` is a single shared component with `mode: 'apply' | 'hard-reject' | 'soft-reject'` prop — ~80% of rendering logic is shared across all three tabs.
@@ -1267,6 +1375,10 @@ find output/applications/<run-folder> -mindepth 2 -maxdepth 2 -name meta.json -p
 # Inspect one failed resume block
 jq '.resume' output/applications/<run-folder>/<job-folder>/meta.json
 
+# Inspect resume mode/cache metadata
+jq '.resume | {generated_by, resume_mode, directives_hash, tech_swaps_hash, prompt_sha, patch_prompt_sha, flags, input_tokens, output_tokens}' \
+  output/applications/<run-folder>/<job-folder>/meta.json
+
 # Retry manual artifact generation for one job id
 npx tsx -e "import { manualGenerateArtifacts } from './src/artifacts/manual-generate.ts'; const out = await manualGenerateArtifacts(process.cwd(), '<job_id>', { force: true }); console.log(JSON.stringify(out, null, 2));"
 
@@ -1383,11 +1495,15 @@ redis-cli --scan --pattern 'orchestrator:lock:*'
 - **Note chips** — preset quick-fill buttons on each card in the Review UI (e.g. "Not a good fit"). Clicking a chip for a No-labeled card immediately POSTs and moves the card to Not Applied.
 - **Time-decayed sort** — Apply Queue sort order: jobs bucketed by age (< 24h, 24–72h, > 72h), sorted by score DESC within each bucket. Ensures freshest high-scoring jobs appear first.
 - **Banned bridge phrase** — tailoring language that reveals a fabricated or adjacent claim, such as "analogous to", "demonstrating transferable", "translate directly to", or "comparable to". Runtime style lint rejects these.
-- **SKILLS atomicity** — generated resumes must preserve the canonical SKILLS section exactly. v10 enforces this by replacing the generated SKILLS block with the canonical block before save.
+- **SKILLS atomicity** — generated resumes must preserve the canonical SKILLS section as the base. v10 enforces this by replacing the generated SKILLS block with the canonical block before save; v13 made that restore tech-swap-aware so approved swaps can survive without allowing arbitrary SKILLS edits.
 - **`frame_as`** — the 2–3 sentence brief in a `gap_directive` that tells the resume/cover-letter generators the role context, adjacent evidence, and execution angle for a fabricate or reframe directive. Formerly a 1-sentence string; expanded in v13 to prevent hedge-phrase contamination and under-specification.
 - **`applyScopedTechSwaps`** — shared utility that applies tech swaps to a plain-text experience block with `target_role` scoping. Scoped swaps (target_role non-null) apply only within the employer section containing the target_role string; unscoped swaps apply globally.
 - **Jaccard content-word matching** — the v13 replacement for the 5-word consecutive run heuristic in `auditRoleAttribution`. Measures whether a generated bullet shares ≥45% of unique non-stop content words with any canonical bullet at the same role. Handles LLM paraphrasing correctly.
 - **`requires_human_review`** — risk map flag on each `direct_equivalent` entry. When `true`, any resume containing a claim graded to that entry generates a yellow badge in the UI. Set to `false` for pure naming variants (S3/AWS S3, React/ReactJS, etc.) and `true` for concept-to-tool mappings where interview depth questions are plausible (EKS/Kubernetes, Memcached/Redis, ETL scripting/Python, etc.).
+- **Patch tailoring** — v14 default resume mode. The LLM receives only active directives, referenced role blocks, slim JD, and tech swaps, then returns JSON ops. Deterministic code applies those ops to canonical TeX.
+- **`full_regen`** — explicit resume mode that preserves the old total-mode full LaTeX generation path.
+- **Resume signature** — cache key made from `canonical_sha`, sorted `directives_hash`, sorted `tech_swaps_hash`, mode-specific `prompt_sha`, and `resume_mode`.
+- **Resume cache hit** — prior healthy resume artifact reused because the signature matches. The resume outcome records `generated_by: "cached"` and zero resume LLM tokens.
 
 ---
 
@@ -1446,7 +1562,8 @@ After v4 fixes, added the tech equivalence risk map at
 - Verifier uses risk map for synonym/equivalent matching
 
 Policy modes (strict / research / chaos_measurement) were specced and dropped
-before implementation. Single-user system, total mode is the only intended use.
+before implementation. Single-user system, `patch_tailoring` is the default
+resume mode, and `full_regen` is the only remaining full total-mode path.
 Risk map data still drives ledger + human_review badges. If we ever multi-user
 the system, modes return as a per-user setting.
 
@@ -1489,18 +1606,20 @@ SELECT change_type, COUNT(*) FROM fabrication_ledger
   WHERE created_at > NOW() - INTERVAL '7 days' GROUP BY change_type;
 ```
 
-### 18.3 — Total mode preservation
+### 18.3 — Total mode preservation before v14
 
-For the record: v8 patches did NOT modify total mode behavior in the resume
+For the record: v8 patches did NOT modify total mode behavior in the full-resume
 generator. The chain `skills/resume-tailor/SKILL.md` (full skill content, all
 four modes) + `PIPELINE_OVERRIDE` (in `src/resume-generator/prompt.ts`, autonomous
 execution rules + fabrication-permitted clause) + hardcoded
 `{ role: "system", content: TOTAL_MODE_PROMPT }` in
-`src/resume-generator/generator.ts` is unchanged. Every resume call is total mode.
+`src/resume-generator/generator.ts` stayed unchanged through v13.
 
 The `tech_swaps` mechanism added in §18.2 is a Mode B augmentation layered on top
-of total mode, not a replacement. Generator still fabricates per skill rules
-when no adjacent experience exists for a missing JD requirement.
+of total mode, not a replacement.
+
+v14 changes the default resume path. Full total-mode regeneration still exists as
+`resume_generator.mode = "full_regen"`, but the default is now patch tailoring.
 
 ### 18.5 — Round-2 quality audit and hard guards
 
@@ -1582,6 +1701,11 @@ Changes:
   regenerating existing PDFs; failed/missing artifacts can be repaired without
   being blocked by stale rows.
 
+v14 supersedes the active manual resume skip behavior: manual generation now
+uses the signature-aware resume cache, and `{ force: true }` bypasses that cache.
+`jobHasCompleteArtifacts()` remains available but is no longer the resume reuse
+gate.
+
 Observed trigger: the `deepseek/deepseek-v4-pro` run
 `2026-05-27T15-32-09_2aec1edc` produced 7 cover letters and 0 resumes. The next
 Flash run produced 5 resumes and 6 cover letters. The likely Pro failure was
@@ -1636,3 +1760,62 @@ Full issue list and root causes in `SESSION-HANDOFF.md` (2026-06-02).
 - `pdf_compile_failed`: 4
 - `frame_as` banned phrase hits: 17
 - Expected to improve substantially on first v13 batch run.
+
+### 18.8 — v14 patch tailoring + signature resume cache (2026-06-03)
+
+v14 separates two cost controls that were previously missing:
+
+1. **Skip gate:** if the resume signature is unchanged, reuse the existing resume
+   artifact and spend zero resume LLM tokens.
+2. **Patch mode:** if the signature changed, call a slim patch planner instead
+   of regenerating the full resume.
+
+**New files:**
+- `src/resume-generator/signature.ts` — canonical/directive/swap/prompt/mode signature.
+- `src/artifacts/resume-cache.ts` — latest-row + prior-`meta.json` cache gate.
+- `src/resume-generator/patch/types.ts` — patch contracts.
+- `src/resume-generator/patch/parser.ts` — EXPERIENCE role blocks + 1-indexed items.
+- `src/resume-generator/patch/generator.ts` — JSON-op LLM prompt and parser.
+- `src/resume-generator/patch/apply.ts` — deterministic canonical TeX splice.
+- `src/resume-generator/patch/coverage.ts` — target-role coverage verification.
+- `src/resume-generator/patch/orchestrator.ts` — patch call, apply, coverage, retry.
+
+**Skip signature:**
+```ts
+canonical_sha
+directives_hash
+tech_swaps_hash
+prompt_sha       // mode-specific: PATCH_PROMPT_SHA or PROMPT_SHA
+resume_mode      // "patch_tailoring" | "full_regen"
+```
+
+`canonical_sha` and `prompt_sha` are read from `tailored_resumes`; the remaining
+signature fields live under `resume` in combined `meta.json`, reached through
+the DB row's `meta_path`. No DB migration was added.
+
+**Cache rejection rules:** prior resume rows are not reused if compile status is
+`failed`, files are missing, `export_status` is `needs_review`, or flags include
+`resume_patch_coverage_failed`, `resume_too_short`, `resume_too_long`,
+`tex_malformed`, `banned_phrase_in_output`, `pdf_compile_failed`,
+`resume_attribution_overrun`, or `resume_gen_failed`.
+
+**Patch metadata in `meta.json.resume`:**
+- `resume_mode`
+- `directives_hash`
+- `tech_swaps_hash`
+- `patch_prompt_sha`
+- `patch_ops`
+- `patch_coverage`
+- `patch_retry_count`
+- `patch_failed_directives`
+
+**Behavioral constraints:**
+- Patch mode never edits SUMMARY.
+- Patch mode never lets the LLM edit SKILLS; existing canonical SKILLS restore
+  and tech-swap post-processing remains authoritative.
+- Patch failures do not auto-fallback to `full_regen`; they fail loud with
+  flags/metadata so a bad patch does not silently become a high-token full
+  generation.
+- Manual `{ force: true }` bypasses the cache.
+- UI resume diff uses `config/resume_master.tex` before `config/resume.tex`,
+  matching the generation source.

@@ -64,6 +64,7 @@ import { buildExperienceBlockFromCanonicalTex } from "@/cover-letter/resume-brie
 import { extractRolesFromCanonicalResume, extractSkillsSectionFromCanonical } from "@/judge/roles-extractor";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
+import { findCachedResumeOutcome } from "@/artifacts/resume-cache";
 import { makeDateFolderName, makeRunFolderName, makeRunLabel } from "@/applications/run-folder";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
 import { makeJobSlug } from "@/shared/slug";
@@ -208,6 +209,7 @@ async function main(): Promise<void> {
     retries:     (config.llm.resume_generator?.retries ?? 1) as number,
     word_count_min: config.llm.resume_generator?.word_count_min as number | undefined,
     word_count_max: config.llm.resume_generator?.word_count_max as number | undefined,
+    mode: (config.llm.resume_generator?.mode ?? "patch_tailoring") as ResumeGenConfig["mode"],
   };
   const scoringWeights: ScoringWeights = config.scoring?.weights ?? {
     skills: 0.35, semantic: 0.25, yoe: 0.15, seniority: 0.15, location: 0.10,
@@ -891,9 +893,16 @@ async function processJobs(
 
         writeJobDescription(bundle, jobFolderAbs);
 
+        const cachedResumeOutcome = doResumeArtifact
+          ? await findCachedResumeOutcome(repoRoot, bundle, resumeGeneratorConfigArg)
+          : null;
+        if (cachedResumeOutcome) {
+          log(`[${n}]  Resume cache hit: ${cachedResumeOutcome.tex_path}`);
+        }
+
         [resumeOutcome, coverOutcome] = await Promise.all([
           doResumeArtifact
-            ? generateAndSaveResume(bundle, resumeGeneratorConfigArg, repoRoot, jobFolderAbs, {
+            ? cachedResumeOutcome ?? generateAndSaveResume(bundle, resumeGeneratorConfigArg, repoRoot, jobFolderAbs, {
                 runId: runIdForArtifacts, bucket: bucket ?? "UNKNOWN", generatedBy: "pipeline",
               })
             : Promise.resolve(null),
@@ -1060,7 +1069,7 @@ async function processJobs(
           input_tokens:    (resumeOutcome.meta.input_tokens as number | null) ?? null,
           output_tokens:   (resumeOutcome.meta.output_tokens as number | null) ?? null,
           compile_status:  String(resumeOutcome.meta.compile_status ?? "failed"),
-          generated_by:    "pipeline",
+          generated_by:    String(resumeOutcome.meta.generated_by ?? "pipeline"),
           flags:           resumeOutcome.flags,
         });
       }

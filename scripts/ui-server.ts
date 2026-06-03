@@ -537,8 +537,8 @@ async function main() {
       const tailored = fs.readFileSync(texAbs, 'utf-8');
 
       const canonicalPaths = [
-        path.join(REPO_ROOT, 'config', 'resume.tex'),
         path.join(REPO_ROOT, 'config', 'resume_master.tex'),
+        path.join(REPO_ROOT, 'config', 'resume.tex'),
         path.join(REPO_ROOT, 'config', 'resume-master.tex'),
       ];
       let canonical = '';

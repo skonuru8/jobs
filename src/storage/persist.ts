@@ -475,6 +475,42 @@ export async function insertTailoredResumeArtifact(row: TailoredResumeInsert): P
   }
 }
 
+export interface LatestTailoredResumeForCache {
+  run_id: string | null;
+  tex_path: string | null;
+  pdf_path: string | null;
+  meta_path: string | null;
+  word_count: number | null;
+  model: string | null;
+  prompt_sha: string | null;
+  canonical_sha: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  compile_status: string | null;
+  flags: string[] | null;
+  generated_at: string;
+}
+
+export async function getLatestTailoredResumeForJob(jobId: string): Promise<LatestTailoredResumeForCache | null> {
+  if (_disabled) return null;
+  try {
+    const result = await getPool().query<LatestTailoredResumeForCache>(
+      `SELECT run_id, tex_path, pdf_path, meta_path, word_count, model,
+              prompt_sha, canonical_sha, input_tokens, output_tokens,
+              compile_status, flags, generated_at
+         FROM tailored_resumes
+        WHERE job_id = $1
+        ORDER BY generated_at DESC NULLS LAST
+        LIMIT 1`,
+      [jobId],
+    );
+    return result.rows[0] ?? null;
+  } catch (e) {
+    console.error("[storage] getLatestTailoredResumeForJob failed:", formatErr(e));
+    return null;
+  }
+}
+
 export interface CoverLetterArtifactInsert {
   job_id:          string;
   run_id:          string;

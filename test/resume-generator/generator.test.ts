@@ -6,6 +6,7 @@ vi.mock("@/cover-letter/client", () => ({
 
 import { complete } from "@/cover-letter/client";
 import { generateResumeTex } from "@/resume-generator/generator";
+import { generatePatchedResumeTex } from "@/resume-generator/patch/orchestrator";
 import type { ResumeGenConfig, ResumeGenInput } from "@/resume-generator/types";
 
 const mockComplete = vi.mocked(complete);
@@ -80,6 +81,41 @@ describe("generateResumeTex", () => {
     expect(result.status).toBe("ok");
     expect(result.warnings).toBeUndefined();
     expect(result.tex).toContain("Contributed to Docker");
+    expect(mockComplete).toHaveBeenCalledTimes(2);
+  });
+
+  it("turns invalid patch JSON into an error result", async () => {
+    mockComplete
+      .mockResolvedValueOnce({
+        content: "not json",
+        model: "test-model",
+        input_tokens: 10,
+        output_tokens: 5,
+      })
+      .mockResolvedValueOnce({
+        content: "{",
+        model: "test-model",
+        input_tokens: 11,
+        output_tokens: 6,
+      });
+
+    const result = await generatePatchedResumeTex({
+      ...baseInput,
+      canonical_resume_tex: doc(`
+\\section*{EXPERIENCE}
+\\textbf{ExampleCo} \\hfill 2024\\\\
+\\textit{Engineer}
+\\begin{itemize}
+\\item Built Java APIs.
+\\end{itemize}
+`),
+      gap_directives: [
+        { handling: "reframe", jd_requirement: "Kafka", target_role: "ExampleCo", frame_as: "event handling" },
+      ],
+    } as ResumeGenInput, config);
+
+    expect(result.status).toBe("error");
+    expect(result.error).toContain("patch op generation failed");
     expect(mockComplete).toHaveBeenCalledTimes(2);
   });
 });

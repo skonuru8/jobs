@@ -82,6 +82,9 @@ function resumeBlock(
       word_count: null, compile_status: "skipped", flags: ["resume_gen_skipped_no_reason"],
       tex_path: null, pdf_path: null,
       risk_summary: null, export_status: "ok",
+      resume_mode: null, directives_hash: null, tech_swaps_hash: null,
+      patch_prompt_sha: null, patch_ops: [], patch_coverage: null,
+      patch_retry_count: null, patch_failed_directives: [],
     };
   }
   if (!o.tex_path) {
@@ -91,6 +94,14 @@ function resumeBlock(
     return {
       model:          o.meta?.model ?? null,
       prompt_sha:     o.meta?.prompt_sha ?? null,
+      resume_mode:    o.meta?.resume_mode ?? null,
+      directives_hash: o.meta?.directives_hash ?? null,
+      tech_swaps_hash: o.meta?.tech_swaps_hash ?? null,
+      patch_prompt_sha: o.meta?.patch_prompt_sha ?? null,
+      patch_ops:      o.meta?.patch_ops ?? [],
+      patch_coverage: o.meta?.patch_coverage ?? null,
+      patch_retry_count: o.meta?.patch_retry_count ?? null,
+      patch_failed_directives: o.meta?.patch_failed_directives ?? [],
       input_tokens:   o.meta?.input_tokens ?? null,
       output_tokens:  o.meta?.output_tokens ?? null,
       word_count:     o.word_count ?? null,
@@ -105,6 +116,14 @@ function resumeBlock(
   return {
     model:          m.model ?? null,
     prompt_sha:     m.prompt_sha ?? null,
+    resume_mode:    m.resume_mode ?? null,
+    directives_hash: m.directives_hash ?? null,
+    tech_swaps_hash: m.tech_swaps_hash ?? null,
+    patch_prompt_sha: m.patch_prompt_sha ?? null,
+    patch_ops:      m.patch_ops ?? [],
+    patch_coverage: m.patch_coverage ?? null,
+    patch_retry_count: m.patch_retry_count ?? null,
+    patch_failed_directives: m.patch_failed_directives ?? [],
     input_tokens:   m.input_tokens ?? null,
     output_tokens:  m.output_tokens ?? null,
     word_count:     o.word_count,

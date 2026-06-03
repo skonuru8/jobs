@@ -9,7 +9,9 @@ import { stripDashes } from "@/shared/dash-lint";
 import { applyTechSwaps } from "@/shared/utils";
 
 import { generateResumeTex, latexStructureOk } from "./generator";
+import { generatePatchedResumeTex } from "./patch/orchestrator";
 import { PROMPT_SHA } from "./prompt";
+import { buildResumeSignature, signatureMeta } from "./signature";
 import { writeTexAndCompile } from "./saver";
 import type { ResumeGenConfig, ResumeGenInput } from "./types";
 
@@ -49,19 +51,25 @@ export async function generateAndSaveResume(
 ): Promise<ResumeArtifactOutcome> {
   const flags: string[] = [];
   const input = toResumeInput(bundle);
+  const signature = buildResumeSignature(bundle, config);
   const wMin = config.word_count_min ?? 1900;
   const wMax = config.word_count_max ?? 2500;
 
   const combinedMetaRel = path.relative(repoRoot, path.join(jobFolderAbs, "meta.json"));
 
-  let gen = await generateResumeTex(input, config);
+  let gen = signature.resume_mode === "patch_tailoring"
+    ? await generatePatchedResumeTex(input, config)
+    : await generateResumeTex(input, config);
   if (gen.status !== "ok" || !gen.tex) {
     flags.push("resume_gen_failed");
     console.log(`[resume] early return — reason: gen failed or empty tex (status=${gen.status})`);
-    return emptyOutcome(bundle, ctx, flags, gen, combinedMetaRel);
+    return emptyOutcome(bundle, ctx, flags, gen, combinedMetaRel, signature);
   }
   if (gen.warnings?.includes("banned_phrase_in_output")) {
     flags.push("banned_phrase_in_output");
+  }
+  if (gen.warnings?.includes("resume_patch_coverage_failed")) {
+    flags.push("resume_patch_coverage_failed");
   }
 
   let tex = boldMetrics(
@@ -71,6 +79,9 @@ export async function generateAndSaveResume(
   let wc = gen.word_count;
   if (wc < wMin) {
     flags.push("resume_too_short");
+  }
+  if (wc > wMax) {
+    flags.push("resume_too_long");
   }
 
   if (!latexStructureOk(tex)) {
@@ -97,6 +108,7 @@ export async function generateAndSaveResume(
         model: gen.model,
         prompt_sha: gen.prompt_sha,
         canonical_sha: bundle.canonical_sha,
+        ...signatureMeta(signature),
         input_tokens: gen.tokens.input,
         output_tokens: gen.tokens.output,
         word_count: wc,
@@ -122,6 +134,12 @@ export async function generateAndSaveResume(
     model:           gen.model,
     prompt_sha:      gen.prompt_sha,
     canonical_sha:   bundle.canonical_sha,
+    ...signatureMeta(signature),
+    patch_prompt_sha: gen.patch?.prompt_sha ?? null,
+    patch_ops:        gen.patch?.ops ?? [],
+    patch_coverage:   gen.patch?.coverage ?? null,
+    patch_retry_count: gen.patch?.retry_count ?? 0,
+    patch_failed_directives: gen.patch?.failed_directives ?? [],
     input_tokens:    gen.tokens.input,
     output_tokens:   gen.tokens.output,
     word_count:      wc,
@@ -169,6 +187,7 @@ function emptyOutcome(
   flags: string[],
   gen: { model: string; error?: string; tokens: { input: number; output: number } },
   metaRel: string,
+  signature: ReturnType<typeof buildResumeSignature>,
 ): ResumeArtifactOutcome {
   return {
     tex_path: null,
@@ -182,8 +201,9 @@ function emptyOutcome(
       generated_at: new Date().toISOString(),
       generated_by: ctx.generatedBy,
       model: gen.model,
-      prompt_sha: PROMPT_SHA,
+      prompt_sha: signature.prompt_sha,
       canonical_sha: bundle.canonical_sha,
+      ...signatureMeta(signature),
       input_tokens: gen.tokens.input,
       output_tokens: gen.tokens.output,
       word_count: 0,
