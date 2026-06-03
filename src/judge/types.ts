@@ -59,11 +59,37 @@ export interface JudgeInput {
 // Judge outputs
 // ---------------------------------------------------------------------------
 
+/**
+ * Final judge verdict, maps to routing bucket:
+ * - `STRONG` → COVER_LETTER (score ≥ 0.70) or RESULTS (score < 0.70)
+ * - `MAYBE`  → REVIEW_QUEUE (artifacts if score ≥ review_queue_threshold)
+ * - `WEAK`   → ARCHIVE (no artifacts generated)
+ */
 export type JudgeVerdict = "STRONG" | "MAYBE" | "WEAK";
+
+/**
+ * How the resume generator should handle a gap between the JD requirement
+ * and the candidate's canonical resume:
+ *
+ * - `fabricate`    — no real adjacent experience; add a new bullet at target_role
+ *                    using frame_as as the angle. Patch mode: adds via insert op.
+ * - `reframe`      — adjacent honest experience exists; rewrite an existing bullet
+ *                    at target_role to surface the requirement.
+ * - `acknowledge`  — gap is real; cover letter mentions it using frame_as as hook.
+ *                    Resume does NOT change.
+ * - `ignore`       — not worth addressing in either artifact.
+ * - `forbid`       — candidate must NOT claim this in either artifact.
+ */
 export type GapHandling = "fabricate" | "reframe" | "acknowledge" | "ignore" | "forbid";
 
 export interface JudgeGap {
   requirement:   string;
+  /**
+   * How significant the gap is for candidate fit:
+   * - `minor`    — nice-to-have; unlikely to screen out
+   * - `moderate` — notable gap; may affect hire decision
+   * - `major`    — core requirement; likely deal-breaker if uncovered
+   */
   severity:        "minor" | "moderate" | "major";
   reframe_angle:   string;
 }
@@ -124,6 +150,13 @@ export interface JudgeResult {
 // Routing — final bucket after judge verdict
 // ---------------------------------------------------------------------------
 
+/**
+ * Final routing bucket after scoring + judge verdict:
+ * - `COVER_LETTER`  — STRONG verdict + score ≥ 0.70 → full artifacts (resume + cover)
+ * - `RESULTS`       — STRONG verdict + score < 0.70  → no artifacts; shows in results list
+ * - `REVIEW_QUEUE`  — MAYBE verdict → artifacts if score ≥ review_queue_threshold (default 0.70)
+ * - `ARCHIVE`       — WEAK verdict or judge error → no artifacts; not surfaced in UI by default
+ */
 export type FinalBucket =
   | "COVER_LETTER"   // STRONG + score >= 0.70
   | "RESULTS"        // STRONG + score < 0.70

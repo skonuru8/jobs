@@ -31,6 +31,14 @@ export interface RequiredSkill {
   category: string
 }
 
+/**
+ * Visa sponsorship status extracted from the job description:
+ * - `offered`            — JD explicitly states sponsorship is available
+ * - `denied`             — JD explicitly states no sponsorship (e.g. "must be authorized")
+ * - `ead_eligible`       — EAD / OPT / STEM OPT mentioned as acceptable
+ * - `payment_model_only` — C2C / 1099 contract that doesn't require employer sponsorship
+ * - `unmentioned`        — no sponsorship language found; status unknown
+ */
 export type VisaSponsorshipStatus =
   | "offered"
   | "denied"
