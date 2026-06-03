@@ -21,6 +21,7 @@ export function App() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [tabRefreshKeys, setTabRefreshKeys] = useState({ apply: 0, hard: 0, soft: 0, history: 0, calendar: 0 });
   const [searchQuery, setSearchQuery] = useState('');
+  const [statsScope, setStatsScope] = useState<'total' | 'today'>('total');
   const searchRef = useRef<HTMLInputElement>(null);
 
   function handleTabChange(tab: string) {
@@ -29,8 +30,16 @@ export function App() {
   }
 
   const fetchStats = useCallback(() => {
-    getStats().then(setStats).catch(console.error);
-  }, []);
+    getStats(statsScope).then(setStats).catch(console.error);
+  }, [statsScope]);
+
+  const handleStatsUpdate = useCallback((fresh: Stats) => {
+    if (statsScope === 'total') {
+      setStats(fresh);
+    } else {
+      fetchStats();
+    }
+  }, [fetchStats, statsScope]);
 
   useEffect(() => {
     fetchStats();
@@ -59,6 +68,14 @@ export function App() {
             <span className="stat">Applied <strong>{stats.applied}</strong></span>
             <span className="stat">Reject <strong>{stats.hardRejectionsUnreviewed}</strong></span>
             <span className="stat">Soft <strong>{stats.softRejectionsUnreviewed}</strong></span>
+            <button
+              type="button"
+              className="stat stat-toggle"
+              onClick={() => setStatsScope(scope => scope === 'today' ? 'total' : 'today')}
+              title={statsScope === 'today' ? 'Showing today. Click for total.' : 'Showing total. Click for today.'}
+            >
+              {statsScope === 'today' ? 'Total' : 'Today'}
+            </button>
           </div>
         )}
       </header>
@@ -88,11 +105,11 @@ export function App() {
       )}
 
       <main className="tab-content">
-        {activeTab === 'apply' && <ApplyQueue onStatsUpdate={setStats} refreshKey={tabRefreshKeys.apply} searchQuery={searchQuery} />}
-        {activeTab === 'hard' && <HardRejections onStatsUpdate={setStats} refreshKey={tabRefreshKeys.hard} searchQuery={searchQuery} />}
-        {activeTab === 'soft' && <SoftRejections onStatsUpdate={setStats} refreshKey={tabRefreshKeys.soft} searchQuery={searchQuery} />}
+        {activeTab === 'apply' && <ApplyQueue onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.apply} searchQuery={searchQuery} />}
+        {activeTab === 'hard' && <HardRejections onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.hard} searchQuery={searchQuery} />}
+        {activeTab === 'soft' && <SoftRejections onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.soft} searchQuery={searchQuery} />}
         {activeTab === 'history' && <RunHistory refreshKey={tabRefreshKeys.history} />}
-        {activeTab === 'calendar' && <AppliedCalendar onStatsUpdate={setStats} refreshKey={tabRefreshKeys.calendar} />}
+        {activeTab === 'calendar' && <AppliedCalendar onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.calendar} />}
       </main>
     </div>
   );

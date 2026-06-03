@@ -142,8 +142,9 @@ export async function getSoftRejections(): Promise<SoftRejectionRow[]> {
   return res.json();
 }
 
-export async function getStats(): Promise<Stats> {
-  const res = await fetch('/api/stats');
+export async function getStats(scope: 'total' | 'today' = 'total'): Promise<Stats> {
+  const url = scope === 'today' ? '/api/stats?scope=today' : '/api/stats';
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`stats failed: ${res.status}`);
   return res.json();
 }
@@ -163,6 +164,10 @@ export async function getAppliedJobs(): Promise<ApplyQueueRow[]> {
 export async function getResumeTex(jobId: string): Promise<{ tailored: string; canonical: string } | null> {
   const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/resume-tex`);
   if (!res.ok) return null;
+  const contentType = res.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    throw new Error('Resume diff API returned HTML. Restart the UI server so /api/jobs/:job_id/resume-tex is available.');
+  }
   return res.json();
 }
 

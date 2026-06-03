@@ -239,30 +239,46 @@ async function main() {
   // -------------------------------------------------------------------------
   // GET /api/stats
   // -------------------------------------------------------------------------
-  app.get('/api/stats', async (_req, res) => {
+  app.get('/api/stats', async (req, res) => {
     try {
+      const scope = String(req.query.scope ?? 'total');
+      const today = scope === 'today';
+      const scrapedToday = today ? 'AND j.scraped_at >= CURRENT_DATE' : '';
+      const labeledToday = today ? 'AND l.labeled_at >= CURRENT_DATE' : '';
+      const appliedToday = today ? 'AND l.applied_at >= CURRENT_DATE' : '';
+
       const [pendingRes, applyLaterRes, appliedRes, hardUnreviewedRes, softUnreviewedRes] = await Promise.all([
         pool.query(`
           SELECT COUNT(*) FROM judge_verdicts jv
+          JOIN jobs j ON j.job_id = jv.job_id AND j.run_id = jv.run_id
           LEFT JOIN labels l ON l.job_id = jv.job_id AND l.run_id = jv.run_id
           WHERE jv.bucket IN ('COVER_LETTER', 'REVIEW_QUEUE', 'RESULTS')
             AND (l.application_status IS NULL OR l.application_status NOT IN ('applied','skipped'))
+            ${scrapedToday}
         `),
         pool.query(`
-          SELECT COUNT(*) FROM labels WHERE application_status = 'apply_later'
+          SELECT COUNT(*) FROM labels l
+          WHERE l.application_status = 'apply_later'
+            ${labeledToday}
         `),
         pool.query(`
-          SELECT COUNT(*) FROM labels WHERE application_status = 'applied'
+          SELECT COUNT(*) FROM labels l
+          WHERE l.application_status = 'applied'
+            ${appliedToday}
         `),
         pool.query(`
           SELECT COUNT(*) FROM filter_results fr
+          JOIN jobs j ON j.job_id = fr.job_id AND j.run_id = fr.run_id
           LEFT JOIN labels l ON l.job_id = fr.job_id AND l.run_id = fr.run_id
           WHERE fr.verdict = 'REJECT' AND l.job_id IS NULL
+            ${scrapedToday}
         `),
         pool.query(`
           SELECT COUNT(*) FROM judge_verdicts jv
+          JOIN jobs j ON j.job_id = jv.job_id AND j.run_id = jv.run_id
           LEFT JOIN labels l ON l.job_id = jv.job_id AND l.run_id = jv.run_id
           WHERE jv.bucket = 'ARCHIVE' AND l.job_id IS NULL
+            ${scrapedToday}
         `),
       ]);
 
