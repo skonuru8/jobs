@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ApplyQueueRow, HardRejectionRow, SoftRejectionRow } from '../api';
+import { ResumeDiff } from './ResumeDiff';
 
 type Mode = 'apply' | 'hard-reject' | 'soft-reject';
 
@@ -34,7 +35,7 @@ function fmtScore(n: number) {
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
   const pct = fmtScore(value);
-  const color = pct >= 70 ? '#2d8a4d' : pct >= 50 ? '#c49a1a' : '#7a2020';
+  const color = pct >= 70 ? '#83f582' : pct >= 50 ? '#fd9143' : '#fc74fc';
   return (
     <div className="dp-score-row">
       <div className="dp-score-labels">
@@ -60,6 +61,8 @@ export function DetailPanel({ row, mode, onClose }: Props) {
   const [jdContent, setJdContent] = useState<string | null>(null);
   const [jdLoading, setJdLoading] = useState(false);
   const [jdError, setJdError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [diffOpen, setDiffOpen] = useState(false);
 
   const jdUrl = stringField(row, 'job_description_url');
 
@@ -107,6 +110,23 @@ export function DetailPanel({ row, mode, onClose }: Props) {
         </div>
       )}
 
+      {applyRow && (applyRow as unknown as { required_skills_with_risk?: unknown[] | null }).required_skills_with_risk && (
+        <div className="dp-section">
+          <div className="dp-section-title">Skill match</div>
+          <div className="skill-pills">
+            {((applyRow as unknown as { required_skills_with_risk: Array<{
+              name?: string;
+              risk_entry?: { swap_allowed?: boolean; fabrication_risk?: string } | null;
+            }> }).required_skills_with_risk).slice(0, 20).map((skill, i) => {
+              const isSwap = skill.risk_entry?.swap_allowed === true;
+              const isGap = !skill.risk_entry || skill.risk_entry.fabrication_risk === 'high';
+              const cls = isSwap ? 'swap' : isGap ? 'gap' : 'matched';
+              return <span key={i} className={`skill-pill ${cls}`}>{skill.name ?? 'Unnamed skill'}</span>;
+            })}
+          </div>
+        </div>
+      )}
+
       {reasoningText && (
         <div className="dp-section">
           <div className="dp-section-title">Judge reasoning</div>
@@ -130,8 +150,35 @@ export function DetailPanel({ row, mode, onClose }: Props) {
 
       {applyRow?.cover_letter && (
         <div className="dp-section">
-          <div className="dp-section-title">Cover letter</div>
+          <div className="dp-section-title">
+            Cover letter
+            <button
+              className={`dp-copy-btn${copied ? ' copied' : ''}`}
+              onClick={() => {
+                void navigator.clipboard.writeText(applyRow.cover_letter!);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+            >
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
           <pre className="dp-cover-text">{applyRow.cover_letter}</pre>
+        </div>
+      )}
+
+      {applyRow?.resume_pdf_url && (
+        <div className="dp-section">
+          <div className="dp-section-title">
+            Resume diff
+            <button
+              style={{ fontSize: 11, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}
+              onClick={() => setDiffOpen(o => !o)}
+            >
+              {diffOpen ? '▴ hide' : '▾ show'}
+            </button>
+          </div>
+          {diffOpen && <ResumeDiff jobId={row.job_id} />}
         </div>
       )}
 

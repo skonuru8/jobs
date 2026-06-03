@@ -9,9 +9,10 @@ type StatusFilter = 'all' | 'unreviewed' | 'reviewed';
 interface Props {
   onStatsUpdate: (s: Stats) => void;
   refreshKey?: number;
+  searchQuery: string;
 }
 
-export function HardRejections({ onStatsUpdate, refreshKey }: Props) {
+export function HardRejections({ onStatsUpdate, refreshKey, searchQuery }: Props) {
   const [rows, setRows] = useState<HardRejectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +48,10 @@ export function HardRejections({ onStatsUpdate, refreshKey }: Props) {
     if (statusFilter === 'unreviewed') return row.label === null;
     if (statusFilter === 'reviewed') return row.label !== null;
     return true;
+  }).filter(row => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return row.title.toLowerCase().includes(q) || row.company.toLowerCase().includes(q);
   });
 
   // Group by reason (preserve server order: reason ASC, scraped_at DESC)

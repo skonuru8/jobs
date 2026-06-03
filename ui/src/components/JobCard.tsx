@@ -43,40 +43,28 @@ function artifactFlagsNeedWarning(flags: string[]): boolean {
 }
 
 function BucketBadge({ bucket }: { bucket: string }) {
-  const colors: Record<string, string> = {
-    COVER_LETTER: '#2d6a2d',
-    REVIEW_QUEUE: '#6a5a1a',
-    RESULTS: '#1a3d6a',
-    ARCHIVE: '#5a1a1a',
-  };
   const labels: Record<string, string> = {
     COVER_LETTER: 'Cover Letter',
     REVIEW_QUEUE: 'Review Queue',
     RESULTS: 'Results',
     ARCHIVE: 'Archive',
   };
-  return (
-    <span className="badge" style={{ background: colors[bucket] ?? '#333' }}>
-      {labels[bucket] ?? bucket}
-    </span>
-  );
+  return <span className={`badge badge-bucket-${bucket.toLowerCase()}`}>{labels[bucket] ?? bucket}</span>;
 }
 
 function VerdictBadge({ verdict }: { verdict: string }) {
-  const colors: Record<string, string> = {
-    STRONG: '#2d6a2d',
-    MAYBE: '#6a5a1a',
-    WEAK: '#6a2d2d',
-  };
-  return (
-    <span className="badge" style={{ background: colors[verdict] ?? '#444' }}>
-      {verdict}
-    </span>
-  );
+  return <span className={`badge badge-verdict-${verdict.toLowerCase()}`}>{verdict}</span>;
 }
 
 function SourceBadge({ source }: { source: string }) {
-  return <span className="badge source-badge">{source}</span>;
+  const map: Record<string, [string, string]> = {
+    dice: ['#fff48d', '#1d1c1c'],
+    jobright_api: ['#7af7f7', '#1d1c1c'],
+    jobright: ['#7af7f7', '#1d1c1c'],
+    linkedin: ['#af47f9', '#fff'],
+  };
+  const [background, color] = map[source.toLowerCase()] ?? ['#fd9143', '#1d1c1c'];
+  return <span className="badge" style={{ background, color }}>{source}</span>;
 }
 
 function badgeFor(status: 'ok' | 'needs_review' | undefined): 'green' | 'yellow' {
@@ -87,7 +75,8 @@ function RiskBadge({ label, status, summary }: { label: string; status: 'ok' | '
   const [open, setOpen] = useState(false);
   const color = badgeFor(status);
   const style: React.CSSProperties = {
-    background: color === 'yellow' ? '#6a5a1a' : '#2d6a2d',
+    background: color === 'yellow' ? '#fd9143' : '#83f582',
+    color: '#1d1c1c',
     cursor: color === 'yellow' ? 'pointer' : 'default',
   };
   return (
@@ -150,6 +139,7 @@ export function JobCard({ mode, row, onStatsUpdate, selected, onSelect, onDataCh
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [selectedChips, setSelectedChips] = useState<string[]>([]);
+  const [concernsOpen, setConcernsOpen] = useState(false);
 
   const applyRow = mode === 'apply' ? (row as ApplyQueueRow) : null;
   const hardRow = mode === 'hard-reject' ? (row as HardRejectionRow) : null;
@@ -267,6 +257,9 @@ export function JobCard({ mode, row, onStatsUpdate, selected, onSelect, onDataCh
 
   const hasScore = 'score_total' in row;
   const hasJudge = 'judge_verdict' in row;
+  const judgeConcerns = applyRow
+    ? ((applyRow as unknown as { judge_concerns?: string[] | null }).judge_concerns ?? applyRow.concerns ?? [])
+    : [];
 
   return (
     <div
@@ -299,6 +292,26 @@ export function JobCard({ mode, row, onStatsUpdate, selected, onSelect, onDataCh
           <span className="subscore">Sen {fmtScore((row as ApplyQueueRow).seniority)}%</span>
           <span className="subscore">Loc {fmtScore((row as ApplyQueueRow).location)}%</span>
         </div>
+      )}
+
+      {applyRow && judgeConcerns.length > 0 && (
+        <>
+          <button
+            className="concerns-toggle"
+            onClick={e => { e.stopPropagation(); setConcernsOpen(o => !o); }}
+          >
+            {concernsOpen ? '▴' : '▾'} {judgeConcerns.length} concern{judgeConcerns.length !== 1 ? 's' : ''}
+          </button>
+          {concernsOpen && (
+            <div className="concerns-list">
+              <ul>
+                {judgeConcerns.map((concern, i) => (
+                  <li key={i}>{concern}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
       )}
 
       {hardRow && (
@@ -484,21 +497,21 @@ export function JobCard({ mode, row, onStatsUpdate, selected, onSelect, onDataCh
         {mode === 'apply' && label && label !== 'no' && (
           <div className="app-status-btns">
             <button
-              className={`app-btn applied${appStatus === 'applied' ? ' active' : ''}`}
+              className={`app-status-btn applied${appStatus === 'applied' ? ' active' : ''}`}
               onClick={() => handleAppStatus('applied')}
               disabled={saving}
             >
               ✓ Applied
             </button>
             <button
-              className={`app-btn apply-later${appStatus === 'apply_later' ? ' active' : ''}`}
+              className={`app-status-btn apply-later${appStatus === 'apply_later' ? ' active' : ''}`}
               onClick={() => handleAppStatus('apply_later')}
               disabled={saving}
             >
               ⏱ Apply Later
             </button>
             <button
-              className={`app-btn not-applied${appStatus === 'skipped' ? ' active' : ''}`}
+              className={`app-status-btn skipped${appStatus === 'skipped' ? ' active' : ''}`}
               onClick={() => handleAppStatus('skipped')}
               disabled={saving}
             >
@@ -508,7 +521,7 @@ export function JobCard({ mode, row, onStatsUpdate, selected, onSelect, onDataCh
         )}
 
         <textarea
-          className="notes-input"
+          className="notes-textarea"
           placeholder="Notes…"
           value={notes}
           onChange={e => setNotes(e.target.value)}

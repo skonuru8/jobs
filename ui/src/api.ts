@@ -27,6 +27,8 @@ export interface ApplyQueueRow {
   label_notes: string | null;
   application_status: 'applied' | 'skipped' | 'apply_later' | null;
   applied_at: string | null;
+  required_skills_with_risk?: any[] | null;
+  judge_concerns?: string[] | null;
   /** Link to saved job_description.md under output/applications/<slug>/ */
   job_description_url?: string | null;
   resume_risk_summary?:  RiskSummary | null;
@@ -98,6 +100,22 @@ export interface Stats {
   softRejectionsUnreviewed: number;
 }
 
+export interface RunRow {
+  run_id: string;
+  source: string;
+  status: string;
+  exit_code: number | null;
+  started_at: string;
+  finished_at: string | null;
+  scraped_count: number | null;
+  passed_count: number | null;
+  extraction_count: number | null;
+}
+
+export interface AppliedDayRow extends ApplyQueueRow {
+  applied_at: string;
+}
+
 export interface LabelPayload {
   job_id: string;
   run_id: string;
@@ -127,6 +145,24 @@ export async function getSoftRejections(): Promise<SoftRejectionRow[]> {
 export async function getStats(): Promise<Stats> {
   const res = await fetch('/api/stats');
   if (!res.ok) throw new Error(`stats failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getRunHistory(): Promise<RunRow[]> {
+  const res = await fetch('/api/run-history');
+  if (!res.ok) throw new Error(`run-history failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getAppliedJobs(): Promise<ApplyQueueRow[]> {
+  const res = await fetch('/api/applied-jobs');
+  if (!res.ok) throw new Error(`applied-jobs failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getResumeTex(jobId: string): Promise<{ tailored: string; canonical: string } | null> {
+  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/resume-tex`);
+  if (!res.ok) return null;
   return res.json();
 }
 

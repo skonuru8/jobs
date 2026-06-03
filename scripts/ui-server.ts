@@ -151,6 +151,7 @@ async function main() {
               const meta = JSON.parse(fs.readFileSync(metaAbs, 'utf8'));
               row.resume_risk_summary  = meta?.resume?.risk_summary  ?? null;
               row.resume_export_status = meta?.resume?.export_status ?? 'ok';
+              row.required_skills_with_risk = meta?.jd_json?.required_skills_with_risk ?? null;
             }
           } catch { /* best-effort */ }
         }
@@ -353,6 +354,189 @@ async function main() {
     } catch (err) {
       console.error('[ui-server] /api/jobs/:job_id/generate error:', err);
       res.status(500).json({ error: 'generate_error', detail: (err as Error).message });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/run-history
+  // -------------------------------------------------------------------------
+  app.get('/api/run-history', async (_req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT
+          run_id,
+          source,
+          CASE
+            WHEN finished_at IS NULL THEN 'running'
+            WHEN COALESCE(exit_code, 0) = 0 THEN 'completed'
+            ELSE 'failed'
+          END AS status,
+          exit_code,
+          started_at,
+          finished_at,
+          jobs_total AS scraped_count,
+          jobs_passed AS passed_count,
+          extractions_succeeded AS extraction_count
+        FROM runs
+        ORDER BY started_at DESC
+        LIMIT 200
+      `);
+      res.json(result.rows);
+    } catch (err) {
+      console.error('[ui-server] /api/run-history error:', err);
+      res.status(500).json({ error: 'db_error', detail: (err as Error).message });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/applied-jobs
+  // -------------------------------------------------------------------------
+  app.get('/api/applied-jobs', async (_req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT
+          j.job_id, j.run_id, j.title, j.company, j.source_url, j.source,
+          j.scraped_at, j.posted_at,
+          CASE WHEN j.source = 'jobright_api' THEN j.meta->>'job_id' ELSE NULL END AS jobright_id,
+          s.total AS score_total, s.skills, s.semantic, s.yoe, s.seniority, s.location,
+          jv.verdict AS judge_verdict, jv.bucket, jv.reasoning, jv.concerns,
+          NULL::text AS cover_letter,
+          tr.pdf_path AS resume_pdf_path,
+          tr.word_count AS resume_word_count,
+          tr.flags AS resume_flags,
+          tr.meta_path AS resume_meta_path,
+          cl.pdf_path AS cover_pdf_path,
+          cl.word_count AS cover_word_count,
+          cl.flags AS cover_flags,
+          cl.meta_path AS cover_meta_path,
+          l.label, l.notes AS label_notes,
+          l.application_status, l.applied_at
+        FROM jobs j
+        LEFT JOIN scores         s  ON s.job_id  = j.job_id AND s.run_id  = j.run_id
+        LEFT JOIN judge_verdicts jv ON jv.job_id = j.job_id AND jv.run_id = j.run_id
+        LEFT JOIN LATERAL (
+          SELECT pdf_path, word_count, flags, meta_path
+          FROM tailored_resumes WHERE job_id = j.job_id ORDER BY generated_at DESC NULLS LAST LIMIT 1
+        ) tr ON true
+        LEFT JOIN LATERAL (
+          SELECT pdf_path, word_count, flags, meta_path
+          FROM cover_letters WHERE job_id = j.job_id ORDER BY generated_at DESC NULLS LAST LIMIT 1
+        ) cl ON true
+        JOIN labels l ON l.job_id = j.job_id AND l.run_id = j.run_id
+        WHERE l.application_status = 'applied'
+          AND l.applied_at IS NOT NULL
+        ORDER BY l.applied_at DESC
+        LIMIT 500
+      `);
+      const rows = result.rows.map(row => {
+        const toUrl = (p: string | null) =>
+          p ? `/${String(p).replace(/\\/g, '/')}` : null;
+        row.resume_pdf_url = toUrl(row.resume_pdf_path);
+        row.cover_pdf_url = toUrl(row.cover_pdf_path);
+        const resumeMetaPath = row.resume_meta_path as string | null;
+        const coverMetaPath  = row.cover_meta_path as string | null;
+        const metaPath = resumeMetaPath ?? coverMetaPath;
+        if (metaPath) {
+          const artifactDir = path.dirname(metaPath);
+          row.job_description_url = toUrl(path.join(artifactDir, 'job_description.md'));
+        } else {
+          const postedIso = row.posted_at ? new Date(row.posted_at as string).toISOString() : null;
+          const slug = makeJobSlug(
+            { title: row.title ?? "", company: row.company ?? "", posted_at: postedIso },
+            row.job_id,
+          );
+          row.job_description_url = toUrl(`output/applications/${slug}/job_description.md`);
+        }
+        const rf = row.resume_flags as string[] | null;
+        const cf = row.cover_flags as string[] | null;
+        row.artifact_flags = [...(rf ?? []), ...(cf ?? [])];
+
+        if (resumeMetaPath) {
+          try {
+            const metaAbs = path.join(REPO_ROOT, resumeMetaPath);
+            if (fs.existsSync(metaAbs)) {
+              const meta = JSON.parse(fs.readFileSync(metaAbs, 'utf8'));
+              row.resume_risk_summary = meta?.resume?.risk_summary ?? null;
+              row.resume_export_status = meta?.resume?.export_status ?? 'ok';
+              row.required_skills_with_risk = meta?.jd_json?.required_skills_with_risk ?? null;
+            }
+          } catch { /* best-effort */ }
+        }
+        if (coverMetaPath) {
+          try {
+            const metaAbs = path.join(REPO_ROOT, coverMetaPath);
+            if (fs.existsSync(metaAbs)) {
+              const meta = JSON.parse(fs.readFileSync(metaAbs, 'utf8'));
+              row.cover_risk_summary = meta?.cover_letter?.risk_summary ?? null;
+              row.cover_export_status = meta?.cover_letter?.export_status ?? 'ok';
+            }
+          } catch { /* best-effort */ }
+        }
+
+        delete row.resume_pdf_path;
+        delete row.cover_pdf_path;
+        delete row.resume_flags;
+        delete row.cover_flags;
+        delete row.resume_meta_path;
+        delete row.cover_meta_path;
+        return row;
+      });
+      res.json(rows);
+    } catch (err) {
+      console.error('[ui-server] /api/applied-jobs error:', err);
+      res.status(500).json({ error: 'db_error', detail: (err as Error).message });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/jobs/:job_id/resume-tex
+  // -------------------------------------------------------------------------
+  app.get('/api/jobs/:job_id/resume-tex', async (req, res) => {
+    try {
+      const { job_id } = req.params;
+      const result = await pool.query(`
+        SELECT tex_path
+        FROM tailored_resumes
+        WHERE job_id = $1
+        ORDER BY generated_at DESC NULLS LAST
+        LIMIT 1
+      `, [job_id]);
+
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: 'not_found' });
+        return;
+      }
+
+      const texRelPath = result.rows[0].tex_path as string | null;
+      if (!texRelPath) {
+        res.status(404).json({ error: 'no_tex_path' });
+        return;
+      }
+
+      const texAbs = path.isAbsolute(texRelPath) ? texRelPath : path.join(REPO_ROOT, texRelPath);
+      if (!fs.existsSync(texAbs)) {
+        res.status(404).json({ error: 'tex_file_missing' });
+        return;
+      }
+      const tailored = fs.readFileSync(texAbs, 'utf-8');
+
+      const canonicalPaths = [
+        path.join(REPO_ROOT, 'config', 'resume.tex'),
+        path.join(REPO_ROOT, 'config', 'resume_master.tex'),
+        path.join(REPO_ROOT, 'config', 'resume-master.tex'),
+      ];
+      let canonical = '';
+      for (const p of canonicalPaths) {
+        if (fs.existsSync(p)) {
+          canonical = fs.readFileSync(p, 'utf-8');
+          break;
+        }
+      }
+
+      res.json({ tailored, canonical });
+    } catch (err) {
+      console.error('[ui-server] /api/jobs/:job_id/resume-tex error:', err);
+      res.status(500).json({ error: 'server_error', detail: (err as Error).message });
     }
   });
 
