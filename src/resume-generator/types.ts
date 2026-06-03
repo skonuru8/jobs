@@ -27,6 +27,7 @@ export interface ResumeGenResult {
   word_count:   number;
   tokens:       { input: number; output: number };
   generated_at: string;
+  warnings?:    string[];
   error?:       string;
 }
 

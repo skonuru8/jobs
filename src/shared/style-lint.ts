@@ -4,9 +4,12 @@ const BANNED_STYLE_PATTERNS = [
   /akin to/i,
   /parallel to/i,
   /whose syntax (?:and|or) features/i,
+  /\bwhose syntax\b/i,
   /syntactically equivalent to/i,
   /foundational knowledge of/i,
+  /working knowledge of/i,
   /transitional knowledge of/i,
+  /deepening understanding/i,
   /directly applicable to/i,
   /translate[s]? directly to/i,
   /immediately useful in/i,
@@ -16,6 +19,8 @@ const BANNED_STYLE_PATTERNS = [
   /transferable skills/i,
   /\baligning with your need for\b/i,
   /\bas required by the role\b/i,
+  /\bhands-on exposure\b/i,
+  /\bexposure to\b/i,
   /\bgained hands-on exposure\b/i,
 ];
 

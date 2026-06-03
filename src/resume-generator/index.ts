@@ -60,6 +60,9 @@ export async function generateAndSaveResume(
     console.log(`[resume] early return — reason: gen failed or empty tex (status=${gen.status})`);
     return emptyOutcome(bundle, ctx, flags, gen, combinedMetaRel);
   }
+  if (gen.warnings?.includes("banned_phrase_in_output")) {
+    flags.push("banned_phrase_in_output");
+  }
 
   let tex = boldMetrics(
     replaceSkillsSection(stripDashes(gen.tex), bundle.canonical_resume_tex, input.tech_swaps),

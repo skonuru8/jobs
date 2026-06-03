@@ -41,7 +41,7 @@ export function buildSystemPrompt(
 ): string {
   const candidateSection = buildCandidateProfileSection(profile);
   const rolesSection = rolesList?.trim()
-    ? `\n\nCANDIDATE WORK HISTORY (for tailoring hints):\n${rolesList.trim()}`
+    ? `\n\nCANDIDATE WORK HISTORY (for tailoring hints):\nThe work-history block below contains the candidate's ACTUAL resume bullets, grouped by employer and project. Treat these bullets as the sole ground truth. Base every fit decision, reframe, and frame_as evidence quote on them. Do not assume or invent experience, tools, or domains not shown here. When emitting frame_as, quote the specific bullet(s) you rely on.\n\n${rolesList.trim()}`
     : "";
   const skillsSection = canonicalSkills?.trim()
     ? `\n\nCANDIDATE FULL SKILLS LIST (verbatim from resume):\n${canonicalSkills.trim()}\n\nWhen identifying gaps, FIRST check this list. Do not flag a technology as a gap if it appears here.`
@@ -127,10 +127,10 @@ Return JSON with exactly this shape:
   ],
   "gap_directives": [
     {
-      "jd_requirement": "Cassandra",
+      "jd_requirement": "<exact requirement string from the JD>",
       "handling": "fabricate" | "reframe" | "acknowledge" | "ignore" | "forbid",
-      "target_role": "Hitachi Vantara / Nokia" | null,
-      "frame_as": "At Hitachi Vantara / Nokia, the role involved contract lifecycle management with Cosmos DB as the primary store. Candidate's canonical bullets reference time-series query optimization and schema design for telemetry data at that role. Surface the candidate's NoSQL query optimization work, frame as high-throughput contract data retrieval, do not claim Cassandra-specific features." | null
+      "target_role": "<exact employer header or project tag from the work history>" | null,
+      "frame_as": "<(1) role context; (2) the specific canonical bullet(s) you draw from, quoted; (3) execution angle + what NOT to claim>" | null
     }
   ],
   "why_apply": "1-2 sentences naming a specific reason this company/role fits the candidate, derived from JD and profile.",
@@ -149,6 +149,7 @@ GUIDANCE FOR THE NEW FIELDS:
 - gaps: every JD requirement the candidate genuinely lacks. severity: minor (1 missing tool/lib), moderate (missing methodology or years), major (missing domain or core stack). reframe_angle MUST be honest — adjacent experience the candidate can truthfully claim.
 - why_apply: NOT generic. Name a domain, project, team, or stated company value from the JD that intersects the candidate's history.
 - gap_directives: REQUIRED. Emit this array even when empty.
+- Never emit a gap_directive whose jd_requirement is empty, "none", "none extracted", or not a real term taken from the JD. If the JD requirement list is empty, emit an empty array.
 - tailoring_hints.emphasize_roles: pull from CANDIDATE WORK HISTORY block above by exact role string.
 - tailoring_hints.emphasize_skills / downplay_skills: pull from the candidate profile skills, NOT invent new ones.
 - tailoring_hints.tech_swaps: emit ONLY when a JD required_skill has risk_entry.relationship === "direct_equivalent" AND risk_entry.swap_allowed === true. from = risk_entry.candidate_source_skill, to = risk_entry.target_skill, confidence = risk_entry.confidence. Also emit target_role to scope the swap to one exact employer header when appropriate; set target_role: null when it genuinely applies everywhere. Empty array when no swaps apply.
@@ -165,7 +166,9 @@ emit a gap_directives entry with:
     where the directive applies (null for handling=ignore or forbid)
   - frame_as: A 2-3 sentence brief structured as:
       (1) Role context at target_role — what kind of work, domain, tech stack at that role
-      (2) Adjacent evidence — which canonical bullets at that role can be drawn from
+      (2) Adjacent evidence — quote or paraphrase the SPECIFIC canonical bullet(s) at
+          target_role (provided verbatim in the work-history block) that make this plausible.
+          If no bullet at target_role supports it, do not fabricate/reframe — use acknowledge.
       (3) Execution angle — what to surface, what language to use, what NOT to claim
     Never compress into one sentence. Never use hedging language (see banned list below).
     (null for handling=ignore or forbid)
@@ -209,9 +212,19 @@ Handling guide:
   - ignore: not worth addressing.
   - forbid: the candidate must not claim this in either artifact.
 
+  Architecture coherence (REQUIRED for fabricate and reframe):
+  - Every directive at a target_role must be consistent with that role's canonical bullets AND
+    with the other directives you emit at the same role. Read the role's bullets first.
+  - Do not introduce a stack or deployment model that contradicts the role's established one
+    (e.g., cloud-native Spring Boot microservices on Azure vs an on-premise JBoss EAP/EAR deploy
+    at the same role — mutually exclusive; pick the one that fits the canonical bullets).
+  - If a JD requirement cannot be made coherent with the role's real stack, use acknowledge/ignore.
+
 target_role must EXACTLY match an employer header from the candidate's experience.
 Valid examples: "Hitachi Vantara", "Hitachi Vantara / Nokia", "AquilaEdge LLC",
 "PHIA Group", "Persistent Systems".
+- target_role must be a string present in the work-history block: an employer header
+  (e.g., "Hitachi Vantara") or a project tag (e.g., "Nokia", "PHIA"). Never invent a role name.
 
 TECH_SWAPS: for each swap, also emit target_role to scope the swap to a specific
 role. If a swap genuinely applies everywhere, set target_role: null.

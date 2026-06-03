@@ -237,6 +237,10 @@ describe("buildJudgePrompt", () => {
 
 describe("SYSTEM_PROMPT", () => {
   const systemPrompt = buildSystemPrompt(baseProfile(), "");
+  const groundedSystemPrompt = buildSystemPrompt(
+    baseProfile(),
+    "## Hitachi Vantara - Senior Software Engineer (2020)\n  - Drove Redis latency improvements.",
+  );
 
   it("is non-empty", () => {
     expect(systemPrompt.length).toBeGreaterThan(100);
@@ -261,6 +265,29 @@ describe("SYSTEM_PROMPT", () => {
     expect(systemPrompt).toContain("Fit test");
     expect(systemPrompt).toContain("strongest contextual fit");
     expect(systemPrompt).toContain("absence is the entire point of fabricate");
+  });
+
+  it("grounds work history on actual bullets", () => {
+    expect(groundedSystemPrompt).toContain("ACTUAL resume bullets");
+    expect(groundedSystemPrompt).toContain("sole ground truth");
+    expect(groundedSystemPrompt).toContain("quote the specific bullet");
+    expect(groundedSystemPrompt).toContain("Drove Redis latency improvements");
+  });
+
+  it("de-leaks concrete gap directive examples", () => {
+    expect(systemPrompt).toContain("<exact requirement string from the JD>");
+    expect(systemPrompt).toContain("<exact employer header or project tag from the work history>");
+    expect(systemPrompt).not.toContain(`"jd_requirement": "Cassandra"`);
+    expect(systemPrompt).not.toContain("Cosmos DB as the primary store");
+  });
+
+  it("requires grounded frame_as and coherent directives", () => {
+    expect(systemPrompt).toContain("quote or paraphrase the SPECIFIC canonical bullet");
+    expect(systemPrompt).toContain("Architecture coherence");
+    expect(systemPrompt).toContain("Never emit a gap_directive whose jd_requirement is empty");
+    expect(systemPrompt).toContain("do not fabricate/reframe");
+    expect(systemPrompt).toContain("project tag");
+    expect(systemPrompt).toContain("Never invent a role name");
   });
 });
 

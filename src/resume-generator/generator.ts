@@ -102,6 +102,20 @@ export async function generateResumeTex(
         const banned = findBannedStylePhrases(tex);
         if (banned.length > 0) {
           lastErr = `banned style phrase: ${banned.join(", ")}`;
+          const finalAttempt = attemptIndex === attempts.length - 1 && i === attemptsForModel - 1;
+          if (finalAttempt) {
+            console.warn(`[resume] final attempt contains banned style phrase; accepting with flag: ${banned.join(", ")}`);
+            return {
+              status:       "ok",
+              tex,
+              model:        r.model,
+              prompt_sha:   PROMPT_SHA,
+              word_count:   countWordsTex(tex),
+              tokens:       { input: r.input_tokens ?? 0, output: r.output_tokens ?? 0 },
+              generated_at,
+              warnings:     ["banned_phrase_in_output"],
+            };
+          }
           logPremiumFailure(
             usePremium,
             attempt.model,

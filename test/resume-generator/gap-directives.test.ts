@@ -87,4 +87,18 @@ describe("resume generator gap directives", () => {
     expect(TOTAL_MODE_PROMPT).toContain("BULLET QUALITY GATE");
     expect(TOTAL_MODE_PROMPT).toContain("PROJECT PLACEMENT AND SCOPE");
   });
+
+  it("guards against contradictions and fabrication inflation", () => {
+    expect(TOTAL_MODE_PROMPT).toContain("must not contradict the role's canonical");
+    expect(TOTAL_MODE_PROMPT).toContain("incompatible stacks/deployments");
+    expect(TOTAL_MODE_PROMPT).toContain("may appear in at most ONE experience bullet");
+    expect(TOTAL_MODE_PROMPT).toContain("Do not elevate it into");
+  });
+
+  it("requires banned phrases to be rewritten from any source", () => {
+    expect(TOTAL_MODE_PROMPT).toContain("regardless of source");
+    expect(TOTAL_MODE_PROMPT).toContain("inherited from a canonical");
+    expect(TOTAL_MODE_PROMPT).toContain("suggested by a frame_as");
+    expect(TOTAL_MODE_PROMPT).toContain("only remove the hedge");
+  });
 });

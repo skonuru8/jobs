@@ -20,29 +20,45 @@ export function extractRolesFromCanonicalTex(tex: string): string {
   );
   if (!exp) return "";
   const block = exp[1];
-  const roles: string[] = [];
 
-  // Primary pattern: \textbf{Company} \hfill dates\\ then \textit{Role} (resume_master.tex)
-  const blockIter = block.matchAll(
-    /\\textbf\{([^}]+)\}\s*\\hfill\s*([^\\\n]+)[\s\n]*(?:\\\\)?\s*(?:\\vspace\{[^}]+\}\s*)?\\textit\{([^}]+)\}/g,
-  );
-  for (const m of blockIter) {
-    const company = m[1].trim();
+  // Anchor on top-level employer headers: \textbf{Company} \hfill <dates>.
+  // Project sub-headers (\hspace{4mm}\textbf{Project: X}) have no \hfill, so they are
+  // not anchors; their bullets fold into the preceding employer.
+  const headerRe = /\\textbf\{([^}]+)\}\s*\\hfill\s*([^\\\n]+)/g;
+  const anchors: { company: string; dates: string; start: number; headerEnd: number }[] = [];
+  let hm: RegExpExecArray | null;
+  while ((hm = headerRe.exec(block)) !== null) {
+    const company = hm[1].trim();
     if (/^project:/i.test(company)) continue;
-    roles.push(`${company} - ${cleanLatexInline(m[3])} (${m[2].trim()})`);
+    anchors.push({ company, dates: hm[2].trim(), start: hm.index, headerEnd: headerRe.lastIndex });
+  }
+  if (anchors.length === 0) return "";
+
+  const out: string[] = [];
+  for (let i = 0; i < anchors.length; i++) {
+    const a = anchors[i];
+    const segEnd = i + 1 < anchors.length ? anchors[i + 1].start : block.length;
+    const segment = block.slice(a.headerEnd, segEnd);
+
+    const roleMatch = segment.match(/\\textit\{([^}]+)\}/);
+    const role = roleMatch ? cleanLatexInline(roleMatch[1]) : "";
+    out.push(role ? `## ${a.company} - ${role} (${a.dates})`
+                  : `## ${a.company} (${a.dates})`);
+
+    // One \item per line in this resume; tag bullets with their project sub-header.
+    let currentProject = "";
+    for (const raw of segment.split("\n")) {
+      const line = raw.trim();
+      const proj = line.match(/\\textbf\{Project:\s*([^}]+)\}/);
+      if (proj) { currentProject = proj[1].trim(); continue; }
+      if (line.startsWith("\\item")) {
+        const bullet = cleanLatexInline(line.replace(/^\\item\s*/, "")).replace(/\s+/g, " ").trim();
+        if (bullet) out.push(`  - ${currentProject ? `[${currentProject}] ` : ""}${bullet}`);
+      }
+    }
   }
 
-  if (roles.length) return roles.join("\n");
-
-  // Fallback: company \textbf lines only (no role line matched)
-  const simple = block.matchAll(/\\textbf\{([^}]+)\}\s*\\hfill\s*([^\\\n]+)/g);
-  for (const m of simple) {
-    const company = m[1].trim();
-    if (/^project:/i.test(company)) continue;
-    roles.push(`${company} (${m[2].trim()})`);
-  }
-
-  return roles.slice(0, 12).join("\n");
+  return out.join("\n");
 }
 
 function cleanLatexInline(value: string): string {
