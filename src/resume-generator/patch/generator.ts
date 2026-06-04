@@ -247,10 +247,7 @@ function isPatchOp(x: unknown): x is PatchOp {
  * @returns `true` when normalized strings match or one contains other.
  */
 function sameRoleish(a: string, b: string): boolean {
-  const na = normalize(a);
-  const nb = normalize(b);
-  return na === nb ||
-    (na.length >= 5 && nb.length >= 5 && (na.includes(nb) || nb.includes(na)));
+  return normalize(a) === normalize(b);
 }
 
 /**

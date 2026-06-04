@@ -82,8 +82,8 @@ describe("judge v5 schema compatibility", () => {
       reasoning: "Several gaps.",
       concerns: ["Needs careful tailoring."],
       gap_directives: [
-        { jd_requirement: "Cassandra", handling: "fabricate", target_role: "PHIA Group", frame_as: "High-throughput NoSQL stores for contract data." },
-        { jd_requirement: "MongoDB", handling: "reframe", target_role: "Hitachi Vantara / Nokia", frame_as: "Document-style data access patterns alongside Cosmos DB." },
+        { jd_requirement: "Cassandra", handling: "fabricate", target_role: "Project: PHIA", frame_as: "High-throughput NoSQL stores for contract data." },
+        { jd_requirement: "MongoDB", handling: "reframe", target_role: "Project: Nokia", frame_as: "Document-style data access patterns alongside Cosmos DB." },
         { jd_requirement: "Capital markets", handling: "acknowledge", target_role: "Persistent Systems", frame_as: "Adjacent enterprise platform work in regulated domains." },
         { jd_requirement: "Kotlin", handling: "ignore", target_role: null, frame_as: null },
         { jd_requirement: "FX trading", handling: "forbid", target_role: null, frame_as: null },
@@ -91,7 +91,7 @@ describe("judge v5 schema compatibility", () => {
       tailoring_hints: {
         ...strictBase.tailoring_hints,
         tech_swaps: [
-          { from: "React", to: "Angular", confidence: 0.8, target_role: "PHIA Group" },
+          { from: "React", to: "Angular", confidence: 0.8, target_role: "Project: PHIA" },
         ],
       },
     });
@@ -100,7 +100,7 @@ describe("judge v5 schema compatibility", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.gap_directives).toHaveLength(5);
-      expect(result.data.tailoring_hints?.tech_swaps?.[0]?.target_role).toBe("PHIA Group");
+      expect(result.data.tailoring_hints?.tech_swaps?.[0]?.target_role).toBe("Project: PHIA");
     }
   });
 
@@ -113,7 +113,7 @@ describe("judge v5 schema compatibility", () => {
         {
           jd_requirement: "Cassandra",
           handling: "definitely_fabricate",
-          target_role: "PHIA Group",
+          target_role: "Project: PHIA",
           frame_as: "NoSQL stores.",
         },
       ],

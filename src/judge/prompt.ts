@@ -170,7 +170,7 @@ Return JSON with exactly this shape:
     "emphasize_skills": ["skills from candidate profile that should appear prominently"],
     "downplay_skills": ["skills present in canonical but not relevant to this JD"],
     "domain_reframe_angle": "If JD requires a domain the candidate hasn't directly worked in, the honest reframe — else empty string",
-    "tech_swaps": [{"from": "Camunda BPMN", "to": "Flowable", "confidence": 0.9, "target_role": "PHIA Group" | null}],
+    "tech_swaps": [{"from": "Camunda BPMN", "to": "Flowable", "confidence": 0.9, "target_role": "Project: PHIA" | null}],
     "gap_directives": []
   }
 }

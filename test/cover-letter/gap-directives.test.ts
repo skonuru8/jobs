@@ -68,12 +68,12 @@ describe("cover letter gap directives", () => {
       {
         jd_requirement: "MongoDB",
         handling: "fabricate",
-        target_role: "Hitachi Vantara / Nokia",
+        target_role: "Project: Nokia",
         frame_as: "Document-oriented persistence for high-volume contract data.",
       },
     ]);
     expect(rendered).toContain("SILENTLY FABRICATE");
-    expect(rendered).toContain("Hitachi Vantara / Nokia");
+    expect(rendered).toContain("Project: Nokia");
   });
 
   it("includes FORBIDDEN block for forbid directives", () => {

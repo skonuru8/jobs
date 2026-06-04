@@ -45,15 +45,25 @@ export function extractRolesFromCanonicalTex(tex: string): string {
     out.push(role ? `## ${a.company} - ${role} (${a.dates})`
                   : `## ${a.company} (${a.dates})`);
 
-    // One \item per line in this resume; tag bullets with their project sub-header.
+    // One \item per line in this resume; project sub-headers become their own ## sections.
     let currentProject = "";
+    let projectHeaderEmitted = false;
     for (const raw of segment.split("\n")) {
       const line = raw.trim();
       const proj = line.match(/\\textbf\{Project:\s*([^}]+)\}/);
-      if (proj) { currentProject = proj[1].trim(); continue; }
+      if (proj) {
+        currentProject = proj[1].trim();
+        projectHeaderEmitted = false; // will emit on next bullet
+        continue;
+      }
       if (line.startsWith("\\item")) {
         const bullet = cleanLatexInline(line.replace(/^\\item\s*/, "")).replace(/\s+/g, " ").trim();
-        if (bullet) out.push(`  - ${currentProject ? `[${currentProject}] ` : ""}${bullet}`);
+        if (!bullet) continue;
+        if (currentProject && !projectHeaderEmitted) {
+          out.push(`## Project: ${currentProject} (under ${a.company})`);
+          projectHeaderEmitted = true;
+        }
+        out.push(`  - ${bullet}`);
       }
     }
   }

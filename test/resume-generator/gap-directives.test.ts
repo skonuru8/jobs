@@ -12,12 +12,12 @@ describe("resume generator gap directives", () => {
       {
         jd_requirement: "MongoDB",
         handling: "fabricate",
-        target_role: "Hitachi Vantara / Nokia",
+        target_role: "Project: Nokia",
         frame_as: "Document-style persistence for high-throughput contract data.",
       },
     ]);
     expect(rendered).toContain("[FABRICATE] MongoDB");
-    expect(rendered).toContain("at role: Hitachi Vantara / Nokia");
+    expect(rendered).toContain("at role: Project: Nokia");
     expect(rendered).toContain("frame as: Document-style persistence");
   });
 
@@ -40,11 +40,11 @@ describe("resume generator gap directives", () => {
         from: "MongoDB",
         to: "Cosmos DB",
         confidence: 0.8,
-        target_role: "Hitachi Vantara / Nokia",
+        target_role: "Project: Nokia",
       },
     ]);
     expect(rendered).toContain("MongoDB -> Cosmos DB");
-    expect(rendered).toContain("apply only at role: Hitachi Vantara / Nokia");
+    expect(rendered).toContain("apply only at role: Project: Nokia");
   });
 
   it("leaves tech swaps unscoped when target_role is null", () => {
@@ -65,7 +65,7 @@ describe("resume generator gap directives", () => {
         {
           jd_requirement: "MongoDB",
           handling: "fabricate",
-          target_role: "Hitachi Vantara / Nokia",
+          target_role: "Project: Nokia",
           frame_as: "Document-style persistence for high-throughput contract data.",
         },
       ],

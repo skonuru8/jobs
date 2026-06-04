@@ -14,7 +14,7 @@ import * as path from "path";
 
 import type { ArtifactBundleOk } from "@/shared/artifact-bundle";
 import { stripDashes } from "@/shared/dash-lint";
-import { applyTechSwaps } from "@/shared/utils";
+import { applyTechSwaps, applyScopedTechSwaps } from "@/shared/utils";
 
 import { generateResumeTex, latexStructureOk } from "./generator";
 import { generatePatchedResumeTex } from "./patch/orchestrator";
@@ -108,8 +108,10 @@ export async function generateAndSaveResume(
   }
 
   const strippedTex = stripDashes(gen.tex);
+  // Apply scoped swaps to full tex (reaches EXPERIENCE role blocks), then replace SKILLS
+  // with canonical+swapped so EXPERIENCE gets scoped swaps and SKILLS stays canonical.
   const swappedTex = (input.tech_swaps?.length ?? 0) > 0
-    ? applyTechSwaps(strippedTex, input.tech_swaps!)
+    ? applyScopedTechSwaps(strippedTex, input.tech_swaps!)
     : strippedTex;
   let tex = boldMetrics(
     replaceSkillsSection(swappedTex, bundle.canonical_resume_tex, input.tech_swaps),
@@ -292,6 +294,12 @@ export function replaceSkillsSection(
 
   if (techSwaps?.length) {
     canonicalSkills = applyTechSwaps(canonicalSkills, techSwaps);
+    // Dedupe: if swap target already appears, collapse consecutive duplicate tokens on skill lines.
+    // Prevents "Apache Kafka, Kafka" when Kafka already present in canonical skills.
+    canonicalSkills = canonicalSkills.replace(
+      /\b(\w[\w .+#-]{1,30}),\s*\1\b/gi,
+      "$1",
+    );
   }
 
   return tex.replace(

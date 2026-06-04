@@ -14,7 +14,7 @@ describe("shared utils", () => {
 
   it("applies scoped swaps only to the matching experience block", () => {
     const block = [
-      "Hitachi Vantara / Nokia",
+      "Project: Nokia",
       "  - Built Java services on Azure Cosmos DB.",
       "",
       "AquilaEdge LLC",
@@ -22,7 +22,7 @@ describe("shared utils", () => {
     ].join("\n");
 
     const out = applyScopedTechSwaps(block, [
-      { from: "Azure Cosmos DB", to: "Cosmos DB", target_role: "Hitachi Vantara / Nokia" },
+      { from: "Azure Cosmos DB", to: "Cosmos DB", target_role: "Project: Nokia" },
     ]);
 
     expect(out).toContain("Built Java services on Cosmos DB.");
@@ -31,7 +31,7 @@ describe("shared utils", () => {
 
   it("applies unscoped swaps across all experience blocks", () => {
     const block = [
-      "Hitachi Vantara / Nokia",
+      "Project: Nokia",
       "  - Built Java services on AWS S3.",
       "",
       "AquilaEdge LLC",
