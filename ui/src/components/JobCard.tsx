@@ -261,275 +261,300 @@ export function JobCard({ mode, row, onStatsUpdate, selected, onSelect, onDataCh
     ? ((applyRow as unknown as { judge_concerns?: string[] | null }).judge_concerns ?? applyRow.concerns ?? [])
     : [];
 
+  const score = hasScore ? Number(fmtScore((row as ApplyQueueRow).score_total)) : 0;
+  const scoreColor = score >= 80 ? '#83f582' : score >= 60 ? '#fd9143' : '#fc74fc';
+
   return (
     <div
       className={cardClass}
       onClick={handleCardClick}
       style={onSelect ? { cursor: 'pointer' } : undefined}
     >
-      <div className="card-header">
-        <div className="card-title-row">
-          <span className="job-title">{row.title}</span>
-          {isApplied    && <span className="status-badge applied">✓ Applied</span>}
-          {isSkipped    && <span className="status-badge not-applied">⊘ Not Applied</span>}
-          {isApplyLater && <span className="status-badge apply-later">⏱ Apply Later</span>}
-        </div>
-        <div className="card-meta">
-          <span className="company">{row.company}</span>
-          <SourceBadge source={row.source} />
-          <span className="scraped-date">{fmtDate(row.scraped_at)}</span>
-          {hasJudge && <BucketBadge bucket={(row as ApplyQueueRow).bucket} />}
-          {hasJudge && <VerdictBadge verdict={(row as ApplyQueueRow).judge_verdict} />}
-        </div>
-      </div>
-
       {hasScore && (
-        <div className="score-row">
-          <span className="score-total">{fmtScore((row as ApplyQueueRow).score_total)}%</span>
-          <span className="subscore">Skills {fmtScore((row as ApplyQueueRow).skills)}%</span>
-          <span className="subscore">Sem {fmtScore((row as ApplyQueueRow).semantic)}%</span>
-          <span className="subscore">YoE {fmtScore((row as ApplyQueueRow).yoe)}%</span>
-          <span className="subscore">Sen {fmtScore((row as ApplyQueueRow).seniority)}%</span>
-          <span className="subscore">Loc {fmtScore((row as ApplyQueueRow).location)}%</span>
+        <div
+          className="card-score-bar"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+            background: scoreColor,
+            width: `${score}%`,
+          }}
+        />
+      )}
+
+      <div className="card-body">
+        <div className="card-header">
+          <div className="card-title-row">
+            <span className="job-title">{row.title}</span>
+            {isApplied    && <span className="status-badge applied">✓ Applied</span>}
+            {isSkipped    && <span className="status-badge not-applied">⊘ Not Applied</span>}
+            {isApplyLater && <span className="status-badge apply-later">⏱ Apply Later</span>}
+          </div>
+          <div className="card-meta">
+            <span className="company">{row.company}</span>
+            <SourceBadge source={row.source} />
+            <span className="scraped-date">{fmtDate(row.scraped_at)}</span>
+            {hasJudge && <BucketBadge bucket={(row as ApplyQueueRow).bucket} />}
+            {hasJudge && <VerdictBadge verdict={(row as ApplyQueueRow).judge_verdict} />}
+          </div>
         </div>
-      )}
 
-      {applyRow && judgeConcerns.length > 0 && (
-        <>
-          <button
-            className="concerns-toggle"
-            onClick={e => { e.stopPropagation(); setConcernsOpen(o => !o); }}
-          >
-            {concernsOpen ? '▴' : '▾'} {judgeConcerns.length} concern{judgeConcerns.length !== 1 ? 's' : ''}
-          </button>
-          {concernsOpen && (
-            <div className="concerns-list">
-              <ul>
-                {judgeConcerns.map((concern, i) => (
-                  <li key={i}>{concern}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </>
-      )}
-
-      {hardRow && (
-        <div className="reject-reason">
-          <span className="reason-label">Reason:</span> {hardRow.reason}
-          {hardRow.flags && Object.keys(hardRow.flags).length > 0 && (
-            <div className="flags">
-              {Object.entries(hardRow.flags).map(([k, v]) => (
-                <span key={k} className="flag-tag">{k}: {String(v)}</span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {applyRow && (
-        <div className="artifact-actions">
-          {applyRow.artifact_flags && applyRow.artifact_flags.length > 0 && (
-            <div
-              className={`artifact-flags-badge${artifactFlagsNeedWarning(applyRow.artifact_flags) ? ' artifact-flags-warn' : ''}`}
-              title={applyRow.artifact_flags.join(', ')}
+        {hasScore && (
+          <div className="score-row">
+            <span
+              className="score-total"
+              style={{ color: scoreColor }}
             >
-              {artifactFlagsNeedWarning(applyRow.artifact_flags) ? 'Artifact issue' : 'Flags'}:{' '}
-              {applyRow.artifact_flags.join(', ')}
-            </div>
-          )}
-          {(applyRow.resume_word_count != null || applyRow.cover_word_count != null) && (
-            <span className="artifact-word-counts">
-              {applyRow.resume_word_count != null && (
-                <span>Resume {applyRow.resume_word_count}w</span>
-              )}
-              {applyRow.resume_word_count != null && applyRow.cover_word_count != null && ' · '}
-              {applyRow.cover_word_count != null && (
-                <span>Cover {applyRow.cover_word_count}w</span>
-              )}
+              {fmtScore((row as ApplyQueueRow).score_total)}%
             </span>
-          )}
-          <button
-            type="button"
-            className={`gen-btn${genLoading ? ' gen-btn-loading' : ''}`}
-            onClick={handleGenerate}
-            disabled={genLoading}
-          >
-            {genLoading
-              ? '⏳ Generating…'
-              : applyRow.cover_pdf_url || applyRow.resume_pdf_url
-              ? 'Regenerate'
-              : 'Generate'}
-          </button>
-          {genLoading && (
-            <div className="gen-loading-msg">
-              Generating resume &amp; cover letter — this takes 1–2 minutes. Do not close or refresh.
-            </div>
-          )}
-          {genError && (
-            <span className="gen-error">
-              {genError}{' '}
-              <button type="button" className="gen-retry-inline" onClick={handleGenerate} disabled={genLoading}>
-                Try again
-              </button>
-            </span>
-          )}
-          <div className="artifact-pdf-links">
-            {applyRow.resume_pdf_url && (
-              <a href={applyRow.resume_pdf_url} target="_blank" rel="noopener noreferrer">Resume PDF</a>
+            <span className="subscore">Skills {fmtScore((row as ApplyQueueRow).skills)}%</span>
+            <span className="subscore">Sem {fmtScore((row as ApplyQueueRow).semantic)}%</span>
+            <span className="subscore">YoE {fmtScore((row as ApplyQueueRow).yoe)}%</span>
+            <span className="subscore">Sen {fmtScore((row as ApplyQueueRow).seniority)}%</span>
+            <span className="subscore">Loc {fmtScore((row as ApplyQueueRow).location)}%</span>
+          </div>
+        )}
+
+        {applyRow && judgeConcerns.length > 0 && (
+          <>
+            <button
+              className="concerns-toggle"
+              onClick={e => { e.stopPropagation(); setConcernsOpen(o => !o); }}
+            >
+              {concernsOpen ? '▴' : '▾'} {judgeConcerns.length} concern{judgeConcerns.length !== 1 ? 's' : ''}
+            </button>
+            {concernsOpen && (
+              <div className="concerns-list">
+                <ul>
+                  {judgeConcerns.map((concern, i) => (
+                    <li key={i}>{concern}</li>
+                  ))}
+                </ul>
+              </div>
             )}
-            {applyRow.cover_pdf_url && (
-              <a href={applyRow.cover_pdf_url} target="_blank" rel="noopener noreferrer">Cover letter PDF</a>
-            )}
-            {applyRow.job_description_url && (
-              <a href={applyRow.job_description_url} target="_blank" rel="noopener noreferrer">View JD</a>
+          </>
+        )}
+
+        {hardRow && (
+          <div className="reject-reason">
+            <span className="reason-label">Reason:</span> {hardRow.reason}
+            {hardRow.flags && Object.keys(hardRow.flags).length > 0 && (
+              <div className="flags">
+                {Object.entries(hardRow.flags).map(([k, v]) => (
+                  <span key={k} className="flag-tag">{k}: {String(v)}</span>
+                ))}
+              </div>
             )}
           </div>
-          {(applyRow.resume_pdf_url || applyRow.cover_pdf_url) && (
-            <div className="risk-badges" style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        )}
+
+        {applyRow && (
+          <div className="artifact-actions">
+            {applyRow.artifact_flags && applyRow.artifact_flags.length > 0 && (
+              <div
+                className={`artifact-flags-badge${artifactFlagsNeedWarning(applyRow.artifact_flags) ? ' artifact-flags-warn' : ''}`}
+                title={applyRow.artifact_flags.join(', ')}
+              >
+                {artifactFlagsNeedWarning(applyRow.artifact_flags) ? 'Artifact issue' : 'Flags'}:{' '}
+                {applyRow.artifact_flags.join(', ')}
+              </div>
+            )}
+            {(applyRow.resume_word_count != null || applyRow.cover_word_count != null) && (
+              <span className="artifact-word-counts">
+                {applyRow.resume_word_count != null && (
+                  <span>Resume {applyRow.resume_word_count}w</span>
+                )}
+                {applyRow.resume_word_count != null && applyRow.cover_word_count != null && ' · '}
+                {applyRow.cover_word_count != null && (
+                  <span>Cover {applyRow.cover_word_count}w</span>
+                )}
+              </span>
+            )}
+            <button
+              type="button"
+              className={`gen-btn${genLoading ? ' gen-btn-loading' : ''}`}
+              onClick={handleGenerate}
+              disabled={genLoading}
+            >
+              {genLoading
+                ? '⏳ Generating…'
+                : applyRow.cover_pdf_url || applyRow.resume_pdf_url
+                ? 'Regenerate'
+                : 'Generate'}
+            </button>
+            {genLoading && (
+              <div className="gen-loading-msg">
+                Generating resume &amp; cover letter — this takes 1–2 minutes. Do not close or refresh.
+              </div>
+            )}
+            {genError && (
+              <span className="gen-error">
+                {genError}{' '}
+                <button type="button" className="gen-retry-inline" onClick={handleGenerate} disabled={genLoading}>
+                  Try again
+                </button>
+              </span>
+            )}
+            <div className="artifact-pdf-links">
               {applyRow.resume_pdf_url && (
-                <RiskBadge
-                  label="Resume"
-                  status={applyRow.resume_export_status}
-                  summary={applyRow.resume_risk_summary}
-                />
+                <a href={applyRow.resume_pdf_url} target="_blank" rel="noopener noreferrer">Resume PDF</a>
               )}
               {applyRow.cover_pdf_url && (
-                <RiskBadge
-                  label="Cover"
-                  status={applyRow.cover_export_status}
-                  summary={applyRow.cover_risk_summary}
-                />
+                <a href={applyRow.cover_pdf_url} target="_blank" rel="noopener noreferrer">Cover letter PDF</a>
+              )}
+              {applyRow.job_description_url && (
+                <a href={applyRow.job_description_url} target="_blank" rel="noopener noreferrer">View JD</a>
               )}
             </div>
-          )}
-        </div>
-      )}
-
-      {applyRow?.applied_at && (
-        <div className="applied-date">Applied: {fmtDate(applyRow.applied_at)}</div>
-      )}
-
-      <div className="card-actions">
-        <div className="action-links">
-          <a
-            href={row.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="open-btn"
-          >
-            Open Job ↗
-          </a>
-          {row.jobright_id && (
-            <a
-              href={`https://jobright.ai/jobs/info/${row.jobright_id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="open-btn jobright-btn"
-            >
-              View on Jobright ↗
-            </a>
-          )}
-        </div>
-
-        <div className="label-btns">
-          {labelBtns.map(btn => (
-            <button
-              key={btn.value}
-              className={`label-btn label-${btn.value}${label === btn.value ? ' active' : ''}`}
-              onClick={() => handleLabel(btn.value)}
-              disabled={saving}
-            >
-              {btn.text}
-            </button>
-          ))}
-        </div>
-
-        {label && (
-          <div className="note-chips">
-            {label === 'no' && mode === 'apply' ? (
-              <>
-                <div className="chips-label">Select reason(s):</div>
-                <div className="chips-multi">
-                  {NO_CHIPS.map(chip => (
-                    <button
-                      key={chip}
-                      className={`chip${selectedChips.includes(chip) ? ' active' : ''}`}
-                      onClick={() =>
-                        setSelectedChips(prev =>
-                          prev.includes(chip)
-                            ? prev.filter(c => c !== chip)
-                            : [...prev, chip]
-                        )
-                      }
-                      disabled={saving}
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  className="dismiss-btn"
-                  onClick={handleDismissNo}
-                  disabled={saving || selectedChips.length === 0}
-                >
-                  Dismiss{selectedChips.length > 0
-                    ? ` (${selectedChips.length} reason${selectedChips.length > 1 ? 's' : ''})`
-                    : ''}
-                </button>
-              </>
-            ) : (
-              YES_CHIPS.map(chip => (
-                <button
-                  key={chip}
-                  className={`chip${notes === chip ? ' active' : ''}`}
-                  onClick={() => handleChip(chip)}
-                  disabled={saving}
-                >
-                  {chip}
-                </button>
-              ))
+            {(applyRow.resume_pdf_url || applyRow.cover_pdf_url) && (
+              <div className="risk-badges" style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                {applyRow.resume_pdf_url && (
+                  <RiskBadge
+                    label="Resume"
+                    status={applyRow.resume_export_status}
+                    summary={applyRow.resume_risk_summary}
+                  />
+                )}
+                {applyRow.cover_pdf_url && (
+                  <RiskBadge
+                    label="Cover"
+                    status={applyRow.cover_export_status}
+                    summary={applyRow.cover_risk_summary}
+                  />
+                )}
+              </div>
             )}
           </div>
         )}
 
-        {/* Change 3: three secondary action buttons for apply mode */}
-        {mode === 'apply' && label && label !== 'no' && (
-          <div className="app-status-btns">
-            <button
-              className={`app-status-btn applied${appStatus === 'applied' ? ' active' : ''}`}
-              onClick={() => handleAppStatus('applied')}
-              disabled={saving}
-            >
-              ✓ Applied
-            </button>
-            <button
-              className={`app-status-btn apply-later${appStatus === 'apply_later' ? ' active' : ''}`}
-              onClick={() => handleAppStatus('apply_later')}
-              disabled={saving}
-            >
-              ⏱ Apply Later
-            </button>
-            <button
-              className={`app-status-btn skipped${appStatus === 'skipped' ? ' active' : ''}`}
-              onClick={() => handleAppStatus('skipped')}
-              disabled={saving}
-            >
-              ⊘ Not Applied
-            </button>
-          </div>
+        {applyRow?.applied_at && (
+          <div className="applied-date">Applied: {fmtDate(applyRow.applied_at)}</div>
         )}
 
-        <textarea
-          className="notes-textarea"
-          placeholder="Notes…"
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          onBlur={handleNotesBlur}
-          rows={2}
-        />
+        <div className="card-actions">
+          <div className="action-links">
+            <a
+              href={row.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="open-btn"
+            >
+              Open Job ↗
+            </a>
+            {row.jobright_id && (
+              <a
+                href={`https://jobright.ai/jobs/info/${row.jobright_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="open-btn jobright-btn"
+              >
+                View on Jobright ↗
+              </a>
+            )}
+          </div>
 
-        {error && <div className="card-error">{error}</div>}
+          <div className="label-btns">
+            {labelBtns.map(btn => (
+              <button
+                key={btn.value}
+                className={`label-btn label-${btn.value}${label === btn.value ? ' active' : ''}`}
+                onClick={() => handleLabel(btn.value)}
+                disabled={saving}
+              >
+                {btn.text}
+              </button>
+            ))}
+          </div>
+
+          {label && (
+            <div className="note-chips">
+              {label === 'no' && mode === 'apply' ? (
+                <>
+                  <div className="chips-label">Select reason(s):</div>
+                  <div className="chips-multi">
+                    {NO_CHIPS.map(chip => (
+                      <button
+                        key={chip}
+                        className={`chip${selectedChips.includes(chip) ? ' active' : ''}`}
+                        onClick={() =>
+                          setSelectedChips(prev =>
+                            prev.includes(chip)
+                              ? prev.filter(c => c !== chip)
+                              : [...prev, chip]
+                          )
+                        }
+                        disabled={saving}
+                      >
+                        {chip}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    className="dismiss-btn"
+                    onClick={handleDismissNo}
+                    disabled={saving || selectedChips.length === 0}
+                  >
+                    Dismiss{selectedChips.length > 0
+                      ? ` (${selectedChips.length} reason${selectedChips.length > 1 ? 's' : ''})`
+                      : ''}
+                  </button>
+                </>
+              ) : (
+                YES_CHIPS.map(chip => (
+                  <button
+                    key={chip}
+                    className={`chip${notes === chip ? ' active' : ''}`}
+                    onClick={() => handleChip(chip)}
+                    disabled={saving}
+                  >
+                    {chip}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* Change 3: three secondary action buttons for apply mode */}
+          {mode === 'apply' && label && label !== 'no' && (
+            <div className="app-status-btns">
+              <button
+                className={`app-status-btn applied${appStatus === 'applied' ? ' active' : ''}`}
+                onClick={() => handleAppStatus('applied')}
+                disabled={saving}
+              >
+                ✓ Applied
+              </button>
+              <button
+                className={`app-status-btn apply-later${appStatus === 'apply_later' ? ' active' : ''}`}
+                onClick={() => handleAppStatus('apply_later')}
+                disabled={saving}
+              >
+                ⏱ Apply Later
+              </button>
+              <button
+                className={`app-status-btn skipped${appStatus === 'skipped' ? ' active' : ''}`}
+                onClick={() => handleAppStatus('skipped')}
+                disabled={saving}
+              >
+                ⊘ Not Applied
+              </button>
+            </div>
+          )}
+
+          <textarea
+            className="notes-textarea"
+            placeholder="Notes…"
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            onBlur={handleNotesBlur}
+            rows={2}
+          />
+
+          {error && <div className="card-error">{error}</div>}
+        </div>
       </div>
     </div>
   );

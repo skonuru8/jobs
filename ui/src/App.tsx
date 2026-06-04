@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getStats } from './api';
 import type { Stats } from './api';
-import { Tabs } from './components/Tabs';
+import { Sidebar } from './components/Sidebar';
 import { ApplyQueue } from './tabs/ApplyQueue';
 import { HardRejections } from './tabs/HardRejections';
 import { SoftRejections } from './tabs/SoftRejections';
@@ -15,6 +15,8 @@ const TABS = [
   { id: 'history', label: 'Run History' },
   { id: 'calendar', label: 'Applied' },
 ];
+
+const TAB_IDS = TABS.map(t => t.id);
 
 export function App() {
   const [activeTab, setActiveTab] = useState('apply');
@@ -51,66 +53,63 @@ export function App() {
       if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA') {
         e.preventDefault();
         searchRef.current?.focus();
+        return;
+      }
+      if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+        const idx = parseInt(e.key, 10);
+        if (idx >= 1 && idx <= TAB_IDS.length) {
+          e.preventDefault();
+          handleTabChange(TAB_IDS[idx - 1]);
+        }
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const showSearch = activeTab === 'apply' || activeTab === 'hard' || activeTab === 'soft';
+
   return (
     <div className="app">
-      <header className="app-header">
-        <span className="app-title">Job Hunter</span>
-        {stats && (
-          <div className="header-stats">
-            <span className="stat">Pending <strong>{stats.pending}</strong></span>
-            <span className="stat">Later <strong>{stats.applyLater}</strong></span>
-            <span className="stat">Applied <strong>{stats.applied}</strong></span>
-            <span className="stat">Reject <strong>{stats.hardRejectionsUnreviewed}</strong></span>
-            <span className="stat">Soft <strong>{stats.softRejectionsUnreviewed}</strong></span>
-            <button
-              type="button"
-              className="stat stat-toggle"
-              onClick={() => setStatsScope(scope => scope === 'today' ? 'total' : 'today')}
-              title={statsScope === 'today' ? 'Showing today. Click for total.' : 'Showing total. Click for today.'}
-            >
-              {statsScope === 'today' ? 'Total' : 'Today'}
-            </button>
+      <Sidebar
+        activeTab={activeTab}
+        onChange={handleTabChange}
+        stats={stats}
+        statsScope={statsScope}
+        onToggleScope={() => setStatsScope(scope => scope === 'today' ? 'total' : 'today')}
+      />
+
+      <div className="main">
+        {showSearch && (
+          <div className="search-bar">
+            <input
+              ref={searchRef}
+              className="search-input"
+              type="text"
+              placeholder="Search by title or company..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button className="search-clear" onClick={() => setSearchQuery('')}>x</button>
+            )}
+            <span className="kbd-hint">
+              <span className="kbd">j</span><span className="kbd">k</span> navigate
+              <span className="kbd" style={{ marginLeft: 6 }}>y</span><span className="kbd">m</span><span className="kbd">n</span> label
+              <span className="kbd" style={{ marginLeft: 6 }}>a</span> applied
+              <span className="kbd" style={{ marginLeft: 6 }}>/</span> search
+            </span>
           </div>
         )}
-      </header>
 
-      <Tabs tabs={TABS} active={activeTab} onChange={handleTabChange} />
-
-      {(activeTab === 'apply' || activeTab === 'hard' || activeTab === 'soft') && (
-        <div className="search-bar">
-          <input
-            ref={searchRef}
-            className="search-input"
-            type="text"
-            placeholder="Search by title or company..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button className="search-clear" onClick={() => setSearchQuery('')}>x</button>
-          )}
-          <span className="kbd-hint">
-            <span className="kbd">j</span><span className="kbd">k</span> navigate
-            <span className="kbd" style={{ marginLeft: 6 }}>y</span><span className="kbd">m</span><span className="kbd">n</span> label
-            <span className="kbd" style={{ marginLeft: 6 }}>a</span> applied
-            <span className="kbd" style={{ marginLeft: 6 }}>/</span> search
-          </span>
-        </div>
-      )}
-
-      <main className="tab-content">
-        {activeTab === 'apply' && <ApplyQueue onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.apply} searchQuery={searchQuery} />}
-        {activeTab === 'hard' && <HardRejections onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.hard} searchQuery={searchQuery} />}
-        {activeTab === 'soft' && <SoftRejections onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.soft} searchQuery={searchQuery} />}
-        {activeTab === 'history' && <RunHistory refreshKey={tabRefreshKeys.history} />}
-        {activeTab === 'calendar' && <AppliedCalendar onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.calendar} />}
-      </main>
+        <main className="tab-content">
+          {activeTab === 'apply' && <ApplyQueue onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.apply} searchQuery={searchQuery} />}
+          {activeTab === 'hard' && <HardRejections onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.hard} searchQuery={searchQuery} />}
+          {activeTab === 'soft' && <SoftRejections onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.soft} searchQuery={searchQuery} />}
+          {activeTab === 'history' && <RunHistory refreshKey={tabRefreshKeys.history} />}
+          {activeTab === 'calendar' && <AppliedCalendar onStatsUpdate={handleStatsUpdate} refreshKey={tabRefreshKeys.calendar} />}
+        </main>
+      </div>
     </div>
   );
 }
