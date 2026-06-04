@@ -1,110 +1,68 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getStats } from '../api';
+import { getAppliedJobs, getStats } from '../api';
 import type { ApplyQueueRow, Stats } from '../api';
+import { JobCard } from '../components/JobCard';
 
-async function getAppliedJobs(): Promise<ApplyQueueRow[]> {
-  const res = await fetch('/api/applied-jobs');
-  if (!res.ok) throw new Error(`applied-jobs failed: ${res.status}`);
-  return res.json();
-}
+interface Props { onStatsUpdate: (s: Stats) => void; refreshKey?: number; }
 
-function isToday(dateStr: string): boolean {
-  const date = new Date(dateStr);
-  const today = new Date();
-  return date.getDate() === today.getDate()
-    && date.getMonth() === today.getMonth()
-    && date.getFullYear() === today.getFullYear();
-}
-
-export function AppliedCalendar({ onStatsUpdate, refreshKey }: {
-  onStatsUpdate: (s: Stats) => void;
-  refreshKey: number;
-}) {
+export function AppliedCalendar({ onStatsUpdate, refreshKey }: Props) {
   const [rows, setRows] = useState<ApplyQueueRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [day, setDay] = useState<string>('all');
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getAppliedJobs()
-      .then(setRows)
-      .catch(e => setError((e as Error).message))
-      .finally(() => setLoading(false));
+    setLoading(true); setError(null);
+    getAppliedJobs().then(setRows).catch(e => setError((e as Error).message)).finally(() => setLoading(false));
     getStats().then(onStatsUpdate).catch(() => undefined);
   }, [refreshKey, onStatsUpdate]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, ApplyQueueRow[]>();
-    rows.forEach(row => {
-      const day = row.applied_at ? new Date(row.applied_at).toISOString().slice(0, 10) : 'unknown';
-      if (!map.has(day)) map.set(day, []);
-      map.get(day)!.push(row);
+  const groups = useMemo(() => {
+    const m = new Map<string, ApplyQueueRow[]>();
+    rows.forEach(r => {
+      const k = r.applied_at ? new Date(r.applied_at).toISOString().slice(0, 10) : 'unknown';
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(r);
     });
-    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+    return Array.from(m.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [rows]);
 
-  const visibleGroups = selectedDay
-    ? grouped.filter(([day]) => day === selectedDay)
-    : grouped;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const label = (k: string) => {
+    if (k === 'unknown') return 'Unknown date';
+    if (k === todayKey) return 'Today';
+    const diff = Math.round((new Date(todayKey).getTime() - new Date(k).getTime()) / 86400000);
+    if (diff === 1) return 'Yesterday';
+    return new Date(`${k}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  };
 
-  if (loading) return <div className="loading">Loading...</div>;
+  if (loading) return <div className="loading">Loading…</div>;
   if (error) return <div className="tab-error">Error: {error}</div>;
-  if (!rows.length) return <div className="empty">No applied jobs yet.</div>;
+  if (!rows.length) return <div className="content-inner"><div className="empty"><h4>No applications yet</h4><p>Roles you mark “Applied” will appear here, grouped by day.</p></div></div>;
+
+  const shown = day === 'all' ? groups : groups.filter(([k]) => k === day);
 
   return (
-    <div>
-      <div className="day-filter-bar" style={{ marginBottom: 18 }}>
-        <span className="day-filter-label">Day</span>
-        <button className={`day-btn${!selectedDay ? ' active' : ''}`} onClick={() => setSelectedDay(null)}>
-          All ({rows.length})
-        </button>
-        {grouped.map(([iso, dayRows]) => (
-          <button
-            key={iso}
-            className={`day-btn${selectedDay === iso ? ' active' : ''}`}
-            onClick={() => setSelectedDay(prev => prev === iso ? null : iso)}
-          >
-            {iso === 'unknown' ? 'Unknown' : new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            <span style={{ opacity: .6, fontSize: '10px', marginLeft: 3 }}>({dayRows.length})</span>
-          </button>
+    <div className="content-inner">
+      <div className="day-tabs">
+        <button className={`daytab${day === 'all' ? ' on' : ''}`} onClick={() => setDay('all')}>All <span className="c">{rows.length}</span></button>
+        {groups.map(([k, arr]) => (
+          <button key={k} className={`daytab${day === k ? ' on' : ''}`} onClick={() => setDay(k)}>{label(k)} <span className="c">{arr.length}</span></button>
         ))}
       </div>
 
-      {visibleGroups.map(([iso, dayRows]) => (
-        <div key={iso} className="applied-day-group">
-          <div className="applied-day-header">
-            <span className="applied-day-label">
-              {iso === 'unknown'
-                ? 'Unknown date'
-                : new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' })}
-            </span>
-            <span className={`applied-day-count${iso !== 'unknown' && isToday(`${iso}T00:00:00`) ? ' applied-day-today' : ''}`}>
-              {dayRows.length} applied
-            </span>
+      {shown.map(([k, arr]) => (
+        <div className="day-group" key={k}>
+          <div className="day-head">
+            <span className="day-name">{label(k)}</span>
+            <span className={`day-badge${k === todayKey ? '' : ' muted'}`}>{arr.length} sent</span>
+            <span className="day-rule" />
           </div>
-          {dayRows.map(row => (
-            <div key={`${row.job_id}-${row.run_id}`} className="job-card state-applied" style={{ cursor: 'default' }}>
-              <div className="card-title-row">
-                <span className="job-title">{row.title}</span>
-              </div>
-              <div className="card-meta">
-                <span className="company">{row.company}</span>
-                {row.source && <span className="badge" style={{ background: '#7af7f7', color: '#1d1c1c' }}>{row.source}</span>}
-                {row.applied_at && (
-                  <span className="scraped-date">
-                    {new Date(row.applied_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                )}
-              </div>
-              <div className="action-links" style={{ marginTop: 8 }}>
-                <a href={row.source_url} target="_blank" rel="noopener noreferrer" className="open-btn">
-                  Open Job ↗
-                </a>
-              </div>
-            </div>
-          ))}
+          <div className="cards">
+            {arr.map((r, i) => (
+              <JobCard key={`${r.job_id}-${r.run_id}`} row={r} mode="apply" index={i} expanded={false} onToggle={() => undefined} onStatsUpdate={onStatsUpdate} />
+            ))}
+          </div>
         </div>
       ))}
     </div>

@@ -1,153 +1,104 @@
 import type { Stats } from '../api';
+import { Briefcase, XCircle, Wave, Check, Clock, Panel } from '../icons';
+import type { SVGProps } from 'react';
 
-interface SidebarProps {
+export const BRAND = { mark: 'J', a: 'jo', b: 'bs', sub: 'job copilot', name: 'jobs' };
+
+export interface NavTab {
+  id: string;
+  label: string;
+  title: string;
+  sub: string;
+}
+
+export const TABS: NavTab[] = [
+  { id: 'apply', label: 'Apply Queue', title: 'Apply Queue', sub: 'Review AI-matched roles and queue your applications' },
+  { id: 'hard', label: 'Hard Rejections', title: 'Hard Rejections', sub: 'Roles filtered out before scoring — audit for false negatives' },
+  { id: 'soft', label: 'Soft Rejections', title: 'Soft Rejections', sub: 'Scored below threshold — second-look queue' },
+  { id: 'applied', label: 'Applied', title: 'Applied', sub: 'Everything you have sent out, by day' },
+  { id: 'history', label: 'Run History', title: 'Run History', sub: 'Scrape & score pipeline runs' },
+];
+
+const ICONS: Record<string, (p: SVGProps<SVGSVGElement>) => JSX.Element> = {
+  apply: Briefcase, hard: XCircle, soft: Wave, applied: Check, history: Clock,
+};
+
+interface Props {
   activeTab: string;
   onChange: (tab: string) => void;
   stats: Stats | null;
-  statsScope: 'total' | 'today';
-  onToggleScope: () => void;
+  scope: 'total' | 'today';
+  onToggleScope: (s: 'total' | 'today') => void;
+  collapsed: boolean;
+  onCollapse: () => void;
 }
 
-interface NavItem {
-  id: string;
-  label: string;
-  shortcut: string;
-  icon: JSX.Element;
-  count: number | null;
-}
-
-function BriefcaseIcon() {
-  return (
-    <svg className="sidebar-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
-    </svg>
-  );
-}
-
-function XCircleIcon() {
-  return (
-    <svg className="sidebar-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
-  );
-}
-
-function MinusCircleIcon() {
-  return (
-    <svg className="sidebar-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="8" y1="12" x2="16" y2="12" />
-    </svg>
-  );
-}
-
-function CalendarCheckIcon() {
-  return (
-    <svg className="sidebar-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-      <polyline points="9 16 11 18 15 14" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg className="sidebar-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  );
-}
-
-export function Sidebar({ activeTab, onChange, stats, statsScope, onToggleScope }: SidebarProps) {
-  const navItems: NavItem[] = [
-    {
-      id: 'apply',
-      label: 'Apply Queue',
-      shortcut: '1',
-      icon: <BriefcaseIcon />,
-      count: stats?.pending ?? null,
-    },
-    {
-      id: 'hard',
-      label: 'Hard Rejections',
-      shortcut: '2',
-      icon: <XCircleIcon />,
-      count: stats?.hardRejectionsUnreviewed ?? null,
-    },
-    {
-      id: 'soft',
-      label: 'Soft Rejections',
-      shortcut: '3',
-      icon: <MinusCircleIcon />,
-      count: stats?.softRejectionsUnreviewed ?? null,
-    },
-    {
-      id: 'calendar',
-      label: 'Applied',
-      shortcut: '4',
-      icon: <CalendarCheckIcon />,
-      count: stats?.applied ?? null,
-    },
-    {
-      id: 'history',
-      label: 'Run History',
-      shortcut: '5',
-      icon: <ClockIcon />,
-      count: null,
-    },
-  ];
+export function Sidebar({ activeTab, onChange, stats, scope, onToggleScope, collapsed, onCollapse }: Props) {
+  const counts: Record<string, number | null> = {
+    apply: stats?.pending ?? null,
+    hard: stats?.hardRejectionsUnreviewed ?? null,
+    soft: stats?.softRejectionsUnreviewed ?? null,
+    applied: stats?.applied ?? null,
+    history: null,
+  };
+  const spark = [5, 8, 6, 11, 7, 9, 14, 10, 12, 8];
+  const mx = Math.max(...spark);
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-logo">&#9670; Wero</div>
+    <aside className="rail">
+      <div className="rail-top">
+        <div className="rail-mark">{BRAND.mark}</div>
+        {!collapsed && (
+          <div>
+            <div className="rail-word">{BRAND.a}<b>{BRAND.b}</b></div>
+            <div className="rail-sub">{BRAND.sub}</div>
+          </div>
+        )}
+        {!collapsed && (
+          <button className="rail-collapse" onClick={onCollapse} title="Collapse"><Panel style={{ width: 14, height: 14 }} /></button>
+        )}
+      </div>
 
-      <nav className="sidebar-nav">
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`sidebar-nav-item${activeTab === item.id ? ' active' : ''}`}
-            onClick={() => onChange(item.id)}
-            title={`${item.label} [${item.shortcut}]`}
-          >
-            {item.icon}
-            <span className="sidebar-nav-label">{item.label}</span>
-            {item.count !== null && (
-              <span className="sidebar-nav-badge">{item.count}</span>
-            )}
-          </button>
-        ))}
+      <nav className="nav">
+        {TABS.map(t => {
+          const Icon = ICONS[t.id];
+          const c = counts[t.id];
+          return (
+            <button key={t.id} className={`nav-item${activeTab === t.id ? ' active' : ''}`} onClick={() => onChange(t.id)} title={t.label}>
+              <Icon className="nav-ic" />
+              <span className="nav-label">{t.label}</span>
+              {c != null && <span className={`nav-count${(t.id === 'hard' || t.id === 'soft') && c > 0 ? ' hot' : ''}`}>{c}</span>}
+            </button>
+          );
+        })}
       </nav>
 
-      <div className="sidebar-divider" />
+      <div className="rail-spacer" />
 
       {stats && (
-        <div className="sidebar-stats">
-          <div className="sidebar-stat-row">
-            <span className="sidebar-stat-label">Pending</span>
-            <span className="sidebar-stat-value">{stats.pending}</span>
+        <div className="rail-stats">
+          <div className="rail-stats-head">
+            <span className="rail-stats-title">Pipeline</span>
+            <div className="scope-toggle">
+              <button className={scope === 'today' ? 'on' : ''} onClick={() => onToggleScope('today')}>Today</button>
+              <button className={scope === 'total' ? 'on' : ''} onClick={() => onToggleScope('total')}>Total</button>
+            </div>
           </div>
-          <div className="sidebar-stat-row">
-            <span className="sidebar-stat-label">Applied</span>
-            <span className="sidebar-stat-value">{stats.applied}</span>
+          <div className="stat-grid">
+            <div className="stat-cell"><div className="stat-num">{stats.pending}</div><div className="stat-lbl">Pending</div></div>
+            <div className="stat-cell"><div className="stat-num">{stats.applied}</div><div className="stat-lbl">Applied</div></div>
           </div>
-          <button
-            type="button"
-            className="sidebar-scope-toggle"
-            onClick={onToggleScope}
-            title={statsScope === 'today' ? 'Showing today. Click for total.' : 'Showing total. Click for today.'}
-          >
-            {statsScope === 'today' ? 'Show Total' : 'Show Today'}
-          </button>
+          <div className="stat-spark">{spark.map((v, i) => <i key={i} style={{ height: `${(v / mx) * 100}%`, opacity: 0.3 + 0.6 * (i / spark.length) }} />)}</div>
         </div>
       )}
+
+      <div className="rail-foot">
+        <div className="rail-avatar">{BRAND.mark}</div>
+        <div className="rail-foot-txt">
+          <div className="rail-foot-name">{BRAND.name}</div>
+          <div className="rail-foot-mail">local pipeline</div>
+        </div>
+      </div>
     </aside>
   );
 }

@@ -1,20 +1,12 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { getApplyQueue, getStats, postLabel } from '../api';
+import { useState, useEffect, useMemo } from 'react';
+import { getApplyQueue } from '../api';
 import type { ApplyQueueRow, Stats } from '../api';
-import { DetailPanel } from '../components/DetailPanel';
-import { JobCard } from '../components/JobCard';
+import { Segmented } from '../components/Segmented';
+import type { SegOption } from '../components/Segmented';
+import { CardList } from '../components/CardList';
 
 type StatusFilter = 'pending' | 'apply_later' | 'applied' | 'not_applied' | 'all';
 type BucketFilter = 'all' | 'COVER_LETTER' | 'REVIEW_QUEUE' | 'RESULTS';
-type SourceFilter = 'all' | string;
-
-const STATUS_LABELS: Record<StatusFilter, string> = {
-  pending: 'Pending',
-  apply_later: 'Apply Later',
-  applied: 'Applied',
-  not_applied: 'Not Applied',
-  all: 'All',
-};
 
 interface Props {
   onStatsUpdate: (s: Stats) => void;
@@ -22,33 +14,27 @@ interface Props {
   searchQuery: string;
 }
 
+const SL: Record<StatusFilter, string> = { pending: 'Pending', apply_later: 'Later', applied: 'Applied', not_applied: 'Not applied', all: 'All' };
+const titleCase = (s: string) => s.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+
 export function ApplyQueue({ onStatsUpdate, refreshKey, searchQuery }: Props) {
   const [rows, setRows] = useState<ApplyQueueRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [kbIndex, setKbIndex] = useState<number>(-1);
+  const [status, setStatus] = useState<StatusFilter>('pending');
+  const [bucket, setBucket] = useState<BucketFilter>('all');
+  const [src, setSrc] = useState<string>('all');
+  const [day, setDay] = useState<string>('all');
 
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
-  const [bucketFilter, setBucketFilter] = useState<BucketFilter>('all');
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
-  const [dayFilter, setDayFilter] = useState<string>('all');
-  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const reload = () => getApplyQueue().then(setRows).catch(e => setError((e as Error).message));
 
   useEffect(() => {
     setLoading(true);
-    getApplyQueue()
-      .then(data => {
-        setRows(data);
-        setSelectedJobId(null);
-      })
-      .catch(e => setError((e as Error).message))
-      .finally(() => setLoading(false));
+    getApplyQueue().then(setRows).catch(e => setError((e as Error).message)).finally(() => setLoading(false));
   }, [refreshKey]);
 
-  const sources = Array.from(new Set(rows.map(r => r.source))).sort();
-
-  const statusCounts: Record<StatusFilter, number> = {
+  const sources = useMemo(() => Array.from(new Set(rows.map(r => r.source))).sort(), [rows]);
+  const counts: Record<StatusFilter, number> = {
     pending: rows.filter(r => r.application_status == null && r.label !== 'no').length,
     apply_later: rows.filter(r => r.application_status === 'apply_later').length,
     applied: rows.filter(r => r.application_status === 'applied').length,
@@ -56,225 +42,61 @@ export function ApplyQueue({ onStatsUpdate, refreshKey, searchQuery }: Props) {
     all: rows.length,
   };
 
-  const filtered = useMemo(() => rows.filter(row => {
-    if (bucketFilter !== 'all' && row.bucket !== bucketFilter) return false;
-    if (sourceFilter !== 'all' && row.source !== sourceFilter) return false;
-    switch (statusFilter) {
-      case 'pending':
-        return row.application_status == null && row.label !== 'no';
-      case 'apply_later':
-        return row.application_status === 'apply_later';
-      case 'applied':
-        return row.application_status === 'applied';
-      case 'not_applied':
-        return row.label === 'no' || row.application_status === 'skipped';
-      default:
-        return true;
+  const filtered = useMemo(() => rows.filter(r => {
+    if (bucket !== 'all' && r.bucket !== bucket) return false;
+    if (src !== 'all' && r.source !== src) return false;
+    switch (status) {
+      case 'pending': return r.application_status == null && r.label !== 'no';
+      case 'apply_later': return r.application_status === 'apply_later';
+      case 'applied': return r.application_status === 'applied';
+      case 'not_applied': return r.label === 'no' || r.application_status === 'skipped';
+      default: return true;
     }
-  }).filter(row => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return row.title.toLowerCase().includes(q) || row.company.toLowerCase().includes(q);
-  }), [rows, bucketFilter, sourceFilter, statusFilter, searchQuery]);
+  }), [rows, status, bucket, src]);
 
   const appliedDays = useMemo(() => {
-    if (statusFilter !== 'applied') return [];
-    const dayMap = new Map<string, number>();
-    rows
-      .filter(row => row.application_status === 'applied' && row.applied_at)
-      .forEach(row => {
-        const iso = new Date(row.applied_at!).toISOString().slice(0, 10);
-        dayMap.set(iso, (dayMap.get(iso) ?? 0) + 1);
-      });
-    return Array.from(dayMap.entries())
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([iso, count]) => ({
-        date: iso,
-        count,
-        label: new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      }));
-  }, [rows, statusFilter]);
-
-  const filteredWithDay = useMemo(() => {
-    if (statusFilter !== 'applied' || dayFilter === 'all') return filtered;
-    return filtered.filter(row => {
-      if (!row.applied_at) return false;
-      return new Date(row.applied_at).toISOString().slice(0, 10) === dayFilter;
+    if (status !== 'applied') return [];
+    const m = new Map<string, number>();
+    rows.filter(r => r.application_status === 'applied' && r.applied_at).forEach(r => {
+      const iso = new Date(r.applied_at!).toISOString().slice(0, 10);
+      m.set(iso, (m.get(iso) ?? 0) + 1);
     });
-  }, [filtered, statusFilter, dayFilter]);
+    return Array.from(m.entries()).sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([iso, count]) => ({ iso, count, label: new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }));
+  }, [rows, status]);
 
-  useEffect(() => {
-    setKbIndex(filteredWithDay.length ? 0 : -1);
-    cardRefs.current = [];
-  }, [filteredWithDay.length, searchQuery, statusFilter, bucketFilter, sourceFilter, dayFilter]);
+  const finalRows = useMemo(() => {
+    if (status !== 'applied' || day === 'all') return filtered;
+    return filtered.filter(r => r.applied_at && new Date(r.applied_at).toISOString().slice(0, 10) === day);
+  }, [filtered, status, day]);
 
-  const selectedRow = selectedJobId
-    ? rows.find(r => r.job_id === selectedJobId) ?? null
-    : null;
-
-  async function labelFocused(label: 'yes' | 'maybe' | 'no', applicationStatus?: 'applied' | 'skipped' | 'apply_later' | null) {
-    const row = filteredWithDay[kbIndex];
-    if (!row) return;
-    await postLabel({
-      job_id: row.job_id,
-      run_id: row.run_id,
-      label,
-      application_status: applicationStatus ?? null,
-      notes: null,
-    });
-    const [data, fresh] = await Promise.all([getApplyQueue(), getStats()]);
-    setRows(data);
-    onStatsUpdate(fresh);
-  }
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      const len = filteredWithDay.length;
-      if (!len) return;
-      if (e.key === 'j') {
-        e.preventDefault();
-        setKbIndex(i => Math.min(i + 1, len - 1));
-      }
-      if (e.key === 'k') {
-        e.preventDefault();
-        setKbIndex(i => Math.max(i - 1, 0));
-      }
-      if (e.key === 'Enter' && kbIndex >= 0) {
-        e.preventDefault();
-        const row = filteredWithDay[kbIndex];
-        setSelectedJobId(prev => prev === row.job_id ? null : row.job_id);
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setSelectedJobId(null);
-        setKbIndex(-1);
-      }
-      if (e.key === 'y') {
-        e.preventDefault();
-        void labelFocused('yes');
-      }
-      if (e.key === 'm') {
-        e.preventDefault();
-        void labelFocused('maybe');
-      }
-      if (e.key === 'n') {
-        e.preventDefault();
-        void labelFocused('no', 'skipped');
-      }
-      if (e.key === 'a') {
-        e.preventDefault();
-        void labelFocused('yes', 'applied');
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [filteredWithDay, kbIndex]);
-
-  useEffect(() => {
-    cardRefs.current[kbIndex]?.scrollIntoView({ block: 'nearest' });
-  }, [kbIndex]);
-
-  if (loading) return <div className="loading">Loading...</div>;
+  if (loading) return <div className="loading">Loading…</div>;
   if (error) return <div className="tab-error">Error: {error}</div>;
 
+  const statusOpts: SegOption<StatusFilter>[] = (Object.keys(SL) as StatusFilter[]).map(s => ({ value: s, label: SL[s], count: counts[s] }));
+  const bucketOpts: SegOption<BucketFilter>[] = (['all', 'COVER_LETTER', 'REVIEW_QUEUE', 'RESULTS'] as BucketFilter[]).map(b => ({ value: b, label: b === 'all' ? 'All' : titleCase(b) }));
+  const sourceOpts: SegOption<string>[] = ['all', ...sources].map(s => ({ value: s, label: s === 'all' ? 'All' : s.replace(/_/g, ' ') }));
+
   return (
-    <div className="tab-body">
-      <div className="tab-main">
-        <div className="filter-bar">
-        <div className="filter-group">
-          <span className="filter-label">Status:</span>
-          {(['pending', 'apply_later', 'applied', 'not_applied', 'all'] as StatusFilter[]).map(s => (
-            <button
-              key={s}
-              className={`filter-btn${statusFilter === s ? ' active' : ''}`}
-              onClick={() => setStatusFilter(s)}
-            >
-              {STATUS_LABELS[s]} <span className="filter-count">({statusCounts[s]})</span>
-            </button>
-          ))}
-        </div>
-        <div className="filter-group">
-          <span className="filter-label">Bucket:</span>
-          {(['all', 'COVER_LETTER', 'REVIEW_QUEUE', 'RESULTS'] as const).map(b => (
-            <button
-              key={b}
-              className={`filter-btn${bucketFilter === b ? ' active' : ''}`}
-              onClick={() => setBucketFilter(b)}
-            >
-              {b === 'all' ? 'All' : b.replace(/_/g, ' ')}
-            </button>
-          ))}
-        </div>
-        <div className="filter-group">
-          <span className="filter-label">Source:</span>
-          {(['all', ...sources]).map(s => (
-            <button
-              key={s}
-              className={`filter-btn${sourceFilter === s ? ' active' : ''}`}
-              onClick={() => setSourceFilter(s)}
-            >
-              {s === 'all' ? 'All' : s}
-            </button>
-          ))}
-        </div>
-        </div>
-
-        {statusFilter === 'applied' && appliedDays.length > 0 && (
-          <div className="day-filter-bar">
-            <span className="day-filter-label">Day</span>
-            <button
-              className={`day-btn${dayFilter === 'all' ? ' active' : ''}`}
-              onClick={() => setDayFilter('all')}
-            >
-              All
-            </button>
-            {appliedDays.map(day => (
-              <button
-                key={day.date}
-                className={`day-btn${dayFilter === day.date ? ' active' : ''}`}
-                onClick={() => setDayFilter(day.date)}
-              >
-                {day.label} <span style={{ opacity: .6, fontSize: '10px', marginLeft: 3 }}>({day.count})</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="card-count">{filteredWithDay.length} jobs</div>
-
-        {filteredWithDay.map((row, idx) => (
-          <div
-            key={`${row.job_id}-${row.run_id}`}
-            ref={el => { cardRefs.current[idx] = el; }}
-            className={kbIndex === idx ? 'kb-focused' : ''}
-          >
-            <JobCard
-              mode="apply"
-              row={row}
-              onStatsUpdate={onStatsUpdate}
-              selected={selectedJobId === row.job_id}
-              onSelect={() => setSelectedJobId(prev => prev === row.job_id ? null : row.job_id)}
-              onDataChange={() => {
-                getApplyQueue()
-                  .then(data => { setRows(data); })
-                  .catch(e => setError((e as Error).message));
-              }}
-            />
-          </div>
-        ))}
-
-        {filteredWithDay.length === 0 && <div className="empty">No jobs match this filter.</div>}
+    <div className="content-inner">
+      <div className="filters">
+        <div className="fgroup"><span className="fgroup-lbl">Status</span><Segmented value={status} options={statusOpts} onChange={setStatus} /></div>
+        <div className="fgroup"><span className="fgroup-lbl">Bucket</span><Segmented value={bucket} options={bucketOpts} onChange={setBucket} /></div>
+        <div className="fgroup"><span className="fgroup-lbl">Source</span><Segmented value={src} options={sourceOpts} onChange={setSrc} /></div>
       </div>
 
-      {selectedRow && (
-        <DetailPanel
-          row={selectedRow}
-          mode="apply"
-          onClose={() => setSelectedJobId(null)}
-        />
+      {status === 'applied' && appliedDays.length > 0 && (
+        <div className="day-tabs">
+          <button className={`daytab${day === 'all' ? ' on' : ''}`} onClick={() => setDay('all')}>All <span className="c">{filtered.length}</span></button>
+          {appliedDays.map(d => (
+            <button key={d.iso} className={`daytab${day === d.iso ? ' on' : ''}`} onClick={() => setDay(d.iso)}>{d.label} <span className="c">{d.count}</span></button>
+          ))}
+        </div>
       )}
+
+      <div className="count-line"><span className="count-num">{finalRows.length}</span><span className="count-word">role{finalRows.length !== 1 ? 's' : ''} in view</span></div>
+
+      <CardList rows={finalRows} mode="apply" searchQuery={searchQuery} onStatsUpdate={onStatsUpdate} onDataChange={reload} swapKey={`${status}|${bucket}|${src}|${day}`} emptyHint="No roles match this filter." />
     </div>
   );
 }

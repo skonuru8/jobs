@@ -1,121 +1,52 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { getSoftRejections } from '../api';
 import type { SoftRejectionRow, Stats } from '../api';
-import { DetailPanel } from '../components/DetailPanel';
-import { JobCard } from '../components/JobCard';
+import { Segmented } from '../components/Segmented';
+import type { SegOption } from '../components/Segmented';
+import { CardList } from '../components/CardList';
 
 type StatusFilter = 'all' | 'unreviewed' | 'reviewed';
 
-interface Props {
-  onStatsUpdate: (s: Stats) => void;
-  refreshKey?: number;
-  searchQuery: string;
-}
+interface Props { onStatsUpdate: (s: Stats) => void; refreshKey?: number; searchQuery: string; }
 
 export function SoftRejections({ onStatsUpdate, refreshKey, searchQuery }: Props) {
   const [rows, setRows] = useState<SoftRejectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [status, setStatus] = useState<StatusFilter>('unreviewed');
+  const [src, setSrc] = useState<string>('all');
 
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('unreviewed');
-  const [sourceFilter, setSourceFilter] = useState<string>('all');
-
+  const reload = () => getSoftRejections().then(setRows).catch(e => setError((e as Error).message));
   useEffect(() => {
     setLoading(true);
-    getSoftRejections()
-      .then(data => {
-        setRows(data);
-        setSelectedJobId(null);
-      })
-      .catch(e => setError((e as Error).message))
-      .finally(() => setLoading(false));
+    getSoftRejections().then(setRows).catch(e => setError((e as Error).message)).finally(() => setLoading(false));
   }, [refreshKey]);
+
+  const sources = useMemo(() => Array.from(new Set(rows.map(r => r.source))).sort(), [rows]);
 
   if (loading) return <div className="loading">Loading…</div>;
   if (error) return <div className="tab-error">Error: {error}</div>;
 
-  const sources = Array.from(new Set(rows.map(r => r.source))).sort();
-
-  const statusCounts: Record<StatusFilter, number> = {
+  const counts: Record<StatusFilter, number> = {
     all: rows.length,
     unreviewed: rows.filter(r => r.label === null).length,
     reviewed: rows.filter(r => r.label !== null).length,
   };
+  const filtered = rows
+    .filter(r => src === 'all' || r.source === src)
+    .filter(r => status === 'unreviewed' ? r.label === null : status === 'reviewed' ? r.label !== null : true);
 
-  const filtered = rows.filter(row => {
-    if (sourceFilter !== 'all' && row.source !== sourceFilter) return false;
-    if (statusFilter === 'unreviewed') return row.label === null;
-    if (statusFilter === 'reviewed') return row.label !== null;
-    return true;
-  }).filter(row => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return row.title.toLowerCase().includes(q) || row.company.toLowerCase().includes(q);
-  });
-
-  const selectedRow = selectedJobId
-    ? rows.find(r => r.job_id === selectedJobId) ?? null
-    : null;
+  const statusOpts: SegOption<StatusFilter>[] = (['unreviewed', 'reviewed', 'all'] as StatusFilter[]).map(s => ({ value: s, label: s[0].toUpperCase() + s.slice(1), count: counts[s] }));
+  const sourceOpts: SegOption<string>[] = ['all', ...sources].map(s => ({ value: s, label: s === 'all' ? 'All' : s.replace(/_/g, ' ') }));
 
   return (
-    <div className="tab-body">
-      <div className="tab-main">
-        <div className="filter-bar">
-        <div className="filter-group">
-          <span className="filter-label">Status:</span>
-          {(['all', 'unreviewed', 'reviewed'] as StatusFilter[]).map(s => (
-            <button
-              key={s}
-              className={`filter-btn${statusFilter === s ? ' active' : ''}`}
-              onClick={() => setStatusFilter(s)}
-            >
-              {s.charAt(0).toUpperCase() + s.slice(1)} <span className="filter-count">({statusCounts[s]})</span>
-            </button>
-          ))}
-        </div>
-        <div className="filter-group">
-          <span className="filter-label">Source:</span>
-          {(['all', ...sources]).map(s => (
-            <button
-              key={s}
-              className={`filter-btn${sourceFilter === s ? ' active' : ''}`}
-              onClick={() => setSourceFilter(s)}
-            >
-              {s === 'all' ? 'All' : s}
-            </button>
-          ))}
-        </div>
-        </div>
-
-        <div className="card-count">{filtered.length} jobs</div>
-
-        {filtered.map(row => (
-          <JobCard
-            key={`${row.job_id}-${row.run_id}`}
-            mode="soft-reject"
-            row={row}
-            onStatsUpdate={onStatsUpdate}
-            selected={selectedJobId === row.job_id}
-            onSelect={() => setSelectedJobId(prev => prev === row.job_id ? null : row.job_id)}
-            onDataChange={() => {
-              getSoftRejections()
-                .then(data => { setRows(data); })
-                .catch(e => setError((e as Error).message));
-            }}
-          />
-        ))}
-
-        {filtered.length === 0 && <div className="empty">No jobs match this filter.</div>}
+    <div className="content-inner">
+      <div className="filters">
+        <div className="fgroup"><span className="fgroup-lbl">Status</span><Segmented value={status} options={statusOpts} onChange={setStatus} /></div>
+        <div className="fgroup"><span className="fgroup-lbl">Source</span><Segmented value={src} options={sourceOpts} onChange={setSrc} /></div>
       </div>
-
-      {selectedRow && (
-        <DetailPanel
-          row={selectedRow}
-          mode="soft-reject"
-          onClose={() => setSelectedJobId(null)}
-        />
-      )}
+      <div className="count-line"><span className="count-num">{filtered.length}</span><span className="count-word">scored below threshold</span></div>
+      <CardList rows={filtered} mode="soft-reject" searchQuery={searchQuery} onStatsUpdate={onStatsUpdate} onDataChange={reload} swapKey={`${status}|${src}`} emptyHint="No soft rejections match this filter." />
     </div>
   );
 }

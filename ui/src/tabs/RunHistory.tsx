@@ -1,81 +1,57 @@
 import { useState, useEffect } from 'react';
+import { getRunHistory } from '../api';
+import type { RunRow } from '../api';
+import { timeAgo, fmtDuration } from '../utils';
 
-interface RunRow {
-  run_id: string;
-  source: string;
-  status: string;
-  exit_code: number | null;
-  started_at: string;
-  finished_at: string | null;
-  scraped_count: number | null;
-  passed_count: number | null;
-  extraction_count: number | null;
-}
-
-async function getRunHistory(): Promise<RunRow[]> {
-  const res = await fetch('/api/run-history');
-  if (!res.ok) throw new Error(`run-history failed: ${res.status}`);
-  return res.json();
-}
-
-function duration(start: string, end: string | null): string {
-  if (!end) return '-';
-  const ms = new Date(end).getTime() - new Date(start).getTime();
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-}
-
-export function RunHistory({ refreshKey }: { refreshKey: number }) {
+export function RunHistory({ refreshKey }: { refreshKey?: number }) {
   const [rows, setRows] = useState<RunRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getRunHistory()
-      .then(setRows)
-      .catch(e => setError((e as Error).message))
-      .finally(() => setLoading(false));
+    setLoading(true); setError(null);
+    getRunHistory().then(setRows).catch(e => setError((e as Error).message)).finally(() => setLoading(false));
   }, [refreshKey]);
 
-  if (loading) return <div className="loading">Loading...</div>;
+  if (loading) return <div className="loading">Loading…</div>;
   if (error) return <div className="tab-error">Error: {error}</div>;
-  if (!rows.length) return <div className="empty">No runs yet.</div>;
+  if (!rows.length) return <div className="content-inner"><div className="empty"><h4>No runs yet</h4><p>Pipeline runs will appear here.</p></div></div>;
 
   return (
-    <div>
-      <div className="card-count">{rows.length} runs</div>
-      <table className="run-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Source</th>
-            <th>Status</th>
-            <th>Scraped</th>
-            <th>Passed</th>
-            <th>Extracted</th>
-            <th>Duration</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(row => {
-            const status = row.exit_code === 0 ? 'ok' : row.exit_code === null ? 'running' : 'failed';
-            return (
-              <tr key={row.run_id}>
-                <td>{new Date(row.started_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                <td>{row.source}</td>
-                <td><span className={`run-status ${status}`}>{status}</span></td>
-                <td>{row.scraped_count ?? '-'}</td>
-                <td>{row.passed_count ?? '-'}</td>
-                <td>{row.extraction_count ?? '-'}</td>
-                <td>{duration(row.started_at, row.finished_at)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="content-inner">
+      <div className="count-line"><span className="count-num">{rows.length}</span><span className="count-word">recent runs</span></div>
+      <div className="panel">
+        <table className="rtable">
+          <thead>
+            <tr><th>Run</th><th>Source</th><th>Status</th><th>Scraped</th><th>Passed</th><th>Yield</th><th>Started</th><th>Duration</th></tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const status = r.exit_code === 0 ? 'ok' : r.exit_code === null ? 'running' : 'failed';
+              const yieldPct = r.scraped_count && r.passed_count != null ? r.passed_count / r.scraped_count : 0;
+              return (
+                <tr key={r.run_id}>
+                  <td><span className="rid">{r.run_id}</span></td>
+                  <td>{r.source.replace(/_/g, ' ')}</td>
+                  <td><span className={`rstatus ${status}`}><span className="dot" />{status}</span></td>
+                  <td><span className="num">{r.scraped_count ?? '—'}</span></td>
+                  <td><span className="num">{r.passed_count ?? '—'}</span></td>
+                  <td>
+                    {r.passed_count != null ? (
+                      <div className="yield-bar">
+                        <div className="yield-track"><div className="yield-fill" style={{ width: `${Math.min(100, Math.round(yieldPct * 100 * 4))}%` }} /></div>
+                        <span className="num" style={{ fontSize: 11 }}>{Math.round(yieldPct * 100)}%</span>
+                      </div>
+                    ) : '—'}
+                  </td>
+                  <td>{timeAgo(r.started_at)}</td>
+                  <td><span className="num" style={{ fontSize: 12 }}>{fmtDuration(r.started_at, r.finished_at)}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
