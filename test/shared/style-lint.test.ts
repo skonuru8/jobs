@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findBannedStylePhrases, hasBannedStylePhrase } from "@/shared/style-lint";
+import { findBannedStylePhrases, hasBannedStylePhrase, stripBannedStyleClauses } from "@/shared/style-lint";
 
 describe("style lint", () => {
   it("detects bridging phrases", () => {
@@ -11,6 +11,8 @@ describe("style lint", () => {
     expect(hasBannedStylePhrase("Gained hands-on exposure to Kubernetes.")).toBe(true);
     expect(hasBannedStylePhrase("deepening understanding of deployment orchestration")).toBe(true);
     expect(hasBannedStylePhrase("working knowledge of Vue.js")).toBe(true);
+    expect(hasBannedStylePhrase("similar to Apache Kafka")).toBe(true);
+    expect(hasBannedStylePhrase("demonstrates transferable architecture skills")).toBe(true);
   });
 
   it("allows direct factual prose", () => {
@@ -19,5 +21,33 @@ describe("style lint", () => {
 
   it("returns matching pattern names", () => {
     expect(findBannedStylePhrases("This is directly applicable to fintech.").length).toBeGreaterThan(0);
+  });
+
+  describe("stripBannedStyleClauses", () => {
+    it("strips em-dash initiated banned clause", () => {
+      const input = "\\item Built BPMN workflows driving automated decisions—directly applicable to modern data pipelines.";
+      const result = stripBannedStyleClauses(input);
+      expect(hasBannedStylePhrase(result)).toBe(false);
+      expect(result).toContain("Built BPMN workflows");
+    });
+
+    it("strips space-preceded banned phrase to end of line", () => {
+      const input = "\\item Built Spring Boot microservices with architectural patterns directly applicable to .NET.";
+      const result = stripBannedStyleClauses(input);
+      expect(hasBannedStylePhrase(result)).toBe(false);
+      expect(result).toContain("Built Spring Boot microservices");
+    });
+
+    it("strips comma-initiated banned clause", () => {
+      const input = "\\item Processed telemetry data at scale, directly applicable to streaming architectures.";
+      const result = stripBannedStyleClauses(input);
+      expect(hasBannedStylePhrase(result)).toBe(false);
+      expect(result).toContain("Processed telemetry data at scale");
+    });
+
+    it("leaves clean bullets unchanged", () => {
+      const input = "\\item Integrated AWS Kinesis for real-time stream processing with fault-tolerant ingestion.";
+      expect(stripBannedStyleClauses(input)).toBe(input);
+    });
   });
 });

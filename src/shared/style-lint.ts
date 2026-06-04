@@ -16,9 +16,11 @@
  */
 const BANNED_STYLE_PATTERNS = [
   /demonstrating transferable/i,
+  /demonstrates transferable/i,
   /analogous to/i,
   /akin to/i,
   /parallel to/i,
+  /similar to/i,
   /whose syntax (?:and|or) features/i,
   /\bwhose syntax\b/i,
   /syntactically equivalent to/i,
@@ -38,6 +40,39 @@ const BANNED_STYLE_PATTERNS = [
   /\bhands-on exposure\b/i,
   /\bexposure to\b/i,
   /\bgained hands-on exposure\b/i,
+];
+
+/**
+ * Human-readable phrase strings corresponding to BANNED_STYLE_PATTERNS,
+ * used to embed the banned list into LLM system prompts.
+ */
+export const BANNED_STYLE_PHRASE_STRINGS: readonly string[] = [
+  "demonstrating transferable",
+  "demonstrates transferable",
+  "analogous to",
+  "akin to",
+  "parallel to",
+  "similar to",
+  "whose syntax and/or features",
+  "whose syntax",
+  "syntactically equivalent to",
+  "foundational knowledge of",
+  "working knowledge of",
+  "transitional knowledge of",
+  "deepening understanding",
+  "directly applicable to",
+  "translate directly to",
+  "translates directly to",
+  "immediately useful in",
+  "comparable to",
+  "while not having direct",
+  "with limited exposure",
+  "transferable skills",
+  "aligning with your need for",
+  "as required by the role",
+  "hands-on exposure",
+  "exposure to",
+  "gained hands-on exposure",
 ];
 
 /**
@@ -62,4 +97,35 @@ export function findBannedStylePhrases(text: string): string[] {
  */
 export function hasBannedStylePhrase(text: string): boolean {
   return findBannedStylePhrases(text).length > 0;
+}
+
+/**
+ * Removes clauses containing banned style phrases from bullet text.
+ *
+ * Strips the clause boundary (comma, semicolon, em-dash, preceding whitespace)
+ * and everything from the banned phrase to end of line. Defense-in-depth sanitizer
+ * applied to patch-generated bullets before they reach canonical TeX.
+ *
+ * @param text - Raw bullet text that may contain banned phrases.
+ * @returns Bullet text with banned-phrase clauses excised and whitespace normalized.
+ * @throws Does not throw.
+ */
+export function stripBannedStyleClauses(text: string): string {
+  let result = text;
+  for (const pattern of BANNED_STYLE_PATTERNS) {
+    const src = pattern.source;
+    // Strip clause after separator (comma, semicolon, em-dash, en-dash) or preceding whitespace
+    result = result.replace(
+      new RegExp(
+        `(?:[,;]\\s*|\\s*[—–]\\s*|\\s+)${src}[^\\n]*`,
+        "gi",
+      ),
+      "",
+    );
+  }
+  return result
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\.\s*\./g, ".")
+    .replace(/,\s*\./g, ".")
+    .trim();
 }

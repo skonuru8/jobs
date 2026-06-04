@@ -16,6 +16,7 @@ import * as crypto from "crypto";
 import { complete } from "@/cover-letter/client";
 import type { GapDirective, TechSwap } from "@/judge/types";
 import { buildSlimJdForPrompts } from "@/shared/artifact-bundle";
+import { BANNED_STYLE_PHRASE_STRINGS } from "@/shared/style-lint";
 
 import type { ResumeGenConfig, ResumeGenInput } from "../types";
 import type { PatchOp, RoleBlock } from "./types";
@@ -45,6 +46,15 @@ Rules:
 - Keep every op scoped to the directive target_role.
 - Use role names exactly as provided in ROLE_BLOCKS.
 - If a directive cannot fit a role naturally, omit it.
+- frame_as is briefing guidance only — extract the factual content, do NOT copy its phrasing verbatim into bullets.
+- Write bullets as confident factual statements about what the candidate did. No hedging.
+
+BANNED phrases — NEVER use any of these in any bullet text:
+${BANNED_STYLE_PHRASE_STRINGS.map(p => `  "${p}"`).join("\n")}
+
+If a bullet you would write contains one of these phrases, rewrite it to state the fact directly without the bridge phrase.
+Wrong:  "\\\\item Built event-driven pipelines directly applicable to AI agent architectures."
+Right:  "\\\\item Built event-driven pipelines processing 100k+ events/sec using AWS Kinesis and Lambda."
 `.trim();
 
 /** Stable short hash for patch prompt versioning in artifacts and diagnostics. */

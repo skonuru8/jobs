@@ -149,6 +149,28 @@ export function auditRoleAttribution(
     canonNormByRole.set(role, bullets.map(normalizeBulletForCompare));
   }
 
+  // Build per-role canonical tech sets so patch-inserted bullets that reference
+  // techs already present in canonical for the same role are not flagged.
+  // True fabricated attribution = tech appears in a new bullet but is ABSENT from
+  // every canonical bullet at that role (possible role-bleed or hallucination).
+  const canonTechLowerByRole = new Map<string, Set<string>>();
+  for (const [role, canonBullets] of canonByRole) {
+    const techs = new Set<string>();
+    const joinedNorm = canonBullets.map(normalizeBulletForCompare).join(" ");
+    for (const tech of effectiveRegistry) {
+      const t = tech.toLowerCase();
+      if (t.length < 3) continue;
+      const re = new RegExp(`(^|[^a-z0-9])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`, "i");
+      if (re.test(joinedNorm)) techs.add(t);
+    }
+    for (const bullet of canonBullets) {
+      for (const tech of extractBoldTechCandidates(bullet)) {
+        techs.add(tech.toLowerCase());
+      }
+    }
+    canonTechLowerByRole.set(role, techs);
+  }
+
   const hasOverlap = (genNorm: string, canonNorms: string[]): boolean => {
     const STOP = new Set([
       "the", "a", "an", "and", "or", "to", "of", "in", "on", "at", "for", "with", "by",
@@ -173,21 +195,27 @@ export function auditRoleAttribution(
 
   for (const [role, genBullets] of genByRole) {
     const canonNorms = canonNormByRole.get(role) ?? [];
+    const canonTechs = canonTechLowerByRole.get(role) ?? new Set();
     for (const bullet of genBullets) {
       const norm = normalizeBulletForCompare(bullet);
       if (norm.length < 20) continue;
       if (hasOverlap(norm, canonNorms)) continue;
+      // New bullet — only flag tech terms absent from canonical for this same role.
+      // Tech present in canonical means this bullet is a reframe, not fabricated attribution.
       const detectedTechs = new Set<string>();
       for (const tech of effectiveRegistry) {
         const t = tech.toLowerCase();
         if (t.length < 3) continue;
+        if (canonTechs.has(t)) continue;
         const re = new RegExp(`(^|[^a-z0-9])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`, "i");
         if (re.test(norm)) {
           detectedTechs.add(tech);
         }
       }
       for (const tech of extractBoldTechCandidates(bullet)) {
-        detectedTechs.add(tech);
+        if (!canonTechs.has(tech.toLowerCase())) {
+          detectedTechs.add(tech);
+        }
       }
       for (const tech of detectedTechs) {
         findings.push({ role, bullet: bullet.slice(0, 200), tech });

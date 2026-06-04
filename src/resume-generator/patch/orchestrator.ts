@@ -11,7 +11,7 @@
  */
 
 import { stripLatex } from "@/cover-letter/resume";
-import { findBannedStylePhrases } from "@/shared/style-lint";
+import { findBannedStylePhrases, hasBannedStylePhrase, stripBannedStyleClauses } from "@/shared/style-lint";
 
 import { latexStructureOk } from "../generator";
 import type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "../types";
@@ -68,7 +68,7 @@ export async function generatePatchedResumeTex(
         error: `patch op generation failed: ${String(e).slice(0, 500)}`,
       };
     }
-    allOps = generated.ops;
+    allOps = sanitizePatchOps(generated.ops);
     totalInput += generated.tokens.input;
     totalOutput += generated.tokens.output;
     model = generated.model;
@@ -137,4 +137,36 @@ export async function generatePatchedResumeTex(
 function countWordsTex(tex: string): number {
   const plain = stripLatex(tex);
   return plain.split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Strips banned style phrases from patch op bullet text before applying to canonical TeX.
+ *
+ * LLMs sometimes copy banned hedging phrases from frame_as guidance into bullets verbatim.
+ * This sanitizer runs deterministically after generation and before application as a
+ * defense-in-depth layer that operates regardless of model compliance with the prompt.
+ *
+ * Drops ops whose bullet content becomes too short after stripping (< 40 chars of content),
+ * since that indicates the banned phrase was load-bearing and the bullet cannot be salvaged.
+ *
+ * @param ops - Raw patch ops from planner, potentially containing banned phrases.
+ * @returns Sanitized ops with banned clauses stripped; unsalvageable ops removed.
+ */
+function sanitizePatchOps(ops: import("./types").PatchOp[]): import("./types").PatchOp[] {
+  return ops
+    .map(op => {
+      const field = op.type === "rewrite" ? "new_item" : "item";
+      const raw = (op as Record<string, unknown>)[field] as string;
+      if (!hasBannedStylePhrase(raw)) return op;
+
+      const cleaned = stripBannedStyleClauses(raw);
+      const contentLen = cleaned.replace(/\\item\s*/, "").replace(/\\[a-zA-Z]+\{[^}]*\}/g, "x").replace(/[{}\\]/g, "").trim().length;
+      if (hasBannedStylePhrase(cleaned) || contentLen < 40) {
+        console.warn(`[patch] sanitizePatchOps: dropped op — residual banned phrase or empty content after strip in role "${op.role}"`);
+        return null;
+      }
+      console.log(`[patch] sanitizePatchOps: stripped banned phrase from bullet in role "${op.role}"`);
+      return { ...op, [field]: cleaned };
+    })
+    .filter(Boolean) as import("./types").PatchOp[];
 }

@@ -204,7 +204,9 @@ emit a gap_directives entry with:
     Never compress into one sentence. Never use hedging language (see banned list below).
     (null for handling=ignore or forbid)
 
-    BANNED phrases in frame_as — never use these in any frame_as string:
+    BANNED phrases — NEVER use any of these anywhere in frame_as. This is a hard rule.
+    Violations cause the downstream bullet to fail the style linter and mark the artifact
+    as defective — not a soft warning, a pipeline failure.
     - "foundational knowledge of", "working knowledge of", "exposure to",
       "transitional knowledge of", "deepening understanding"
     - "analogous to", "comparable to", "akin to", "parallel to", "similar to"
@@ -212,9 +214,10 @@ emit a gap_directives entry with:
     - "directly applicable to", "translate directly to", "immediately useful in"
     - "syntactically equivalent to", "whose syntax", "while not having direct"
     - "with limited exposure", "aligning with your need for", "as required by the role"
-    Write frame_as as if briefing a senior writer who will produce a confident bullet.
-    Hedging language signals a gap confession. A gap confession in frame_as will cause
-    the generated resume bullet to fail the style linter and require a retry.
+    - "hands-on exposure", "gained hands-on exposure"
+    Write frame_as as factual briefing: (1) what the candidate did at that role,
+    (2) the specific canonical bullet(s) as evidence, (3) what to surface and what NOT
+    to claim. Never describe how the experience maps or transfers — only what it is.
 
 Handling guide:
   - fabricate: candidate has no real adjacent experience for this JD requirement.
@@ -255,10 +258,10 @@ target_role must EXACTLY match one of these block headers from the candidate's e
 "Hitachi Vantara" (employer-level; use only for cross-project or promotion claims),
 "Project: Nokia" (Nokia CPQ bullets), "Project: PHIA" (PHIA Group / PATS bullets),
 "Project: Nissan" (Nissan telemetry bullets), "AquilaEdge LLC", "Persistent Systems".
-NEVER emit composite forms like "Hitachi Vantara / Nokia" or bare project names like
-"Nokia" or "PHIA Group". Those strings do not exist as resume blocks and will be
-silently dropped. If targeting Nokia-specific bullets, target_role = "Project: Nokia".
-If targeting PHIA bullets, target_role = "Project: PHIA".
+Never invent a role name. Never emit composite forms like "Hitachi Vantara / Nokia" or
+bare project names like "Nokia" or "PHIA Group". Those strings do not exist as resume
+blocks and will be silently dropped. If targeting Nokia-specific bullets, target_role =
+"Project: Nokia". If targeting PHIA bullets, target_role = "Project: PHIA".
 If targeting Nissan bullets, target_role = "Project: Nissan".
 
 TECH_SWAPS: for each swap, also emit target_role to scope the swap to a specific
