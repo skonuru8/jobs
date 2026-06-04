@@ -47,6 +47,58 @@ function readCoverLetter(filePath: string | null): string | null {
   return null;
 }
 
+function toUrl(p: string | null): string | null {
+  return p ? `/${String(p).replace(/\\/g, '/')}` : null;
+}
+
+function jobDescriptionApiUrl(jobId: string): string {
+  return `/api/jobs/${encodeURIComponent(jobId)}/job-description`;
+}
+
+function findJobDescriptionPathBySlug(slug: string): string | null {
+  const baseDir = path.join(REPO_ROOT, 'output', 'applications');
+  if (!fs.existsSync(baseDir)) return null;
+
+  let newestPath: string | null = null;
+  let newestMtime = -1;
+
+  for (const day of fs.readdirSync(baseDir, { withFileTypes: true })) {
+    if (!day.isDirectory()) continue;
+    const dayDir = path.join(baseDir, day.name);
+    for (const run of fs.readdirSync(dayDir, { withFileTypes: true })) {
+      if (!run.isDirectory()) continue;
+      const candidate = path.join(dayDir, run.name, slug, 'job_description.md');
+      if (!fs.existsSync(candidate)) continue;
+      const mtime = fs.statSync(candidate).mtimeMs;
+      if (mtime > newestMtime) {
+        newestMtime = mtime;
+        newestPath = candidate;
+      }
+    }
+  }
+
+  return newestPath;
+}
+
+function resolveJobDescriptionPath(job: {
+  job_id: string;
+  title: string | null;
+  company: string | null;
+  posted_at: string | null;
+}, metaPath?: string | null): string | null {
+  if (metaPath) {
+    const candidate = path.join(REPO_ROOT, path.dirname(metaPath), 'job_description.md');
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  const postedIso = job.posted_at ? new Date(job.posted_at).toISOString() : null;
+  const slug = makeJobSlug(
+    { title: job.title ?? '', company: job.company ?? '', posted_at: postedIso },
+    job.job_id,
+  );
+  return findJobDescriptionPathBySlug(slug);
+}
+
 /**
  * Boots review API server, applies required schema migrations, and mounts all
  * endpoints needed by frontend queue triage workflow.
@@ -137,24 +189,11 @@ async function main() {
         } else if (row.cover_pdf_path || (row.cover_letter_path && /\.pdf$/i.test(row.cover_letter_path))) {
           row.cover_letter = null;
         }
-        const toUrl = (p: string | null) =>
-          p ? `/${String(p).replace(/\\/g, '/')}` : null;
         row.resume_pdf_url = toUrl(row.resume_pdf_path);
         row.cover_pdf_url = toUrl(row.cover_pdf_path ?? (row.cover_letter_path && /\.pdf$/i.test(row.cover_letter_path) ? row.cover_letter_path : null));
         const resumeMetaPath = row.resume_meta_path as string | null;
         const coverMetaPath  = row.cover_meta_path as string | null;
-        const metaPath = resumeMetaPath ?? coverMetaPath;
-        if (metaPath) {
-          const artifactDir = path.dirname(metaPath);
-          row.job_description_url = toUrl(path.join(artifactDir, 'job_description.md'));
-        } else {
-          const postedIso = row.posted_at ? new Date(row.posted_at as string).toISOString() : null;
-          const slug = makeJobSlug(
-            { title: row.title ?? "", company: row.company ?? "", posted_at: postedIso },
-            row.job_id,
-          );
-          row.job_description_url = toUrl(`output/applications/${slug}/job_description.md`);
-        }
+        row.job_description_url = jobDescriptionApiUrl(String(row.job_id));
         const rf = row.resume_flags as string[] | null;
         const cf = row.cover_flags as string[] | null;
         row.artifact_flags = [...(rf ?? []), ...(cf ?? [])];
@@ -468,24 +507,11 @@ async function main() {
         LIMIT 500
       `);
       const rows = result.rows.map(row => {
-        const toUrl = (p: string | null) =>
-          p ? `/${String(p).replace(/\\/g, '/')}` : null;
         row.resume_pdf_url = toUrl(row.resume_pdf_path);
         row.cover_pdf_url = toUrl(row.cover_pdf_path);
         const resumeMetaPath = row.resume_meta_path as string | null;
         const coverMetaPath  = row.cover_meta_path as string | null;
-        const metaPath = resumeMetaPath ?? coverMetaPath;
-        if (metaPath) {
-          const artifactDir = path.dirname(metaPath);
-          row.job_description_url = toUrl(path.join(artifactDir, 'job_description.md'));
-        } else {
-          const postedIso = row.posted_at ? new Date(row.posted_at as string).toISOString() : null;
-          const slug = makeJobSlug(
-            { title: row.title ?? "", company: row.company ?? "", posted_at: postedIso },
-            row.job_id,
-          );
-          row.job_description_url = toUrl(`output/applications/${slug}/job_description.md`);
-        }
+        row.job_description_url = jobDescriptionApiUrl(String(row.job_id));
         const rf = row.resume_flags as string[] | null;
         const cf = row.cover_flags as string[] | null;
         row.artifact_flags = [...(rf ?? []), ...(cf ?? [])];
@@ -524,6 +550,81 @@ async function main() {
     } catch (err) {
       console.error('[ui-server] /api/applied-jobs error:', err);
       res.status(500).json({ error: 'db_error', detail: (err as Error).message });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/jobs/:job_id/job-description
+  // -------------------------------------------------------------------------
+  // `GET /api/jobs/:job_id/job-description` — return saved JD markdown or raw description fallback.
+  app.get('/api/jobs/:job_id/job-description', async (req, res) => {
+    try {
+      const { job_id } = req.params;
+      const result = await pool.query(`
+        SELECT
+          j.job_id, j.title, j.company, j.posted_at, j.description_raw,
+          tr.meta_path AS resume_meta_path,
+          cl.meta_path AS cover_meta_path
+        FROM jobs j
+        LEFT JOIN LATERAL (
+          SELECT meta_path
+          FROM tailored_resumes
+          WHERE job_id = j.job_id
+          ORDER BY generated_at DESC NULLS LAST
+          LIMIT 1
+        ) tr ON true
+        LEFT JOIN LATERAL (
+          SELECT meta_path
+          FROM cover_letters
+          WHERE job_id = j.job_id
+          ORDER BY generated_at DESC NULLS LAST
+          LIMIT 1
+        ) cl ON true
+        WHERE j.job_id = $1
+        ORDER BY j.scraped_at DESC
+        LIMIT 1
+      `, [job_id]);
+
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: 'not_found' });
+        return;
+      }
+
+      const row = result.rows[0] as {
+        job_id: string;
+        title: string | null;
+        company: string | null;
+        posted_at: string | null;
+        description_raw: string | null;
+        resume_meta_path: string | null;
+        cover_meta_path: string | null;
+      };
+
+      const jdPath = resolveJobDescriptionPath(
+        {
+          job_id: row.job_id,
+          title: row.title,
+          company: row.company,
+          posted_at: row.posted_at,
+        },
+        row.resume_meta_path ?? row.cover_meta_path,
+      );
+
+      if (jdPath && fs.existsSync(jdPath)) {
+        res.type('text/markdown').send(fs.readFileSync(jdPath, 'utf8'));
+        return;
+      }
+
+      const raw = (row.description_raw ?? '').trim();
+      if (raw) {
+        res.type('text/plain').send(raw);
+        return;
+      }
+
+      res.status(404).json({ error: 'job_description_missing' });
+    } catch (err) {
+      console.error('[ui-server] /api/jobs/:job_id/job-description error:', err);
+      res.status(500).json({ error: 'server_error', detail: (err as Error).message });
     }
   });
 

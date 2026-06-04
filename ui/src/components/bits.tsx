@@ -1,5 +1,5 @@
 // Small presentational pieces shared by JobCard.
-import { pct, scoreColor } from '../utils';
+import { pct, scoreColor, scoreDisplayColor } from '../utils';
 
 export function ScoreRing({ value }: { value: number }) {
   const p = pct(value);
@@ -21,7 +21,7 @@ export function ScoreNum({ value }: { value: number }) {
   const p = pct(value);
   return (
     <div className="score-num">
-      <div className="v" style={{ color: scoreColor(p) }}>{p}<span className="pct">%</span></div>
+      <div className="v" style={{ color: scoreDisplayColor(p) }}>{p}<span className="pct">%</span></div>
       <div className="lbl">Match</div>
     </div>
   );

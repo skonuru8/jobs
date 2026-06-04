@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import { postLabel, postGenerateArtifacts, getStats } from '../api';
 import type { ApplyQueueRow, HardRejectionRow, SoftRejectionRow, Stats, RiskSummary } from '../api';
-import { timeAgo, stripHtml } from '../utils';
+import { timeAgo, renderMarkdownPreview } from '../utils';
 import { Chevron, Ext, Doc, Spark, Warn, Check } from '../icons';
 import { ScoreRing, ScoreNum, MiniScores, Bars, VerdictTag, SourceTag, SkillPills } from './bits';
 import { ResumeDiff } from './ResumeDiff';
@@ -35,6 +35,11 @@ function artifactFlagsWarn(flags: string[]): boolean {
 function field(row: Row, key: string): string | null {
   const v = (row as unknown as Record<string, unknown>)[key];
   return typeof v === 'string' && v.trim() ? v : null;
+}
+
+function looksLikeAppShell(body: string): boolean {
+  const probe = body.slice(0, 4000).toLowerCase();
+  return probe.includes('<!doctype html') || probe.includes('<div id="root"></div>') || probe.includes('<title>jobs — job copilot</title>');
 }
 
 function RiskBadge({ label, status, summary }: { label: string; status: 'ok' | 'needs_review' | undefined; summary: RiskSummary | null | undefined }) {
@@ -86,12 +91,18 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
     let cancelled = false;
     setJdLoading(true); setJdError(null);
     fetch(jdUrl)
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
-      .then(html => { if (!cancelled) setJd(stripHtml(html)); })
+      .then(async r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const text = await r.text();
+        if (looksLikeAppShell(text)) throw new Error('job description unavailable');
+        return text;
+      })
+      .then(text => { if (!cancelled) setJd(text); })
       .catch(e => { if (!cancelled) setJdError((e as Error).message); })
       .finally(() => { if (!cancelled) setJdLoading(false); });
     return () => { cancelled = true; };
   }, [expanded, jdUrl, jd]);
+  const jdPreview = useMemo(() => (jd ? renderMarkdownPreview(jd) : null), [jd]);
 
   const isApplied = appStatus === 'applied';
   const isSkipped = appStatus === 'skipped' || (mode !== 'apply' && label === 'no');
@@ -219,7 +230,7 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
                   <div className="d-head"><span>Job description</span><a className="dp-open-link" href={jdUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink-3)', fontSize: 11 }}>open ↗</a></div>
                   {jdLoading && <div className="diff-loading">Loading…</div>}
                   {jdError && <div className="dp-error">Could not load JD ({jdError})</div>}
-                  {jd && <div className="doc">{jd}</div>}
+                  {jdPreview && <div className="doc md-preview" dangerouslySetInnerHTML={{ __html: jdPreview }} />}
                 </div>
               )}
               {applyRow?.cover_letter && (

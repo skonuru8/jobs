@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { Cog } from './icons';
 
@@ -55,51 +56,99 @@ const CARD_LABELS: Record<CardStyle, string> = { minimal: 'Minimal', data: 'Data
 export function SettingsMenu() {
   const { theme, accent, card, setTheme, setAccent, setCard } = useTheme();
   const [open, setOpen] = useState(false);
-  const wrap = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState({ top: 0, right: 0 });
 
   useEffect(() => {
     if (!open) return;
-    function onDoc(e: MouseEvent) {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+    // Compute position from button's bounding rect so portal renders in right place
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
     }
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
-    document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+    return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
   return (
-    <div ref={wrap} style={{ position: 'relative' }}>
-      <button className="btn btn-icon btn-ghost" onClick={() => setOpen(o => !o)} title="Settings" aria-label="Settings">
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className="btn btn-icon btn-ghost"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(o => !o);
+        }}
+        title="Settings"
+        aria-label="Settings"
+      >
         <Cog />
       </button>
-      {open && (
-        <div className="settings-pop">
-          <div className="settings-row">
-            <span className="settings-lbl">Appearance</span>
-            <button className={`toggle${theme === 'dark' ? ' on' : ''}`} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-              <span className="toggle-track"><span className="knob" /></span>
-              <span className="toggle-txt">Dark mode</span>
-            </button>
-          </div>
-          <div className="settings-row">
-            <span className="settings-lbl">Accent</span>
-            <div className="swatches">
-              {ACCENTS.map(c => (
-                <button key={c} className={`swatch${accent === c ? ' on' : ''}`} style={{ background: c }} onClick={() => setAccent(c)} aria-label={`Accent ${c}`} />
-              ))}
+      {open && createPortal(
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onClick={() => setOpen(false)} aria-hidden="true" />
+          <div
+            className="settings-pop"
+            style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="settings-row">
+              <span className="settings-lbl">Appearance</span>
+              <button
+                type="button"
+                className={`toggle${theme === 'dark' ? ' on' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTheme(theme === 'dark' ? 'light' : 'dark');
+                }}
+              >
+                <span className="toggle-track"><span className="knob" /></span>
+                <span className="toggle-txt">Dark mode</span>
+              </button>
+            </div>
+            <div className="settings-row">
+              <span className="settings-lbl">Accent</span>
+              <div className="swatches">
+                {ACCENTS.map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`swatch${accent === c ? ' on' : ''}`}
+                    style={{ background: c }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAccent(c);
+                    }}
+                    aria-label={`Accent ${c}`}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="settings-row">
+              <span className="settings-lbl">Card style</span>
+              <div className="segmented">
+                {(Object.keys(CARD_LABELS) as CardStyle[]).map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`seg${card === c ? ' on' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCard(c);
+                    }}
+                  >
+                    {CARD_LABELS[c]}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="settings-row">
-            <span className="settings-lbl">Card style</span>
-            <div className="segmented">
-              {(Object.keys(CARD_LABELS) as CardStyle[]).map(c => (
-                <button key={c} className={`seg${card === c ? ' on' : ''}`} onClick={() => setCard(c)}>{CARD_LABELS[c]}</button>
-              ))}
-            </div>
-          </div>
-        </div>
+        </>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
