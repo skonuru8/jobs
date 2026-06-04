@@ -71,6 +71,10 @@ export interface ExtractionResult {
   prompt_version: string;
   extracted_at:   string;
   error?:         string;
-  // Number of quotes that failed substring verification (informational)
+  /** Number of quotes that failed substring verification (informational). */
   citation_failures?: number;
+  /** Total prompt tokens consumed across all extractor LLM calls. */
+  input_tokens?:  number;
+  /** Total completion tokens consumed across all extractor LLM calls. */
+  output_tokens?: number;
 }

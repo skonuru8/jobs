@@ -251,11 +251,15 @@ Handling guide:
     at the same role — mutually exclusive; pick the one that fits the canonical bullets).
   - If a JD requirement cannot be made coherent with the role's real stack, use acknowledge/ignore.
 
-target_role must EXACTLY match an employer header from the candidate's experience.
-Valid examples: "Hitachi Vantara", "Hitachi Vantara / Nokia", "AquilaEdge LLC",
-"PHIA Group", "Persistent Systems".
-- target_role must be a string present in the work-history block: an employer header
-  (e.g., "Hitachi Vantara") or a project tag (e.g., "Nokia", "PHIA"). Never invent a role name.
+target_role must EXACTLY match one of these block headers from the candidate's experience:
+"Hitachi Vantara" (employer-level; use only for cross-project or promotion claims),
+"Project: Nokia" (Nokia CPQ bullets), "Project: PHIA" (PHIA Group / PATS bullets),
+"Project: Nissan" (Nissan telemetry bullets), "AquilaEdge LLC", "Persistent Systems".
+NEVER emit composite forms like "Hitachi Vantara / Nokia" or bare project names like
+"Nokia" or "PHIA Group". Those strings do not exist as resume blocks and will be
+silently dropped. If targeting Nokia-specific bullets, target_role = "Project: Nokia".
+If targeting PHIA bullets, target_role = "Project: PHIA".
+If targeting Nissan bullets, target_role = "Project: Nissan".
 
 TECH_SWAPS: for each swap, also emit target_role to scope the swap to a specific
 role. If a swap genuinely applies everywhere, set target_role: null.

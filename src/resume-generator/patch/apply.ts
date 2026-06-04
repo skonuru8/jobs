@@ -28,7 +28,17 @@ import type { PatchOp } from "./types";
  */
 export function applyPatchOps(canonicalTex: string, ops: PatchOp[]): string {
   let tex = canonicalTex;
-  for (const op of ops) {
+  // Sort: rewrites first (no index shift), then inserts bottom-to-top (prevents upward drift).
+  // Bottom-to-top also preserves insertion order for same-anchor ops.
+  const sortedOps = [...ops].sort((a, b) => {
+    const aRank = a.type === "rewrite" ? 0 : 1;
+    const bRank = b.type === "rewrite" ? 0 : 1;
+    if (aRank !== bRank) return aRank - bRank;
+    const aPos = a.type === "insert_after" ? (a.after_item ?? 0) : 0;
+    const bPos = b.type === "insert_after" ? (b.after_item ?? 0) : 0;
+    return bPos - aPos; // descending — bottom of block first
+  });
+  for (const op of sortedOps) {
     const blocks = extractRoleBlocks(tex);
     const block = findRoleBlock(blocks, op.role);
     if (!block) continue;

@@ -16,6 +16,12 @@ import type { GapDirective } from "@/judge/types";
 import { extractRoleBlocks, findRoleBlock } from "./parser";
 import type { PatchCoverage } from "./types";
 
+/** Short but meaningful tech abbreviations that must survive the length filter. */
+const TECH_SHORT_TERMS = new Set([
+  "aws", "sql", "api", "k8s", "etl", "iam", "sso", "pci", "sox",
+  "go", "ml", "ci", "cd", "nlp", "llm", "mq", "gcp", "rds",
+]);
+
 /**
  * Low-signal tokens ignored during keyword extraction for coverage checks.
  *
@@ -81,6 +87,6 @@ function keywords(text: string): string[] {
       .replace(/\\[a-z]+/g, " ")
       .split(/[^a-z0-9+#.]+/g)
       .map(s => s.trim())
-      .filter(s => s.length >= 4 && !STOPWORDS.has(s)),
+      .filter(s => (s.length >= 4 || TECH_SHORT_TERMS.has(s)) && !STOPWORDS.has(s)),
   )].slice(0, 8);
 }

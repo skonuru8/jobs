@@ -460,8 +460,14 @@ interface JobResult {
   cover_letter_words?: number | null;
   resume_pdf_path?: string | null;
   /** Sum of LLM input+output tokens for resume+cover when generated this run. */
-  artifact_input_tokens?:  number;
-  artifact_output_tokens?: number;
+  artifact_input_tokens?:   number;
+  artifact_output_tokens?:  number;
+  /** Judge LLM token spend for this job. */
+  judge_input_tokens?:      number;
+  judge_output_tokens?:     number;
+  /** Extractor LLM token spend for this job. */
+  extractor_input_tokens?:  number;
+  extractor_output_tokens?: number;
 }
 
 /**
@@ -639,6 +645,10 @@ async function processJobs(
       // that returns near-empty HTML to a plain HTTP fetcher anyway.
       // Skip the fetch when the scraper has already provided substantive prose.
       let fetchStatus: "ok" | "error" | "skipped" = "skipped";
+      let judgeInputTokens      = 0;
+      let judgeOutputTokens     = 0;
+      let extractorInputTokens  = 0;
+      let extractorOutputTokens = 0;
 
       if (hasUsableDescription(sanitized.description_raw)) {
         fetchStatus = "ok";
@@ -681,6 +691,8 @@ async function processJobs(
 
         log(`[${n}]  Extracting...`);
         const extraction = await extract(sanitized.description_raw, extractorConfig);
+        extractorInputTokens  += extraction.input_tokens  ?? 0;
+        extractorOutputTokens += extraction.output_tokens ?? 0;
         extractStatus = extraction.status;
 
         if (extraction.status === "ok" && extraction.fields) {
@@ -864,6 +876,8 @@ async function processJobs(
       };
 
       judgeResult = await judge(judgeInput, judgeConfigArg);
+      judgeInputTokens  += judgeResult.input_tokens  ?? 0;
+      judgeOutputTokens += judgeResult.output_tokens ?? 0;
       bucket      = getBucket(judgeResult, scoreResult.score);
       finalVerdict = routing.gateVerdict;   // still GATE_PASS for the raw record; bucket is the real routing
 
@@ -938,11 +952,26 @@ async function processJobs(
 
         writeJobDescription(bundle, jobFolderAbs);
 
-        const cachedResumeOutcome = doResumeArtifact
+        let cachedResumeOutcome = doResumeArtifact
           ? await findCachedResumeOutcome(repoRoot, bundle, resumeGeneratorConfigArg)
           : null;
         if (cachedResumeOutcome) {
           log(`[${n}]  Resume cache hit: ${cachedResumeOutcome.tex_path}`);
+          // FIX-12: copy cached tex/pdf into new job folder so this run's folder is self-contained
+          if (cachedResumeOutcome.tex_path) {
+            const newTexPath = path.join(jobFolderAbs, "resume.tex");
+            try {
+              await fs.promises.copyFile(cachedResumeOutcome.tex_path, newTexPath);
+              cachedResumeOutcome = { ...cachedResumeOutcome, tex_path: newTexPath };
+              if (cachedResumeOutcome.pdf_path) {
+                const newPdfPath = path.join(jobFolderAbs, "resume.pdf");
+                await fs.promises.copyFile(cachedResumeOutcome.pdf_path, newPdfPath);
+                cachedResumeOutcome = { ...cachedResumeOutcome, pdf_path: newPdfPath };
+              }
+            } catch (e) {
+              console.warn(`[cache] failed to copy cached tex to new folder: ${String(e).slice(0, 200)}`);
+            }
+          }
         }
 
         [resumeOutcome, coverOutcome] = await Promise.all([
@@ -1168,8 +1197,12 @@ async function processJobs(
         cover_letter_path:   coverLetterPath,
         cover_letter_words:  coverLetterWords,
         resume_pdf_path:     resumePdfPath,
-        artifact_input_tokens:  artifactInputTokens || undefined,
-        artifact_output_tokens: artifactOutputTokens || undefined,
+        artifact_input_tokens:    artifactInputTokens    || undefined,
+        artifact_output_tokens:   artifactOutputTokens   || undefined,
+        judge_input_tokens:       judgeInputTokens       || undefined,
+        judge_output_tokens:      judgeOutputTokens      || undefined,
+        extractor_input_tokens:   extractorInputTokens   || undefined,
+        extractor_output_tokens:  extractorOutputTokens  || undefined,
       },
     };
   })); // end limit()

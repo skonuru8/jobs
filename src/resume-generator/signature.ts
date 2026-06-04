@@ -41,10 +41,19 @@ export interface ResumeSignature {
  */
 export function buildResumeSignature(bundle: ArtifactBundleOk, config: ResumeGenConfig): ResumeSignature {
   const resume_mode = config.mode ?? "patch_tailoring";
+  const hints = bundle.judge_json.tailoring_hints;
+  // FIX-11: hash all tailoring hint fields so changes to any field invalidate cache
+  const directivesPayload = {
+    gap_directives:      bundle.judge_json.gap_directives ?? [],
+    emphasize_roles:     hints?.emphasize_roles ?? [],
+    emphasize_skills:    hints?.emphasize_skills ?? [],
+    downplay_skills:     hints?.downplay_skills ?? [],
+    domain_reframe_angle: hints?.domain_reframe_angle ?? null,
+  };
   return {
     canonical_sha: bundle.canonical_sha,
-    directives_hash: stableHash(bundle.judge_json.gap_directives ?? []),
-    tech_swaps_hash: stableHash(bundle.judge_json.tailoring_hints?.tech_swaps ?? []),
+    directives_hash: stableHash(directivesPayload),
+    tech_swaps_hash: stableHash(hints?.tech_swaps ?? []),
     prompt_sha: resume_mode === "patch_tailoring" ? PATCH_PROMPT_SHA : PROMPT_SHA,
     resume_mode,
   };

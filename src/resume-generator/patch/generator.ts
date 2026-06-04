@@ -204,12 +204,22 @@ function parsePatchOps(content: string): PatchOp[] {
  * @returns Ops whose role and positional references are safe to apply.
  */
 function filterValidOps(ops: PatchOp[], roleBlocks: RoleBlock[]): PatchOp[] {
+  const available = roleBlocks.map(b => b.role).join(", ");
   return ops.filter(op => {
     const block = roleBlocks.find(b => sameRoleish(b.role, op.role));
-    if (!block) return false;
-    if (op.type === "rewrite") return op.item >= 1 && op.item <= block.items.length;
-    if (op.type === "insert_after") return op.after_item >= 1 && op.after_item <= block.items.length;
-    return true; // insert_first — role validated, no position constraint
+    if (!block) {
+      console.warn(`[patch] filterValidOps: dropped — role "${op.role}" not in [${available}]`);
+      return false;
+    }
+    if (op.type === "rewrite" && !(op.item >= 1 && op.item <= block.items.length)) {
+      console.warn(`[patch] filterValidOps: dropped rewrite — item ${op.item} OOB in "${op.role}" (${block.items.length} items)`);
+      return false;
+    }
+    if (op.type === "insert_after" && !(op.after_item >= 1 && op.after_item <= block.items.length)) {
+      console.warn(`[patch] filterValidOps: dropped insert_after — after_item ${op.after_item} OOB in "${op.role}" (${block.items.length} items)`);
+      return false;
+    }
+    return true;
   });
 }
 
@@ -239,7 +249,8 @@ function isPatchOp(x: unknown): x is PatchOp {
 function sameRoleish(a: string, b: string): boolean {
   const na = normalize(a);
   const nb = normalize(b);
-  return na === nb || na.includes(nb) || nb.includes(na);
+  return na === nb ||
+    (na.length >= 5 && nb.length >= 5 && (na.includes(nb) || nb.includes(na)));
 }
 
 /**

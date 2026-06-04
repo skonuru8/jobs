@@ -121,8 +121,14 @@ export async function judge(
 
   let raw: string;
   let model: string;
+  let totalInputTokens  = 0;
+  let totalOutputTokens = 0;
   try {
-    ({ content: raw, model } = await _withHttpRetry(call));
+    const r1 = await _withHttpRetry(call);
+    raw   = r1.content;
+    model = r1.model;
+    totalInputTokens  += r1.input_tokens  ?? 0;
+    totalOutputTokens += r1.output_tokens ?? 0;
   } catch (e: any) {
     return {
       status:            "error",
@@ -141,7 +147,11 @@ export async function judge(
   if (!validation.ok) {
     await new Promise(r => setTimeout(r, 2000));
     try {
-      ({ content: raw, model } = await _withHttpRetry(call));
+      const r2 = await _withHttpRetry(call);
+      raw   = r2.content;
+      model = r2.model;
+      totalInputTokens  += r2.input_tokens  ?? 0;
+      totalOutputTokens += r2.output_tokens ?? 0;
     } catch (e: any) {
       return {
         status:            "error",
@@ -168,6 +178,8 @@ export async function judge(
       system_prompt_sha: systemPromptSha,
       judged_at,
       error:             validation.error,
+      input_tokens:      totalInputTokens  || undefined,
+      output_tokens:     totalOutputTokens || undefined,
     };
   }
 
@@ -179,6 +191,8 @@ export async function judge(
     prompt_version:    PROMPT_VERSION,
     system_prompt_sha: systemPromptSha,
     judged_at,
+    input_tokens:      totalInputTokens  || undefined,
+    output_tokens:     totalOutputTokens || undefined,
   };
 }
 

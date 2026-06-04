@@ -34,8 +34,10 @@ export interface CompletionOptions {
 }
 
 export interface CompletionResult {
-  content: string;
-  model:   string;
+  content:        string;
+  model:          string;
+  input_tokens?:  number;
+  output_tokens?: number;
 }
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
@@ -88,12 +90,18 @@ export async function complete(opts: CompletionOptions): Promise<CompletionResul
   const raw     = data?.choices?.[0]?.message?.content ?? "";
   const content = stripThinkBlocks(raw);
   const model   = data?.model ?? opts.model;
+  const usage   = data?.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
 
   if (!content) {
     throw new Error("OpenRouter returned empty content");
   }
 
-  return { content, model };
+  return {
+    content,
+    model,
+    input_tokens:  usage?.prompt_tokens,
+    output_tokens: usage?.completion_tokens,
+  };
 }
 
 /** Remove <think>...</think> and <redacted_thinking>...</redacted_thinking>. */

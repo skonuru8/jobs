@@ -39,6 +39,8 @@ export async function extract(
   config: ExtractorConfig,
 ): Promise<ExtractionResult> {
   const extracted_at = new Date().toISOString();
+  let totalInputTokens  = 0;
+  let totalOutputTokens = 0;
 
   if (!descriptionRaw.trim()) {
     return {
@@ -56,12 +58,16 @@ export async function extract(
 
   // First attempt
   let result = await _attempt(userPrompt, config);
+  totalInputTokens  += result.input_tokens  ?? 0;
+  totalOutputTokens += result.output_tokens ?? 0;
 
   // Retry once on validation failure (bible spec).
   // Brief backoff — pipeline-level throttling already spaces requests.
   if (!result.ok) {
     await new Promise(r => setTimeout(r, 1000));
     result = await _attempt(userPrompt, config);
+    totalInputTokens  += result.input_tokens  ?? 0;
+    totalOutputTokens += result.output_tokens ?? 0;
   }
 
   if (!result.ok) {
@@ -72,6 +78,8 @@ export async function extract(
       prompt_version: PROMPT_VERSION,
       extracted_at,
       error:          result.error,
+      input_tokens:   totalInputTokens  || undefined,
+      output_tokens:  totalOutputTokens || undefined,
     };
   }
 
@@ -85,6 +93,8 @@ export async function extract(
     prompt_version:    PROMPT_VERSION,
     extracted_at,
     citation_failures: citationFailures,
+    input_tokens:      totalInputTokens  || undefined,
+    output_tokens:     totalOutputTokens || undefined,
   };
 }
 
@@ -95,10 +105,12 @@ export async function extract(
 async function _attempt(
   userPrompt: string,
   config: ExtractorConfig,
-): Promise<{ ok: true; data: ValidatedFields } | { ok: false; error: string }> {
+): Promise<{ ok: true; data: ValidatedFields; input_tokens?: number; output_tokens?: number } | { ok: false; error: string; input_tokens?: number; output_tokens?: number }> {
   let raw: string;
+  let input_tokens: number | undefined;
+  let output_tokens: number | undefined;
   try {
-    raw = await _callWithRetry(userPrompt, config);
+    ({ content: raw, input_tokens, output_tokens } = await _callWithRetry(userPrompt, config));
   } catch (e: any) {
     return { ok: false, error: `LLM call failed: ${e?.message ?? e}` };
   }
@@ -109,12 +121,12 @@ async function _attempt(
     const preview = raw.length > 500 ? raw.slice(0, 500) + `\n...[${raw.length} chars total]` : raw;
     process.stderr.write(`[extract] RAW RESPONSE (validation failed):\n${preview}\n`);
   }
-  return result;
+  return { ...result, input_tokens, output_tokens };
 }
 
 // One HTTP-level retry for transient errors (timeout, 5xx, network).
 // Validation retries happen at the extract() level; this is strictly network resilience.
-async function _callWithRetry(userPrompt: string, config: ExtractorConfig): Promise<string> {
+async function _callWithRetry(userPrompt: string, config: ExtractorConfig): Promise<{ content: string; input_tokens?: number; output_tokens?: number }> {
   const messages = [
     { role: "system" as const, content: SYSTEM_PROMPT },
     { role: "user" as const,   content: userPrompt },
@@ -129,11 +141,11 @@ async function _callWithRetry(userPrompt: string, config: ExtractorConfig): Prom
 
   try {
     const res = await call();
-    return res.content;
+    return { content: res.content, input_tokens: res.input_tokens, output_tokens: res.output_tokens };
   } catch (e) {
     await new Promise(r => setTimeout(r, 2000));
     const res = await call();
-    return res.content;
+    return { content: res.content, input_tokens: res.input_tokens, output_tokens: res.output_tokens };
   }
 }
 

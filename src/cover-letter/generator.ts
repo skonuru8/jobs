@@ -57,6 +57,8 @@ export async function generateCoverLetter(
   let lastErr: string | undefined;
   let currentUserPrompt = userPrompt;
   let apiErrorCount = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -70,12 +72,18 @@ export async function generateCoverLetter(
         temperature: config.temperature,
         ...(config.thinking ? { thinking: config.thinking } : {}),
       });
+      totalInputTokens  += result.input_tokens  ?? 0;
+      totalOutputTokens += result.output_tokens ?? 0;
+
       const cleaned = stripDashes(stripMarkdown(result.content));
       const wordCount = countWords(cleaned);
       const truncated = looksTruncated(cleaned);
       const bannedStyle = hasBannedStylePhrase(cleaned);
 
-      if (cleaned && (wordCount < 350 || truncated || bannedStyle) && attempt < maxAttempts - 1) {
+      // FIX-09: short CLs always retry on attempt 0; quality issues retry on any non-final attempt
+      const shouldRetryShort = wordCount < 350 && attempt === 0;
+      const shouldRetryQuality = (truncated || bannedStyle) && attempt < maxAttempts - 1;
+      if (cleaned && (shouldRetryShort || shouldRetryQuality)) {
         const retryAddendum = `\n\nPREVIOUS OUTPUT WAS ${wordCount} WORDS${truncated ? " AND LOOKED TRUNCATED" : ""}${bannedStyle ? " AND USED BANNED BRIDGING STYLE" : ""}. Minimum 400 required. Generate a complete longer body. Address the judge's gap reframe angles in more depth. Add a fourth paragraph if needed. Do not return under 400 words. End with a complete sentence. Do not use bridging phrases such as analogous to, demonstrating transferable, similar to, or directly applicable to.`;
         currentUserPrompt = userPrompt + retryAddendum;
         continue;
@@ -99,8 +107,8 @@ export async function generateCoverLetter(
         prompt_sha:     COVER_PROMPT_SHA,
         generated_at,
         word_count:     wordCount,
-        input_tokens:   result.input_tokens,
-        output_tokens:  result.output_tokens,
+        input_tokens:   totalInputTokens,
+        output_tokens:  totalOutputTokens,
       };
     } catch (e) {
       const msg = String(e);

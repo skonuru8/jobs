@@ -85,7 +85,10 @@ export function extractRoleBlocks(tex: string): RoleBlock[] {
 export function findRoleBlock(blocks: RoleBlock[], role: string): RoleBlock | null {
   const needle = normalize(role);
   return blocks.find(b => normalize(b.role) === needle)
-    ?? blocks.find(b => normalize(b.role).includes(needle) || needle.includes(normalize(b.role)))
+    ?? blocks.find(b => {
+      const nb = normalize(b.role);
+      return nb.length >= 5 && needle.length >= 5 && (nb.includes(needle) || needle.includes(nb));
+    })
     ?? null;
 }
 

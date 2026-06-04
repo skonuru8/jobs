@@ -209,6 +209,10 @@ export interface JudgeResult {
   judged_at:      string;
   /** Human-readable failure reason when `status` is `error`. */
   error?:         string;
+  /** Total prompt tokens consumed across all judge LLM calls for this result. */
+  input_tokens?:  number;
+  /** Total completion tokens consumed across all judge LLM calls for this result. */
+  output_tokens?: number;
 }
 
 // ---------------------------------------------------------------------------

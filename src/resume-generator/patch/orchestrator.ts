@@ -76,6 +76,19 @@ export async function generatePatchedResumeTex(
     const tex = applyPatchOps(input.canonical_resume_tex, allOps);
     const coverage = verifyPatchCoverage(tex, directives);
     if (coverage.missed.length === 0 || attempt === 1) {
+      if (allOps.length === 0 && coverage.missed.length > 0) {
+        return {
+          status: "error",
+          tex: null,
+          model,
+          prompt_sha: PATCH_PROMPT_SHA,
+          word_count: 0,
+          tokens: { input: totalInput, output: totalOutput },
+          generated_at,
+          error: `patch produced no valid ops; missed: ${coverage.missed.join("; ")}`,
+        };
+      }
+
       const warnings: string[] = [];
       if (coverage.missed.length > 0) warnings.push("resume_patch_coverage_failed");
       if (findBannedStylePhrases(tex).length > 0) warnings.push("banned_phrase_in_output");

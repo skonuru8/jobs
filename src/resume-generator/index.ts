@@ -107,8 +107,12 @@ export async function generateAndSaveResume(
     flags.push("resume_patch_coverage_failed");
   }
 
+  const strippedTex = stripDashes(gen.tex);
+  const swappedTex = (input.tech_swaps?.length ?? 0) > 0
+    ? applyTechSwaps(strippedTex, input.tech_swaps!)
+    : strippedTex;
   let tex = boldMetrics(
-    replaceSkillsSection(stripDashes(gen.tex), bundle.canonical_resume_tex, input.tech_swaps),
+    replaceSkillsSection(swappedTex, bundle.canonical_resume_tex, input.tech_swaps),
   );
 
   let wc = gen.word_count;
