@@ -10,10 +10,9 @@
  * Side effects: up to two LLM calls, text lint checks, LaTeX structure validation
  */
 
-import { stripLatex } from "@/cover-letter/resume";
 import { findBannedStylePhrases, hasBannedStylePhrase, stripBannedStyleClauses } from "@/shared/style-lint";
 
-import { latexStructureOk } from "../generator";
+import { countWordsTex, latexStructureOk } from "../generator";
 import type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "../types";
 import { applyPatchOps } from "./apply";
 import { verifyPatchCoverage } from "./coverage";
@@ -126,17 +125,6 @@ export async function generatePatchedResumeTex(
     generated_at,
     error: "patch coverage failed",
   };
-}
-
-/**
- * Counts visible words in TeX after stripping markup commands.
- *
- * @param tex - Resume LaTeX source to measure.
- * @returns Approximate plain-text word count used in artifact metadata.
- */
-function countWordsTex(tex: string): number {
-  const plain = stripLatex(tex);
-  return plain.split(/\s+/).filter(Boolean).length;
 }
 
 /**

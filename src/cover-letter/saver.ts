@@ -20,7 +20,18 @@ import {
   buildSlimJdForPrompts,
   buildSlimProfileForPrompts,
 } from "@/shared/artifact-bundle";
-import { runPdflatex } from "@/shared/pdflatex";
+import { cleanupAuxFiles, runPdflatex } from "@/shared/pdflatex";
+import { countWords } from "./generator";
+export { escapeLatexBody, escapeLatexPlain } from "./latex-utils";
+import {
+  bodyHasLatexLeak,
+  deriveSalutation,
+  escapeLatexBody,
+  escapeLatexPlain,
+  finalTexValid,
+  formatCompanyLocationLine,
+  formatLetterDate,
+} from "./latex-utils";
 
 import { generateCoverLetter } from "./generator";
 import { COVER_PROMPT_SHA } from "./prompt";
@@ -230,147 +241,6 @@ export async function generateAndSaveCoverLetter(
     flags,
     word_count: wc,
   };
-}
-
-/**
- * Removes transient LaTeX auxiliary files after a successful compile.
- *
- * Keeps failures non-fatal because auxiliary cleanup should never invalidate
- * an otherwise valid artifact run.
- *
- * @param dir - Artifact directory containing compile outputs.
- * @param basename - Shared filename stem for aux/log/out files.
- */
-function cleanupAuxFiles(dir: string, basename: string): void {
-  for (const ext of [".aux", ".log", ".out"]) {
-    const p = path.join(dir, `${basename}${ext}`);
-    if (fs.existsSync(p)) {
-      try { fs.unlinkSync(p); } catch { /* ignore */ }
-    }
-  }
-}
-
-/**
- * Counts whitespace-delimited words for rough cover-letter length validation.
- *
- * @param s - Generated prose body to measure.
- * @returns Approximate word count used for QA flags.
- */
-function countWords(s: string): number {
-  return s.split(/\s+/).filter(Boolean).length;
-}
-
-/**
- * Formats current date for the LaTeX template's letter header.
- *
- * @returns Locale-formatted US date like `June 3, 2026`.
- */
-function formatLetterDate(): string {
-  return new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-/**
- * Picks a neutral salutation target from raw job description text.
- *
- * Defaults to `Manager` because many postings omit a named contact and the
- * template expects only the noun following `Dear Hiring ...`.
- *
- * @param bundle - Artifact bundle containing raw job description text.
- * @returns `Manager` or `Team` based on detected recruiting phrasing.
- */
-function deriveSalutation(bundle: ArtifactBundleOk): string {
-  const raw = (bundle.job.description_raw ?? "").slice(0, 12000);
-  if (/\bhiring\s+manager\b/i.test(raw)) return "Manager";
-  if (/\brecruiting\s+team\b|\btalent\s+acquisition\s+team\b|\bhiring\s+team\b/i.test(raw)) {
-    return "Team";
-  }
-  return "Manager";
-}
-
-/**
- * Converts optional company location into template-ready LaTeX line break content.
- *
- * @param loc - Human-readable job location line, if available.
- * @returns Escaped LaTeX string prefixed with line break markup, or empty string.
- */
-function formatCompanyLocationLine(loc: string | null | undefined): string {
-  if (!loc?.trim()) return "";
-  return `\\\\\n${escapeLatexPlain(loc.trim())}`;
-}
-
-/**
- * Escapes LaTeX-sensitive characters in generated body prose.
- *
- * Keeps newlines intact so paragraph structure survives template insertion.
- *
- * @param raw - Generated cover letter body before template insertion.
- * @returns LaTeX-safe body text suitable for `<<BODY>>`.
- * @example
- * escapeLatexBody("Built C# services & ETL")
- */
-export function escapeLatexBody(raw: string): string {
-  let s = raw;
-  s = s.replace(/\\/g, "\\textbackslash{}");
-  s = s.replace(/%/g, "\\%");
-  s = s.replace(/&/g, "\\&");
-  s = s.replace(/\$/g, "\\$");
-  s = s.replace(/#/g, "\\#");
-  s = s.replace(/_/g, "\\_");
-  s = s.replace(/~/g, "\\textasciitilde{}");
-  s = s.replace(/\^/g, "\\textasciicircum{}");
-  return s;
-}
-
-/**
- * Escapes LaTeX-sensitive characters for single-line template fields.
- *
- * Collapses newlines into spaces because contact/header placeholders must stay
- * on one logical line inside the LaTeX template.
- *
- * @param raw - Plain text field value such as company name or contact info.
- * @returns LaTeX-safe single-line string.
- */
-export function escapeLatexPlain(raw: string): string {
-  return escapeLatexBody(raw).replace(/\n/g, " ");
-}
-
-/**
- * Detects likely raw LaTeX leakage in generated prose before templating.
- *
- * This is deliberately conservative: unmatched braces or command-like tokens
- * are treated as suspicious because provider output should be plain prose only.
- *
- * @param body - Generated cover letter prose body.
- * @returns `true` when the body appears to contain raw LaTeX markup.
- */
-function bodyHasLatexLeak(body: string): boolean {
-  const open = (body.match(/\{/g) ?? []).length;
-  const close = (body.match(/\}/g) ?? []).length;
-  const hasCommand = /\\[a-zA-Z]+/.test(body);
-  return open > 0 || close > 0 || hasCommand;
-}
-
-/**
- * Performs final sanity checks on rendered LaTeX before writing artifacts.
- *
- * Uses lightweight heuristics instead of full parsing because the compile step
- * is the authoritative validator and this check only flags obvious corruption.
- *
- * @param tex - Fully substituted LaTeX document.
- * @returns `true` when document markers and brace balance look plausible.
- */
-function finalTexValid(tex: string): boolean {
-  const open = (tex.match(/\{/g) ?? []).length;
-  const close = (tex.match(/\}/g) ?? []).length;
-  return (
-    tex.includes("\\begin{document}")
-    && tex.includes("\\end{document}")
-    && Math.abs(open - close) <= 1
-  );
 }
 
 /**

@@ -23,7 +23,8 @@ import { hardFilter }      from "@/filter/filter";
 import { postFetchChecks } from "@/filter/post-fetch";
 import { sanitizeJob }     from "@/filter/sanitize";
 import { validateProfile } from "@/filter/validate";
-import { normalizeSkill, buildAliasMap } from "@/filter/skills";
+import { normalizeSkill } from "@/filter/skills";
+import { buildAliasMap } from "@/filter/config-loader";
 
 import { fetchJobPage }  from "@/fetcher/fetch";
 import { extract }       from "@/extractor/extract";

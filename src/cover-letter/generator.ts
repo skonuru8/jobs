@@ -139,7 +139,7 @@ export async function generateCoverLetter(
   };
 }
 
-function countWords(s: string): number {
+export function countWords(s: string): number {
   return s.split(/\s+/).filter(Boolean).length;
 }
 

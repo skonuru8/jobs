@@ -89,3 +89,11 @@ SESSION-NOTES*.md
 # Local audit scratch notes
 docs/audit-*.md
 docs/patch-tailoring-plan.md
+
+# Generated / large reference files not needed in repo
+tester.html
+THE-BIBLE-v1.md
+
+# Completed bug audit docs (historical; committed work is the record)
+docs/patch-bugs.md
+docs/patch-fixes.md

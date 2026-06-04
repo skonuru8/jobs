@@ -5,7 +5,7 @@
 import * as fs   from "fs";
 import * as path from "path";
 
-import { runPdflatex } from "@/shared/pdflatex";
+import { cleanupAuxFiles, runPdflatex } from "@/shared/pdflatex";
 
 export interface ResumeSaveResult {
   tex_path:       string;
@@ -48,13 +48,4 @@ export async function writeTexAndCompile(
     "utf8",
   );
   return { tex_path: texAbs, pdf_path: null, compile_error: lastLog.slice(0, 2000) };
-}
-
-function cleanupAuxFiles(dir: string, basename: string): void {
-  for (const ext of [".aux", ".log", ".out"]) {
-    const p = path.join(dir, `${basename}${ext}`);
-    if (fs.existsSync(p)) {
-      try { fs.unlinkSync(p); } catch { /* ignore */ }
-    }
-  }
 }

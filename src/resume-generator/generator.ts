@@ -11,7 +11,9 @@
  */
 
 import { complete } from "@/cover-letter/client";
-import { stripLatex } from "@/cover-letter/resume";
+
+export { countWordsTex, latexStructureOk } from "./latex-utils";
+import { countWordsTex, extractLatexDocument, latexStructureOk, recoverTruncatedLatex, stripFences } from "./latex-utils";
 
 import {
   hasExtendedJudgeContext,
@@ -321,94 +323,3 @@ function buildUserMessage(input: ResumeGenInput, shortHint?: string): string {
   return parts.join("\n");
 }
 
-/**
- * Removes accidental Markdown fences from model output before LaTeX validation.
- *
- * @param s - Raw model text that may be wrapped in fenced code blocks.
- * @returns Trimmed text without outer Markdown fences.
- */
-function stripFences(s: string): string {
-  return s
-    .replace(/^```(?:latex|tex)?\s*/i, "")
-    .replace(/```\s*$/i, "")
-    .trim();
-}
-
-/**
- * Extracts best LaTeX slice starting at `\\documentclass` from model output.
- *
- * @param s - Fence-stripped model output.
- * @returns Full document slice when both boundaries exist, otherwise best-effort truncated tail.
- */
-function extractLatexDocument(s: string): string {
-  const start = s.indexOf("\\documentclass");
-  if (start < 0) return s;
-  const end = s.lastIndexOf("\\end{document}");
-  if (end >= start) return s.slice(start, end + "\\end{document}".length).trim();
-  return s.slice(start).trim(); // truncated: best-effort slice, still missing \end{document}
-}
-
-/**
- * Best-effort repair of a LaTeX doc truncated before \end{document}.
- * 1) drop a trailing incomplete macro line (unbalanced braces, e.g. "\vspace{2pt")
- * 2) close still-open environments in LIFO order
- * 3) close the document
- * Recovered output is usually short → resume_too_short fires downstream as a signal.
- *
- * @param partial - Truncated LaTeX text accepted only as last-resort salvage input.
- * @returns Recovered LaTeX with obvious trailing damage removed and document closed.
- */
-function recoverTruncatedLatex(partial: string): string {
-  const lines = partial.split("\n");
-  while (lines.length > 0) {
-    const last = lines[lines.length - 1].trim();
-    if (!last) { lines.pop(); continue; }
-    const open  = (last.match(/\{/g) ?? []).length;
-    const close = (last.match(/\}/g) ?? []).length;
-    if (open > close) { lines.pop(); } else { break; }
-  }
-  const cleaned = lines.join("\n");
-
-  const stack: string[] = [];
-  const re = /\\(begin|end)\{([^}]+)\}/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(cleaned)) !== null) {
-    if (m[1] === "begin") stack.push(m[2]);
-    else if (stack.length > 0 && stack[stack.length - 1] === m[2]) stack.pop();
-  }
-
-  let out = cleaned;
-  for (const env of stack.reverse()) {
-    if (env === "document") continue; // closed last, below
-    out += `\n\\end{${env}}`;
-  }
-  if (!out.includes("\\end{document}")) out += "\n\\end{document}";
-  return out.trim();
-}
-
-/**
- * Estimates rendered word count by stripping LaTeX commands first.
- *
- * @param tex - LaTeX document to analyze.
- * @returns Plain-text word count used for downstream min/max flagging.
- */
-function countWordsTex(tex: string): number {
-  const plain = stripLatex(tex);
-  return plain.split(/\s+/).filter(Boolean).length;
-}
-
-/**
- * Performs lightweight LaTeX sanity checks before compile stage.
- *
- * This is intentionally cheaper than full compilation and only guards against
- * obviously broken outputs that should already be flagged before persistence.
- *
- * @param tex - Generated LaTeX document candidate.
- * @returns `true` when brace imbalance is small and document boundaries exist.
- */
-export function latexStructureOk(tex: string): boolean {
-  const open = (tex.match(/\{/g) ?? []).length;
-  const close = (tex.match(/\}/g) ?? []).length;
-  if (Math.abs(open - close) > 3) return false;
-  return tex.includes("\\begin{document}") && tex.includes("\\end{document}");
-}
