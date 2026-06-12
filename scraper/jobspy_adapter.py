@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
+from scraper.common.app_config import load_scraping_config
 from scraper.common.normalize import (
     guess_seniority,
     parse_employment_type,
@@ -21,20 +22,14 @@ from scraper.common.normalize import (
 from scraper.common.output import now_iso
 from scraper.common.schema import FLAGS, add_flag, make_empty_job
 
-DEFAULT_SEARCHES = [
-    "senior full stack developer",
-    "senior java engineer",
-    "senior backend engineer",
-]
-
 DEFAULT_PARAMS = {
     "site_name": ["linkedin"],
-    "location": "New York, NY",
-    "results_wanted": 30,
+    "location": "United States",
+    "results_wanted": 15,
     "hours_old": 72,
     "is_remote": None,
-    "distance": 50,
-    "linkedin_fetch_description": False,  # listing only; fetcher fills description_raw later
+    "distance": 50,  # ignored by LinkedIn at country-level geo; harmless
+    "linkedin_fetch_description": True,   # JobSpy fetches JD at scrape time (guest API, no login); pipeline skips HTTP fetch
 }
 
 
@@ -43,7 +38,7 @@ def scrape(
     run_id: str,
     cookies_path: Path | None = None,    # ignored — JobSpy handles its own session
     search_terms: list[str] | None = None,
-    location: str = "New York, NY",
+    location: str | None = None,
     hours_old: int = 72,
 ) -> Iterator[dict]:
     """
@@ -57,8 +52,8 @@ def scrape(
         max_jobs:      stop after this many unique jobs
         run_id:        from output.make_run_id()
         cookies_path:  ignored (kept for CLI uniformity with Playwright scrapers)
-        search_terms:  override default 3 searches
-        location:      JobSpy location string
+        search_terms:  override default searches (falls back to config scraping.linkedin.search_terms)
+        location:      JobSpy location string (falls back to config scraping.linkedin.location)
         hours_old:     only include jobs posted within this many hours
 
     Raises:
@@ -71,14 +66,17 @@ def scrape(
             "python-jobspy not installed. Run: pip install python-jobspy"
         )
 
-    terms = search_terms or DEFAULT_SEARCHES
+    cfg = load_scraping_config()
+    li_cfg = cfg.get("linkedin", {})
+    terms = search_terms or li_cfg["search_terms"]
+    resolved_location = location or li_cfg["location"]
     scraped_at = now_iso()
     seen_urls: set[str] = set()
     yielded = 0
 
     params = {
         **DEFAULT_PARAMS,
-        "location": location,
+        "location": resolved_location,
         "hours_old": hours_old,
     }
 
@@ -86,7 +84,7 @@ def scrape(
         if yielded >= max_jobs:
             break
 
-        _err(f"[linkedin] Searching: '{term}' (location={location}, hours_old={hours_old})")
+        _err(f"[linkedin] Searching: '{term}' (location={resolved_location}, hours_old={hours_old})")
 
         try:
             df = scrape_jobs(search_term=term, **params)

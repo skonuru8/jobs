@@ -16,6 +16,9 @@ import type { Profile } from "./types.ts"
  * profile is structurally valid.
  */
 export function validateProfile(profile: Profile): void {
+  if (!profile.target_titles?.length) {
+    throw new Error("profile.target_titles must be a non-empty array")
+  }
   if (!profile.acceptable_seniority?.length) {
     throw new Error("profile.acceptable_seniority must be a non-empty array")
   }

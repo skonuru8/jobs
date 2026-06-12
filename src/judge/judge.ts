@@ -22,7 +22,6 @@ import {
 import { extractSkillsSectionFromCanonical } from "./roles-extractor";
 import { validateJudge } from "./validate";
 import type { JudgeInput, JudgeResult, FinalBucket, JudgeFields } from "./types";
-import type { Profile } from "@/filter/types";
 
 export interface JudgeConfig {
   /** Provider model identifier to send to `complete`. */
@@ -35,55 +34,6 @@ export interface JudgeConfig {
   throttle_ms: number;
   /** Optional provider-specific reasoning config forwarded to client call. */
   reasoning?:  ReasoningConfig;
-}
-
-/**
- * Supplies safe fallback profile when caller omits live profile data.
- *
- * Judge stage still needs consistent prompt structure for manual runs and
- * legacy callers, so this profile preserves schema without inventing candidate
- * strengths that could bias verdict.
- *
- * @returns Minimal profile object compatible with `buildSystemPrompt`.
- */
-function defaultProfileForJudge(): Profile {
-  return {
-    meta: {
-      profile_id: "fallback",
-      schema_version: "1.0.0",
-      version: "1",
-      last_updated: new Date().toISOString(),
-    },
-    target_titles:       ["Senior Software Engineer"],
-    acceptable_seniority: ["senior"],
-    acceptable_employment: ["full_time"],
-    location: {
-      current_city: "Unknown",
-      current_country: "USA",
-      timezone: "America/New_York",
-      acceptable_types: ["remote", "hybrid", "onsite"],
-      acceptable_cities: [],
-      acceptable_countries: ["USA"],
-      willing_to_relocate: false,
-    },
-    compensation: { min_acceptable: 0, currency: "USD", interval: "annual" },
-    contact: {
-      name: "Candidate", email: "x@y.z", phone: "", linkedin: "", github: "",
-      city: "", state: "",
-    },
-    skills: [],
-    years_experience: 0,
-    education: { degree: "bachelor", field: "Computer Science" },
-    work_authorization: {
-      requires_sponsorship: false,
-      visa_type: "",
-      clearance_eligible: true,
-      cover_letter_phrasing_sponsorship_needed: "",
-      cover_letter_phrasing_no_sponsorship_needed: "",
-    },
-    preferred_domains: [],
-    deal_breakers: [],
-  };
 }
 
 /**
@@ -103,8 +53,8 @@ export async function judge(
 ): Promise<JudgeResult> {
   const judged_at  = new Date().toISOString();
   const userPrompt = buildJudgePrompt(input);
-  const profile = input.profile ?? defaultProfileForJudge();
-  const systemPrompt = buildSystemPrompt(profile, input.roles_list, input.canonical_skills);
+  const profile = input.profile;
+  const systemPrompt = buildSystemPrompt(profile, input.roles_list, input.canonical_skills, input.allowed_role_labels);
   const systemPromptSha = computeSystemPromptSha(systemPrompt);
 
   const messages = [
@@ -142,7 +92,8 @@ export async function judge(
     };
   }
 
-  let validation = validateJudge(raw);
+  const allowedLabels = input.allowed_role_labels;
+  let validation = validateJudge(raw, allowedLabels);
 
   if (!validation.ok) {
     await new Promise(r => setTimeout(r, 2000));
@@ -164,7 +115,7 @@ export async function judge(
         error:             `LLM call failed (retry): ${e?.message ?? e}`,
       };
     }
-    validation = validateJudge(raw);
+    validation = validateJudge(raw, allowedLabels);
   }
 
   if (!validation.ok) {

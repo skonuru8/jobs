@@ -307,8 +307,7 @@ export function coverLetterInputFromBundle(bundle: ArtifactBundleOk): CoverLette
       },
       title:
         bundle.profile.contact.title?.trim()
-        ?? bundle.profile.target_titles?.[0]
-        ?? "Senior Software Engineer",
+        ?? bundle.profile.target_titles[0],
       location_line: formatProfileLocationLine(bundle.profile),
     },
     resume:           null,

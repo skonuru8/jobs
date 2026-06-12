@@ -55,6 +55,24 @@ ${BANNED_STYLE_PHRASE_STRINGS.map(p => `  "${p}"`).join("\n")}
 If a bullet you would write contains one of these phrases, rewrite it to state the fact directly without the bridge phrase.
 Wrong:  "\\\\item Built event-driven pipelines directly applicable to AI agent architectures."
 Right:  "\\\\item Built event-driven pipelines processing 100k+ events/sec using AWS Kinesis and Lambda."
+
+EXAMPLES:
+
+Example 1 — fabricate: add Kubernetes observability bullet to Project: Nokia
+DIRECTIVE:
+{"jd_requirement":"container orchestration observability","handling":"fabricate","target_role":"Project: Nokia","frame_as":"Nokia CPQ ran 10+ Spring Boot microservices on Azure with Docker and Kubernetes via Azure Pipelines. Candidate contributed to containerization and deployment orchestration. Surface container monitoring and health-check ownership."}
+ROLE_BLOCKS (excerpt):
+{"role":"Project: Nokia","items":[{"item":8,"text":"\\\\item Contributed to containerization and deployment orchestration with \\\\textbf{Docker, Kubernetes, and Azure Pipelines} alongside the DevOps team across a large-scale Azure environment."}]}
+CORRECT OP:
+{"ops":[{"type":"rewrite","role":"Project: Nokia","item":8,"new_item":"\\\\item Owned containerization and deployment orchestration for \\\\textbf{10+ Spring Boot microservices} using \\\\textbf{Docker, Kubernetes, and Azure Pipelines}, monitoring health checks and scaling behavior across the Nokia CPQ Azure environment."}]}
+
+Example 2 — reframe: surface SQL query optimization at Project: PHIA
+DIRECTIVE:
+{"jd_requirement":"database query performance tuning","handling":"reframe","target_role":"Project: PHIA","frame_as":"PHIA PATS ran on SQL Server. Candidate wrote optimized queries that improved report generation by 15%. Surface the optimization work and the measurable outcome."}
+ROLE_BLOCKS (excerpt):
+{"role":"Project: PHIA","items":[{"item":6,"text":"\\\\item Wrote optimized \\\\textbf{SQL Server} queries for client-facing task-listing reports, improving generation times by \\\\textbf{15\\\\%} and enabling real-time queue visibility for PHIA Group clients."}]}
+CORRECT OP:
+{"ops":[{"type":"rewrite","role":"Project: PHIA","item":6,"new_item":"\\\\item Tuned \\\\textbf{SQL Server} queries for client-facing task-listing and reporting workflows, achieving \\\\textbf{15\\\\%} faster generation times and enabling real-time queue visibility for PHIA Group stakeholders."}]}
 `.trim();
 
 /** Stable short hash for patch prompt versioning in artifacts and diagnostics. */
@@ -84,26 +102,53 @@ export async function generatePatchOps(
   config: ResumeGenConfig,
   roleBlocks: RoleBlock[],
   retryHint?: string,
-): Promise<{ ops: PatchOp[]; model: string; tokens: { input: number; output: number } }> {
+): Promise<{ ops: PatchOp[]; model: string; tokens: { input: number; output: number }; ops_dropped_unknown_role: number }> {
   const activeDirectives = activeGapDirectives(input.gap_directives ?? input.judge_json.gap_directives ?? []);
   if (activeDirectives.length === 0) {
-    return { ops: [], model: "deterministic-noop", tokens: { input: 0, output: 0 } };
+    return { ops: [], model: "deterministic-noop", tokens: { input: 0, output: 0 }, ops_dropped_unknown_role: 0 };
   }
 
-  const r = await complete({
-    model: config.model,
-    messages: [
-      { role: "system", content: PATCH_MODE_PROMPT },
-      { role: "user", content: buildPatchUserMessage(input, roleBlocks, activeDirectives, retryHint) },
-    ],
-    max_tokens: Math.min(config.max_tokens, 1600),
-    temperature: Math.min(config.temperature, 0.2),
-  });
+  const usePremium = config.premium_model
+    && input.judge_json.verdict === "STRONG"
+    && input.score.total >= (config.premium_min_score ?? 0.70);
+  const model = usePremium ? config.premium_model! : config.model;
+
+  let r;
+  try {
+    r = await complete({
+      model,
+      messages: [
+        { role: "system", content: PATCH_MODE_PROMPT },
+        { role: "user", content: buildPatchUserMessage(input, roleBlocks, activeDirectives, retryHint) },
+      ],
+      max_tokens: Math.min(config.max_tokens, 1600),
+      temperature: Math.min(config.temperature, 0.2),
+    });
+  } catch (e) {
+    if (!usePremium) throw e;
+    // Premium failure: fall back to config.model once
+    r = await complete({
+      model: config.model,
+      messages: [
+        { role: "system", content: PATCH_MODE_PROMPT },
+        { role: "user", content: buildPatchUserMessage(input, roleBlocks, activeDirectives, retryHint) },
+      ],
+      max_tokens: Math.min(config.max_tokens, 1600),
+      temperature: Math.min(config.temperature, 0.2),
+    });
+  }
+
+  const parsed = parsePatchOps(r.content);
+  const ops = filterValidOps(parsed, roleBlocks);
+  const ops_dropped_unknown_role = parsed.filter(op =>
+    !roleBlocks.some(b => sameRole(b.role, op.role)),
+  ).length;
 
   return {
-    ops: filterValidOps(parsePatchOps(r.content), roleBlocks),
+    ops,
     model: r.model,
     tokens: { input: r.input_tokens ?? 0, output: r.output_tokens ?? 0 },
+    ops_dropped_unknown_role,
   };
 }
 
@@ -142,7 +187,7 @@ function buildPatchUserMessage(
 ): string {
   const targetRoles = new Set(directives.map(d => d.target_role).filter(Boolean) as string[]);
   const relevantBlocks = roleBlocks.filter(b =>
-    [...targetRoles].some(role => sameRoleish(b.role, role)),
+    [...targetRoles].some(role => sameRole(b.role, role)),
   );
   const techSwaps = input.tech_swaps ?? input.judge_json.tailoring_hints?.tech_swaps ?? [];
 
@@ -216,7 +261,7 @@ function parsePatchOps(content: string): PatchOp[] {
 function filterValidOps(ops: PatchOp[], roleBlocks: RoleBlock[]): PatchOp[] {
   const available = roleBlocks.map(b => b.role).join(", ");
   return ops.filter(op => {
-    const block = roleBlocks.find(b => sameRoleish(b.role, op.role));
+    const block = roleBlocks.find(b => sameRole(b.role, op.role));
     if (!block) {
       console.warn(`[patch] filterValidOps: dropped — role "${op.role}" not in [${available}]`);
       return false;
@@ -250,13 +295,13 @@ function isPatchOp(x: unknown): x is PatchOp {
 }
 
 /**
- * Performs tolerant role matching between planner output and canonical blocks.
+ * Exact normalized role equality between planner output and canonical blocks.
  *
  * @param a - Canonical role label.
  * @param b - Planner or directive role label.
- * @returns `true` when normalized strings match or one contains other.
+ * @returns `true` when normalized strings are identical.
  */
-function sameRoleish(a: string, b: string): boolean {
+function sameRole(a: string, b: string): boolean {
   return normalize(a) === normalize(b);
 }
 

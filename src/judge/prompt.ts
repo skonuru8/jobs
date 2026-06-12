@@ -69,6 +69,7 @@ export function buildSystemPrompt(
   profile: Profile,
   rolesList?: string,
   canonicalSkills?: string,
+  allowedRoleLabels?: string[],
 ): string {
   const candidateSection = buildCandidateProfileSection(profile);
   const rolesSection = rolesList?.trim()
@@ -77,6 +78,9 @@ export function buildSystemPrompt(
   const skillsSection = canonicalSkills?.trim()
     ? `\n\nCANDIDATE FULL SKILLS LIST (verbatim from resume):\n${canonicalSkills.trim()}\n\nWhen identifying gaps, FIRST check this list. Do not flag a technology as a gap if it appears here.`
     : "";
+  const roleLabelsBlock = allowedRoleLabels && allowedRoleLabels.length > 0
+    ? `ALLOWED target_role VALUES — copy ONE verbatim, character-for-character:\n${JSON.stringify(allowedRoleLabels)}\n(list is built at runtime from the canonical resume parser)\nAny other string, any combination, any paraphrase is invalid and will be discarded downstream.\nProject bullets live under their "Project: X" label, NOT under the employer label.`
+    : `target_role must EXACTLY match one of these block headers from the candidate's experience:\n"Hitachi Vantara" (employer-level; use only for cross-project or promotion claims),\n"Project: Nokia" (Nokia CPQ bullets), "Project: PHIA" (PHIA Group / PATS bullets),\n"Project: Nissan" (Nissan telemetry bullets), "AquilaEdge LLC", "Persistent Systems".\nNever invent a role name. Never emit composite forms like "Hitachi Vantara / Nokia" or\nbare project names like "Nokia" or "PHIA Group". Those strings do not exist as resume\nblocks and will be silently dropped. If targeting Nokia-specific bullets, target_role =\n"Project: Nokia". If targeting PHIA bullets, target_role = "Project: PHIA".\nIf targeting Nissan bullets, target_role = "Project: Nissan".`;
 
   return `You are a job application screener for a senior software engineer.
 
@@ -254,15 +258,7 @@ Handling guide:
     at the same role — mutually exclusive; pick the one that fits the canonical bullets).
   - If a JD requirement cannot be made coherent with the role's real stack, use acknowledge/ignore.
 
-target_role must EXACTLY match one of these block headers from the candidate's experience:
-"Hitachi Vantara" (employer-level; use only for cross-project or promotion claims),
-"Project: Nokia" (Nokia CPQ bullets), "Project: PHIA" (PHIA Group / PATS bullets),
-"Project: Nissan" (Nissan telemetry bullets), "AquilaEdge LLC", "Persistent Systems".
-Never invent a role name. Never emit composite forms like "Hitachi Vantara / Nokia" or
-bare project names like "Nokia" or "PHIA Group". Those strings do not exist as resume
-blocks and will be silently dropped. If targeting Nokia-specific bullets, target_role =
-"Project: Nokia". If targeting PHIA bullets, target_role = "Project: PHIA".
-If targeting Nissan bullets, target_role = "Project: Nissan".
+${roleLabelsBlock}
 
 TECH_SWAPS: for each swap, also emit target_role to scope the swap to a specific
 role. If a swap genuinely applies everywhere, set target_role: null.

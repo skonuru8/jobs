@@ -175,7 +175,7 @@ describe("validateJudge", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildJudgePrompt", () => {
-  const input: JudgeInput = { job: BASE_JOB, score: BASE_SCORE };
+  const input: JudgeInput = { job: BASE_JOB, score: BASE_SCORE, profile: baseProfile() };
 
   it("includes job title and company", () => {
     const prompt = buildJudgePrompt(input);
@@ -204,22 +204,22 @@ describe("buildJudgePrompt", () => {
   });
 
   it("shows 'sponsorship offered' when visa_sponsorship = offered", () => {
-    const with_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: "offered" }, score: BASE_SCORE };
+    const with_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: "offered" }, score: BASE_SCORE, profile: baseProfile() };
     expect(buildJudgePrompt(with_visa)).toContain("sponsorship offered");
   });
 
   it("shows 'NO sponsorship' when visa_sponsorship = denied", () => {
-    const no_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: "denied" }, score: BASE_SCORE };
+    const no_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: "denied" }, score: BASE_SCORE, profile: baseProfile() };
     expect(buildJudgePrompt(no_visa)).toContain("NO sponsorship");
   });
 
   it("shows 'not mentioned' when visa_sponsorship = unmentioned", () => {
-    const null_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: "unmentioned" }, score: BASE_SCORE };
+    const null_visa: JudgeInput = { job: { ...BASE_JOB, visa_sponsorship: "unmentioned" }, score: BASE_SCORE, profile: baseProfile() };
     expect(buildJudgePrompt(null_visa)).toContain("not mentioned");
   });
 
   it("shows 'none' when flags is empty", () => {
-    const no_flags: JudgeInput = { job: { ...BASE_JOB, flags: [] }, score: BASE_SCORE };
+    const no_flags: JudgeInput = { job: { ...BASE_JOB, flags: [] }, score: BASE_SCORE, profile: baseProfile() };
     expect(buildJudgePrompt(no_flags)).toContain("Flags:            none");
   });
 

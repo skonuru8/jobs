@@ -181,6 +181,7 @@ export async function generateAndSaveResume(
     patch_coverage:   gen.patch?.coverage ?? null,
     patch_retry_count: gen.patch?.retry_count ?? 0,
     patch_failed_directives: gen.patch?.failed_directives ?? [],
+    patch_ops_dropped_unknown_role: gen.patch?.ops_dropped_unknown_role ?? 0,
     input_tokens:    gen.tokens.input,
     output_tokens:   gen.tokens.output,
     word_count:      wc,

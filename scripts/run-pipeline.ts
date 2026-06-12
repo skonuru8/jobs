@@ -45,6 +45,7 @@ import type { ResumeGenConfig } from "@/resume-generator/types";
 
 import { buildExperienceBlockFromCanonicalTex } from "@/cover-letter/resume-brief";
 import { extractRolesFromCanonicalResume, extractSkillsSectionFromCanonical } from "@/judge/roles-extractor";
+import { extractRoleLabels } from "@/resume-generator/patch/parser";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
 import { findCachedResumeOutcome } from "@/artifacts/resume-cache";
@@ -106,14 +107,13 @@ const SKIP_PERSIST   = parseBoolEnv(process.env.SKIP_PERSIST);  // bypass Postgr
 const VERIFY         = parseBoolEnv(process.env.VERIFY);        // run Redis↔Postgres integrity check
 
 // Dice-only env vars. Both passed through to the scraper subprocess.
-//   QUERY="java developer"          search term (default below)
+//   QUERY=<term>                    search term (default: config scraping.dice.query)
 //   POSTED_WITHIN=ONE|THREE|SEVEN   server-side recency filter:
 //                                     ONE   = jobs posted in last 24h
 //                                     THREE = jobs posted in last 3 days
 //                                     SEVEN = jobs posted in last 7 days
 //                                     unset = no filter (all listings)
 // Use POSTED_WITHIN=ONE for cron runs to only pull genuinely new jobs.
-const QUERY          = process.env.QUERY ?? "java developer";
 const POSTED_WITHIN  = process.env.POSTED_WITHIN ?? "";   // "" = no filter
 
 // Real-data extraction fixtures live alongside the existing extractor fixtures.
@@ -158,6 +158,7 @@ async function main(): Promise<void> {
     die(`Config not found at ${CONFIG_PATH}`);
   }
   const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+  const QUERY = process.env.QUERY ?? (config.scraping?.dice?.query as string | undefined) ?? "java developer";
   const extractorConfig = {
     model:       config.llm.extractor.model       as string,
     max_tokens:  config.llm.extractor.max_tokens  as number,
@@ -871,9 +872,10 @@ async function processJobs(
             location:  scoreResult.components.location,
           },
         },
-        profile:          profile as Profile,
-        roles_list:       rolesList || undefined,
-        canonical_skills: canonicalSkillsText || undefined,
+        profile:             profile as Profile,
+        roles_list:          rolesList || undefined,
+        canonical_skills:    canonicalSkillsText || undefined,
+        allowed_role_labels: canonicalResumeTex ? extractRoleLabels(canonicalResumeTex) : undefined,
       };
 
       judgeResult = await judge(judgeInput, judgeConfigArg);

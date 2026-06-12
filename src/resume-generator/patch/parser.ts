@@ -28,6 +28,17 @@ const NEXT_SECTION_RE = /\\section\*?\{(?:PROJECTS|EDUCATION|AWARDS|SKILLS|SUMMA
  * @param tex - Canonical resume LaTeX source to inspect.
  * @returns Parsed role blocks in source order, or empty array when EXPERIENCE is absent.
  */
+/**
+ * Canonical addressable role labels, in source order. Single source of truth
+ * for judge target_role values and patch op routing.
+ *
+ * @param tex - Canonical resume LaTeX source.
+ * @returns Ordered list of exact role label strings matching `RoleBlock.role`.
+ */
+export function extractRoleLabels(tex: string): string[] {
+  return extractRoleBlocks(tex).map(b => b.role);
+}
+
 export function extractRoleBlocks(tex: string): RoleBlock[] {
   const expMatch = EXPERIENCE_RE.exec(tex);
   if (!expMatch) return [];

@@ -77,12 +77,14 @@ export interface JudgeInput {
   /** Optional identifiers for validation-failure payload capture. */
   run_id?: string | null;
   job_id?: string | null;
-  /** When set, system prompt uses live profile instead of a static template. */
-  profile?: Profile;
+  /** Candidate profile used to build system prompt. Required at all production call sites. */
+  profile: Profile;
   /** Work-history lines extracted from canonical resume TeX. */
   roles_list?: string;
   /** SKILLS section text from canonical resume TeX — prevents judge from flagging known skills as gaps. */
   canonical_skills?: string;
+  /** Exact role labels from parser — judge target_role must match one of these verbatim. */
+  allowed_role_labels?: string[];
 }
 
 // ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ import { countWordsTex, latexStructureOk } from "../generator";
 import type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "../types";
 import { applyPatchOps } from "./apply";
 import { verifyPatchCoverage } from "./coverage";
+import { runDiffLint } from "./diff-lint";
 import { activeGapDirectives, generatePatchOps, PATCH_PROMPT_SHA } from "./generator";
 import { extractRoleBlocks } from "./parser";
 
@@ -43,11 +44,17 @@ export async function generatePatchedResumeTex(
   let model = config.model;
   let retryCount = 0;
   let prevMissed: string[] = [];
+  let prevLintViolations: string[] = [];
+  let totalDroppedUnknownRole = 0;
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const retryHint = prevMissed.length > 0
+    const missedPart = prevMissed.length > 0
       ? `Previously missed directives: ${prevMissed.map(r => `"${r}"`).join(", ")}. For each, add or rewrite a bullet at the directive's target_role.`
-      : undefined;
+      : "";
+    const lintPart = prevLintViolations.length > 0
+      ? ` Lint violations to fix: ${prevLintViolations.join("; ")}.`
+      : "";
+    const retryHint = (missedPart || lintPart) ? `${missedPart}${lintPart}` : undefined;
     let generated;
     try {
       generated = await generatePatchOps(input, config, roleBlocks, retryHint);
@@ -71,9 +78,13 @@ export async function generatePatchedResumeTex(
     totalInput += generated.tokens.input;
     totalOutput += generated.tokens.output;
     model = generated.model;
+    totalDroppedUnknownRole += generated.ops_dropped_unknown_role;
 
     const tex = applyPatchOps(input.canonical_resume_tex, allOps);
     const coverage = verifyPatchCoverage(tex, directives);
+    const allDirectives = input.gap_directives ?? input.judge_json.gap_directives ?? [];
+    const lintResult = runDiffLint(tex, allOps, allDirectives, config.word_count_min, config.word_count_max);
+
     if (coverage.missed.length === 0 || attempt === 1) {
       if (allOps.length === 0 && coverage.missed.length > 0) {
         return {
@@ -92,6 +103,7 @@ export async function generatePatchedResumeTex(
       if (coverage.missed.length > 0) warnings.push("resume_patch_coverage_failed");
       if (findBannedStylePhrases(tex).length > 0) warnings.push("banned_phrase_in_output");
       if (!latexStructureOk(tex)) warnings.push("tex_malformed");
+      for (const flag of lintResult.flags) warnings.push(flag);
 
       return {
         status: "ok",
@@ -108,10 +120,12 @@ export async function generatePatchedResumeTex(
           retry_count: retryCount,
           failed_directives: coverage.missed,
           prompt_sha: PATCH_PROMPT_SHA,
+          ops_dropped_unknown_role: totalDroppedUnknownRole,
         },
       } as ResumeGenResult;
     }
     prevMissed = coverage.missed;
+    prevLintViolations = lintResult.violations;
     retryCount += 1;
   }
 

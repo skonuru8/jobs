@@ -97,3 +97,12 @@ THE-BIBLE-v1.md
 # Completed bug audit docs (historical; committed work is the record)
 docs/patch-bugs.md
 docs/patch-fixes.md
+
+# Local planning / track docs (session artifacts, not repo deliverables)
+00-MASTER-PLAN.md
+TRACK-A-SOURCING-SCOPE.md
+TRACK-B-PATCH-ROOT-REPAIR.md
+TRACK-C-EVAL-HARNESS.md
+TRACK-D-VERIFICATION-SWEEP.md
+TRACK-E-CONFIG-EXTRACTION.md
+scripts/clean-slate.ts

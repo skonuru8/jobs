@@ -22,6 +22,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from scraper.common.app_config import load_scraping_config
 from scraper.common.output import make_run_id, write_jsonl
 
 # Default cookies directory — relative to project root
@@ -71,8 +72,8 @@ def main() -> int:
     parser.add_argument(
         "--query",
         type=str,
-        default="java developer",
-        help="Dice only: search query string (default: 'java developer').",
+        default=None,
+        help="Dice only: search query string (default: from config scraping.dice.query).",
     )
     parser.add_argument(
         "--posted-within",
@@ -141,10 +142,14 @@ def _get_adapter(args, cookies_path: Path, run_id: str):
     """Return a jobs iterator from the appropriate adapter."""
     if args.source == "dice":
         from scraper.dice import scrape
+        query = args.query
+        if query is None:
+            cfg = load_scraping_config()
+            query = cfg["dice"]["query"]
         return scrape(
             max_jobs=args.max_jobs,
             run_id=run_id,
-            query=args.query,
+            query=query,
             headless=not args.headed,
             posted_within=args.posted_within,
         )

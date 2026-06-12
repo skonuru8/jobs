@@ -109,4 +109,6 @@ export interface PatchResult {
   failed_directives: string[];
   /** Stable hash of patch prompt template used to generate ops. */
   prompt_sha: string;
+  /** Ops emitted by planner that were dropped because their role was not in canonical blocks. */
+  ops_dropped_unknown_role: number;
 }

@@ -37,8 +37,9 @@ generic filler. Do not repeat earlier paragraphs.
    sentence (years of experience + 3-4 key technologies from the JD that match
    the canonical resume).
 2. Strongest relevant past experience with specific metrics from the canonical
-   resume only (e.g., 85% reduction, 55% latency improvement, 100+ GB
-   telemetry) mapped to JD requirements.
+   resume only (e.g., a percentage improvement, a latency reduction, a
+   data-volume or scale figure taken verbatim from the CANDIDATE EXPERIENCE
+   block) mapped to JD requirements.
 3. Second relevant experience OR a company/role-specific hook (the company's
    domain, mission, or stated values from the JD).
 4. Closing: location/availability fit, education, closing offer to discuss.
