@@ -592,25 +592,18 @@ body{
 .head-link svg{ width:13px; height:13px; }
 .head-link:hover{ color:var(--ink); border-color:var(--ink-3); background:var(--surface-2); box-shadow:var(--shadow-sm), 0 0 0 3px var(--accent-soft); transform:translateY(-1px); }
 
-/* ─── HEAD STATUS ROW (quick applied toggle visible on card header) */
-.head-status-row{
-  display:inline-flex; align-items:center; gap:2px; margin-top:7px;
-  background:var(--surface-3); border:1px solid var(--line); border-radius:var(--r-pill); padding:2px;
-  box-shadow:inset 0 1px 2px rgba(0,0,0,.04);
+/* ─── STATUS META BUTTONS (inline apply toggle on card header meta row) */
+.smb{
+  font-family:var(--font-ui); font-size:11px; font-weight:600; letter-spacing:.01em;
+  padding:2px 8px; border-radius:var(--r-pill); border:1px solid var(--line-2);
+  background:transparent; color:var(--ink-3); cursor:pointer;
+  transition:color .14s var(--ease), background .14s var(--ease), border-color .14s var(--ease), transform .08s var(--ease);
 }
-.head-status-row button{
-  border:none; background:transparent; cursor:pointer;
-  font-family:var(--font-ui); font-size:11px; font-weight:600;
-  color:var(--ink-3); padding:4px 11px; border-radius:var(--r-pill);
-  transition:background .15s var(--ease), color .15s var(--ease), transform .08s var(--ease);
-}
-.head-status-row button:hover{ color:var(--ink); }
-.head-status-row button:active{ transform:var(--press); }
-.head-status-row button.on-applied{ background:var(--pos); color:#fff; }
-.head-status-row button.on-later{ background:var(--info); color:#fff; }
-.head-status-row button.on-skip{ background:var(--ink-2); color:var(--paper); }
-.app[data-theme="dark"] .head-status-row button.on-applied,
-.app[data-theme="dark"] .head-status-row button.on-later{ color:var(--accent-ink); }
+.smb:hover{ color:var(--ink); border-color:var(--ink-3); }
+.smb:active{ transform:var(--press); }
+.smb.smb-applied{ background:var(--pos-soft); color:var(--pos); border-color:color-mix(in srgb,var(--pos) 30%,transparent); }
+.smb.smb-later  { background:var(--info-soft); color:var(--info); border-color:color-mix(in srgb,var(--info) 30%,transparent); }
+.smb.smb-skip   { background:var(--paper-2); color:var(--ink-2); border-color:var(--line); }
 
 /* ─── SOURCE DROPDOWN ───────────────────────────────────────────── */
 .src-select{ position:relative; display:inline-flex; align-items:center; background:var(--paper-2); border:1px solid var(--line); border-radius:var(--r-pill); }

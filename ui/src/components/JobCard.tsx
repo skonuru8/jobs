@@ -183,14 +183,15 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
             {'judge_verdict' in row && <VerdictTag v={(row as ApplyQueueRow).judge_verdict} />}
             <span className="j-dot" />
             <span className="j-time">{timeAgo(row.scraped_at)}</span>
+            {mode === 'apply' && (
+              <>
+                <span className="j-dot" />
+                <button className={`smb${appStatus === 'applied' ? ' smb-applied' : ''}`} disabled={saving} onClick={e => { e.stopPropagation(); handleHeadStatus('applied'); }}>Applied</button>
+                <button className={`smb${appStatus === 'apply_later' ? ' smb-later' : ''}`} disabled={saving} onClick={e => { e.stopPropagation(); handleHeadStatus('apply_later'); }}>Later</button>
+                <button className={`smb${appStatus === 'skipped' ? ' smb-skip' : ''}`} disabled={saving} onClick={e => { e.stopPropagation(); handleHeadStatus('skipped'); }}>Skip</button>
+              </>
+            )}
           </div>
-          {mode === 'apply' && (
-            <div className="head-status-row" onClick={e => e.stopPropagation()}>
-              <button className={appStatus === 'applied' ? 'on-applied' : ''} disabled={saving} onClick={() => handleHeadStatus('applied')}>Applied</button>
-              <button className={appStatus === 'apply_later' ? 'on-later' : ''} disabled={saving} onClick={() => handleHeadStatus('apply_later')}>Later</button>
-              <button className={appStatus === 'skipped' ? 'on-skip' : ''} disabled={saving} onClick={() => handleHeadStatus('skipped')}>Skip</button>
-            </div>
-          )}
           {hardRow && <div className="flag-strip"><Warn /> {hardRow.reason}</div>}
           {hasScore && <MiniScores row={row as ApplyQueueRow} />}
           {applyRow?.artifact_flags && applyRow.artifact_flags.length > 0 && (
