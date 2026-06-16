@@ -131,6 +131,13 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
     const ok = await doPost(label, s);
     if (ok) onDataChange?.();
   }
+  // Quick toggle from card header — works even before a verdict is set
+  async function handleHeadStatus(s: AppStatus) {
+    const autoLabel: Label = s === 'skipped' ? 'no' : (label ?? 'yes');
+    setLabel(autoLabel); setAppStatus(s);
+    const ok = await doPost(autoLabel, s);
+    if (ok) onDataChange?.();
+  }
   async function handleNotesBlur() { if (label) await doPost(label); }
   async function handleDismiss() {
     if (!chips.length) return;
@@ -177,11 +184,11 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
             <span className="j-dot" />
             <span className="j-time">{timeAgo(row.scraped_at)}</span>
           </div>
-          {mode === 'apply' && label && label !== 'no' && (
+          {mode === 'apply' && (
             <div className="head-status-row" onClick={e => e.stopPropagation()}>
-              <button className={appStatus === 'applied' ? 'on-applied' : ''} disabled={saving} onClick={() => handleStatus('applied')}>Applied</button>
-              <button className={appStatus === 'apply_later' ? 'on-later' : ''} disabled={saving} onClick={() => handleStatus('apply_later')}>Later</button>
-              <button className={appStatus === 'skipped' ? 'on-skip' : ''} disabled={saving} onClick={() => handleStatus('skipped')}>Skip</button>
+              <button className={appStatus === 'applied' ? 'on-applied' : ''} disabled={saving} onClick={() => handleHeadStatus('applied')}>Applied</button>
+              <button className={appStatus === 'apply_later' ? 'on-later' : ''} disabled={saving} onClick={() => handleHeadStatus('apply_later')}>Later</button>
+              <button className={appStatus === 'skipped' ? 'on-skip' : ''} disabled={saving} onClick={() => handleHeadStatus('skipped')}>Skip</button>
             </div>
           )}
           {hardRow && <div className="flag-strip"><Warn /> {hardRow.reason}</div>}
