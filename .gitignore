@@ -70,6 +70,7 @@ CLAUDE.md
 .mcp.json
 
 .claude/
+.codex/
 .cursor/
 .cursorrules
 
@@ -96,7 +97,8 @@ docs/patch-tailoring-plan.md
 
 # Generated / large reference files not needed in repo
 tester.html
-THE-BIBLE-v1.md
+THE-BIBLE*.md
+ui/README_REDESIGN.md
 
 # Completed bug audit docs (historical; committed work is the record)
 docs/patch-bugs.md
