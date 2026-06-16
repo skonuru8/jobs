@@ -73,11 +73,15 @@ CLAUDE.md
 .cursor/
 .cursorrules
 
-# Local Codex skills installed for this machine only
-.agents/skills/cavecrew/
-.agents/skills/caveman*/
+# Local AI agent skills (machine-local, not repo deliverables)
+.agents/
 skills/cavecrew
-skills/caveman*
+skills/caveman
+skills/caveman-commit
+skills/caveman-compress
+skills/caveman-help
+skills/caveman-review
+skills/caveman-stats
 skills-lock.json
 
 # Local handoff/context notes for chat-to-chat transfer
