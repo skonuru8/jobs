@@ -52,6 +52,32 @@ function Shell() {
 
   useSmoothScroll(contentRef, activeTab);
 
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let tx = 50, ty = 30, cx = 50, cy = 30, raf = 0;
+    const onMove = (e: MouseEvent) => {
+      tx = (e.clientX / window.innerWidth) * 100;
+      ty = (e.clientY / window.innerHeight) * 100;
+    };
+    const tick = () => {
+      cx += (tx - cx) * 0.04;
+      cy += (ty - cy) * 0.04;
+      const w = window.innerWidth, h = window.innerHeight;
+      const ax = (((cx / 100) - .5) * w * .42).toFixed(1);
+      const ay = (((cy / 100) - .5) * h * .42).toFixed(1);
+      const bx = (-((cx / 100) - .5) * w * .28).toFixed(1);
+      const by = (-((cy / 100) - .5) * h * .28).toFixed(1);
+      document.documentElement.style.setProperty('--ax', `${ax}px`);
+      document.documentElement.style.setProperty('--ay', `${ay}px`);
+      document.documentElement.style.setProperty('--bx', `${bx}px`);
+      document.documentElement.style.setProperty('--by', `${by}px`);
+      raf = requestAnimationFrame(tick);
+    };
+    window.addEventListener('mousemove', onMove, { passive: true });
+    raf = requestAnimationFrame(tick);
+    return () => { window.removeEventListener('mousemove', onMove); cancelAnimationFrame(raf); };
+  }, []);
+
   const meta = TABS.find(t => t.id === activeTab)!;
   const showSearch = activeTab === 'apply' || activeTab === 'hard' || activeTab === 'soft';
 

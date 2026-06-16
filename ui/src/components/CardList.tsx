@@ -79,7 +79,7 @@ export function CardList({ rows, mode, searchQuery, onStatsUpdate, onDataChange,
           index={i}
           expanded={openId === row.job_id}
           kbFocus={kb === i}
-          onToggle={() => setOpenId(p => p === row.job_id ? null : row.job_id)}
+          onToggle={() => { setKb(i); setOpenId(p => p === row.job_id ? null : row.job_id); }}
           onStatsUpdate={onStatsUpdate}
           onDataChange={onDataChange}
           cardRef={el => { refs.current[i] = el; }}
