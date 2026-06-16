@@ -1,97 +1,177 @@
 import { useState, useEffect } from 'react';
 
-interface DiffLine {
-  type: 'added' | 'removed' | 'unchanged';
-  text: string;
+// ─── Types ────────────────────────────────────────────────────────
+
+interface SemanticChange {
+  type: 'replaced' | 'added' | 'removed';
+  section: string;
+  oldText?: string;
+  newText?: string;
+  text?: string;
 }
 
-async function getResumeTex(jobId: string): Promise<{ tailored: string; canonical: string } | null> {
-  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/resume-tex`);
-  if (!res.ok) return null;
-  return res.json();
+// ─── LaTeX helpers ────────────────────────────────────────────────
+
+function cleanLatex(raw: string): string {
+  return raw
+    .replace(/\\href\{[^}]*\}\{([^}]*)\}/g, '$1')
+    .replace(/\\textbf\{([^}]*)\}/g, '$1')
+    .replace(/\\textit\{([^}]*)\}/g, '$1')
+    .replace(/\\emph\{([^}]*)\}/g, '$1')
+    .replace(/\\[a-zA-Z]+\{([^}]*)\}/g, '$1')
+    .replace(/\\[a-zA-Z]+/g, '')
+    .replace(/[{}]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-function computeDiff(canonical: string, tailored: string): DiffLine[] {
-  const canonicalLines = canonical.split('\n');
-  const tailoredLines = tailored.split('\n');
-  const expStart = (lines: string[]) => lines.findIndex(line => line.includes('\\section*{EXPERIENCE}'));
-  const aStart = expStart(canonicalLines);
-  const bStart = expStart(tailoredLines);
-  const aSlice = aStart >= 0 ? canonicalLines.slice(aStart) : canonicalLines;
-  const bSlice = bStart >= 0 ? tailoredLines.slice(bStart) : tailoredLines;
+function parseSections(tex: string): Map<string, string[]> {
+  const sections = new Map<string, string[]>();
+  let current = '';
 
-  const remainingCanonical = new Set(aSlice);
-  const tailoredSet = new Set(bSlice);
-  const result: DiffLine[] = [];
-
-  bSlice.forEach(line => {
-    if (remainingCanonical.has(line)) {
-      result.push({ type: 'unchanged', text: line });
-      remainingCanonical.delete(line);
-    } else {
-      result.push({ type: 'added', text: line });
+  for (const line of tex.split('\n')) {
+    const sec = line.match(/\\section\*?\{([^}]+)\}/);
+    if (sec) {
+      current = sec[1].trim();
+      if (!sections.has(current)) sections.set(current, []);
+      continue;
     }
-  });
-
-  aSlice.forEach(line => {
-    if (remainingCanonical.has(line) && !tailoredSet.has(line)) {
-      const insertAt = Math.max(result.findIndex(item => item.type === 'unchanged'), 0);
-      result.splice(insertAt, 0, { type: 'removed', text: line });
+    if (!current) continue;
+    const trimmed = line.trim();
+    if (trimmed.startsWith('\\item')) {
+      const bullet = trimmed.replace(/^\\item\s*/, '').trim();
+      if (bullet) sections.get(current)!.push(bullet);
     }
-  });
+  }
 
-  return result.filter(line => {
-    if (line.type !== 'unchanged') return true;
-    const trimmed = line.text.trim();
-    return trimmed.startsWith('\\item') || trimmed.startsWith('\\section') || trimmed.startsWith('\\textbf');
-  }).slice(0, 200);
+  return sections;
+}
+
+// Word-overlap similarity (ignores short stop words)
+function wordSim(a: string, b: string): number {
+  const tok = (s: string) =>
+    new Set(s.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+  const aW = tok(a);
+  const bW = tok(b);
+  const n = [...aW].filter(w => bW.has(w)).length;
+  const d = Math.max(aW.size, bW.size);
+  return d > 0 ? n / d : 0;
+}
+
+// ─── Semantic diff engine ─────────────────────────────────────────
+
+function computeSemanticChanges(canonical: string, tailored: string): SemanticChange[] {
+  const canonSec = parseSections(canonical);
+  const tailSec = parseSections(tailored);
+  const allSections = [...new Set([...canonSec.keys(), ...tailSec.keys()])];
+  const changes: SemanticChange[] = [];
+
+  for (const section of allSections) {
+    const cBullets = canonSec.get(section) ?? [];
+    const tBullets = tailSec.get(section) ?? [];
+
+    const cSet = new Set(cBullets);
+    const tSet = new Set(tBullets);
+
+    const added   = tBullets.filter(b => !cSet.has(b));
+    const removed = cBullets.filter(b => !tSet.has(b));
+
+    const usedAdded   = new Set<number>();
+    const usedRemoved = new Set<number>();
+
+    // Pair removed+added as replacements when word similarity > threshold
+    for (let ri = 0; ri < removed.length; ri++) {
+      let best = 0.28;
+      let bestAi = -1;
+      for (let ai = 0; ai < added.length; ai++) {
+        if (usedAdded.has(ai)) continue;
+        const s = wordSim(removed[ri], added[ai]);
+        if (s > best) { best = s; bestAi = ai; }
+      }
+      if (bestAi >= 0) {
+        usedAdded.add(bestAi);
+        usedRemoved.add(ri);
+        changes.push({ type: 'replaced', section, oldText: removed[ri], newText: added[bestAi] });
+      }
+    }
+
+    removed.forEach((b, i) => {
+      if (!usedRemoved.has(i)) changes.push({ type: 'removed', section, text: b });
+    });
+    added.forEach((b, i) => {
+      if (!usedAdded.has(i)) changes.push({ type: 'added', section, text: b });
+    });
+  }
+
+  return changes;
+}
+
+// ─── Component ────────────────────────────────────────────────────
+
+function Badge({ type }: { type: SemanticChange['type'] }) {
+  const label = type === 'replaced' ? 'replaced' : type === 'added' ? 'added' : 'removed';
+  return <span className={`sdiff-badge ${type}`}>{label}</span>;
 }
 
 export function ResumeDiff({ jobId }: { jobId: string }) {
-  const [lines, setLines] = useState<DiffLine[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [changes, setChanges] = useState<SemanticChange[] | null>(null);
+  const [error, setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getResumeTex(jobId)
-      .then(data => {
-        if (!data) {
-          setError('Resume source not found');
-          return;
-        }
-        if (!data.canonical) {
-          setError('Canonical resume not found in config/');
-          return;
-        }
-        setLines(computeDiff(data.canonical, data.tailored));
+    setLoading(true); setError(null);
+    fetch(`/api/jobs/${encodeURIComponent(jobId)}/resume-tex`)
+      .then(async r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<{ tailored: string; canonical: string }>;
+      })
+      .then(({ canonical, tailored }) => {
+        if (!canonical) throw new Error('Canonical resume not found in config/');
+        setChanges(computeSemanticChanges(canonical, tailored));
       })
       .catch(e => setError((e as Error).message))
       .finally(() => setLoading(false));
   }, [jobId]);
 
   if (loading) return <div className="diff-loading">Loading diff...</div>;
-  if (error) return <div className="dp-error">{error}</div>;
-  if (!lines) return null;
+  if (error)   return <div className="dp-error">{error}</div>;
+  if (!changes) return null;
 
-  const added = lines.filter(line => line.type === 'added').length;
-  const removed = lines.filter(line => line.type === 'removed').length;
+  if (changes.length === 0) {
+    return <div className="sdiff-empty">No bullet changes from canonical resume</div>;
+  }
+
+  const nReplaced = changes.filter(c => c.type === 'replaced').length;
+  const nAdded    = changes.filter(c => c.type === 'added').length;
+  const nRemoved  = changes.filter(c => c.type === 'removed').length;
+  const sections  = [...new Set(changes.map(c => c.section))];
 
   return (
     <>
-      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 5 }}>
-        <span style={{ color: 'var(--green)', marginRight: 10 }}>+{added} added</span>
-        <span style={{ color: 'var(--pink)' }}>-{removed} removed</span>
-        <span style={{ marginLeft: 8, opacity: .6 }}>(EXPERIENCE section)</span>
+      <div className="sdiff-stat">
+        {nReplaced > 0 && <span className="sdiff-stat-replaced">~{nReplaced} replaced</span>}
+        {nAdded    > 0 && <span className="sdiff-stat-added">+{nAdded} added</span>}
+        {nRemoved  > 0 && <span className="sdiff-stat-removed">-{nRemoved} removed</span>}
       </div>
-      <div className="diff-container">
-        {lines.map((line, i) => (
-          <div key={i} className={`diff-line ${line.type}`}>
-            <span className="diff-marker">
-              {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}
-            </span>
-            <span>{line.text}</span>
+
+      <div className="sdiff">
+        {sections.map(section => (
+          <div key={section} className="sdiff-section">
+            <div className="sdiff-section-head">{section}</div>
+            {changes.filter(c => c.section === section).map((c, i) => (
+              <div key={i} className="sdiff-row">
+                <Badge type={c.type} />
+                {c.type === 'replaced' && (
+                  <>
+                    <div className="sdiff-old">{cleanLatex(c.oldText!)}</div>
+                    <div className="sdiff-arrow">↓</div>
+                    <div className="sdiff-new">{cleanLatex(c.newText!)}</div>
+                  </>
+                )}
+                {c.type === 'added'    && <div className="sdiff-bullet sdiff-bullet-added">{cleanLatex(c.text!)}</div>}
+                {c.type === 'removed'  && <div className="sdiff-bullet sdiff-bullet-removed">{cleanLatex(c.text!)}</div>}
+              </div>
+            ))}
           </div>
         ))}
       </div>
