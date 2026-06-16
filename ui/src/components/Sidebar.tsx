@@ -84,11 +84,19 @@ export function Sidebar({ activeTab, onChange, stats, scope, onToggleScope, coll
               <button className={scope === 'total' ? 'on' : ''} onClick={() => onToggleScope('total')}>Total</button>
             </div>
           </div>
-          <div className="stat-grid">
-            <div className="stat-cell"><div className="stat-num">{stats.pending}</div><div className="stat-lbl">Pending</div></div>
-            <div className="stat-cell"><div className="stat-num">{stats.applied}</div><div className="stat-lbl">Applied</div></div>
+          <div className="stat-bento">
+            <div className="stat-bento-main">
+              <div>
+                <div className="stat-num">{stats.pending}</div>
+                <div className="stat-lbl">Pending</div>
+              </div>
+              <div className="stat-spark">{spark.map((v, i) => <i key={i} style={{ height: `${(v / mx) * 100}%`, opacity: 0.3 + 0.6 * (i / spark.length) }} />)}</div>
+            </div>
+            <div className="stat-bento-sec">
+              <div className="stat-num">{stats.applied}</div>
+              <div className="stat-lbl">Applied</div>
+            </div>
           </div>
-          <div className="stat-spark">{spark.map((v, i) => <i key={i} style={{ height: `${(v / mx) * 100}%`, opacity: 0.3 + 0.6 * (i / spark.length) }} />)}</div>
         </div>
       )}
 

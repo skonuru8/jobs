@@ -40,12 +40,13 @@ import { JobSkill, ProfileSkill, LocationInfo } from "./types.js";
  */
 const THIN_EXTRACTION_THRESHOLD = 6;   // jobs with fewer r+p skills trigger ceiling
 const THIN_EXTRACTION_CEILING   = 0.85;
+const EMPTY_SKILLS_SCORE = 0.75; // benefit of the doubt when JD lists no skills — consistent with scoreYOE unknown
 
 export function scoreSkills(
   jobSkills:     JobSkill[],
   profileSkills: ProfileSkill[],
 ): number {
-  if (!jobSkills.length) return 1.0;
+  if (!jobSkills.length) return EMPTY_SKILLS_SCORE;
 
   // Build profile skill lookup (canonical name → confidence weight)
   const profileMap = new Map<string, number>();

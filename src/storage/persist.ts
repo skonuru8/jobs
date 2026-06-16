@@ -146,7 +146,8 @@ export async function finishRun(runId: string, stats: RunStats): Promise<void> {
               jobs_gated             = $5,
               jobs_covered           = $6,
               extractions_attempted  = $7,
-              extractions_succeeded  = $8
+              extractions_succeeded  = $8,
+              exit_code              = COALESCE($9, exit_code)
         WHERE run_id = $1`,
       [
         runId,
@@ -157,6 +158,7 @@ export async function finishRun(runId: string, stats: RunStats): Promise<void> {
         stats.jobs_covered,
         stats.extractions_attempted,
         stats.extractions_succeeded,
+        stats.exit_code ?? null,
       ],
     );
   } catch (e) {

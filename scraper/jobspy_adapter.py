@@ -26,8 +26,8 @@ DEFAULT_PARAMS = {
     "site_name": ["linkedin"],
     "location": "United States",
     "results_wanted": 15,
-    "hours_old": 72,
-    "is_remote": None,
+    "hours_old": 5,   # run interval (4h) + 1h buffer; Redis dedup absorbs overlap
+    "is_remote": False,  # False = include all (remote + onsite); jobspy 1.1.82+ requires bool
     "distance": 50,  # ignored by LinkedIn at country-level geo; harmless
     "linkedin_fetch_description": True,   # JobSpy fetches JD at scrape time (guest API, no login); pipeline skips HTTP fetch
 }
@@ -39,7 +39,7 @@ def scrape(
     cookies_path: Path | None = None,    # ignored — JobSpy handles its own session
     search_terms: list[str] | None = None,
     location: str | None = None,
-    hours_old: int = 72,
+    hours_old: int | None = None,
 ) -> Iterator[dict]:
     """
     Scrape LinkedIn via JobSpy for senior engineering roles.
@@ -70,6 +70,7 @@ def scrape(
     li_cfg = cfg.get("linkedin", {})
     terms = search_terms or li_cfg["search_terms"]
     resolved_location = location or li_cfg["location"]
+    resolved_hours = hours_old if hours_old is not None else li_cfg.get("hours_old", DEFAULT_PARAMS["hours_old"])
     scraped_at = now_iso()
     seen_urls: set[str] = set()
     yielded = 0
@@ -77,14 +78,14 @@ def scrape(
     params = {
         **DEFAULT_PARAMS,
         "location": resolved_location,
-        "hours_old": hours_old,
+        "hours_old": resolved_hours,
     }
 
     for term in terms:
         if yielded >= max_jobs:
             break
 
-        _err(f"[linkedin] Searching: '{term}' (location={resolved_location}, hours_old={hours_old})")
+        _err(f"[linkedin] Searching: '{term}' (location={resolved_location}, hours_old={resolved_hours})")
 
         try:
             df = scrape_jobs(search_term=term, **params)
@@ -173,7 +174,11 @@ def _row_to_job(row, run_id: str, scraped_at: str) -> dict | None:
                                   tzinfo=timezone.utc)
                     job["meta"]["posted_at"] = dt.isoformat()
             else:
-                job["meta"]["posted_at"] = str(date_posted)
+                s = str(date_posted).strip()
+                if s and s.lower() != "nan":
+                    job["meta"]["posted_at"] = s
+                else:
+                    add_flag(job, FLAGS.POSTED_AT_MISSING)
         except Exception:
             add_flag(job, FLAGS.POSTED_AT_MISSING)
     else:

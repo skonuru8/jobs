@@ -307,56 +307,78 @@ async function main(): Promise<void> {
     ? extractSkillsSectionFromCanonical(canonicalTexPath)
     : "";
 
-  const results = await processJobs(
-    jsonlPath, profile, aliases,
-    extractorConfig, judgeConfig, coverLetterConfig, resumeGeneratorConfig,
-    scoringWeights, scoringThreshold,
-    profileEmbedding, resumeText, canonicalResumeTex, experienceBlock, rolesList, canonicalSkillsText, nowIso,
-    REPO_ROOT, RUN_ID, runFolderName, DO_RESUME_ARTIFACT, DO_COVER_ARTIFACT,
-  );
+  let ranFinishRun = false;
+  try {
+    const results = await processJobs(
+      jsonlPath, profile, aliases,
+      extractorConfig, judgeConfig, coverLetterConfig, resumeGeneratorConfig,
+      scoringWeights, scoringThreshold,
+      profileEmbedding, resumeText, canonicalResumeTex, experienceBlock, rolesList, canonicalSkillsText, nowIso,
+      REPO_ROOT, RUN_ID, runFolderName, DO_RESUME_ARTIFACT, DO_COVER_ARTIFACT,
+    );
 
-  let artifactIn = 0;
-  let artifactOut = 0;
-  for (const r of results) {
-    artifactIn += r.artifact_input_tokens ?? 0;
-    artifactOut += r.artifact_output_tokens ?? 0;
+    let artifactIn = 0;
+    let artifactOut = 0;
+    for (const r of results) {
+      artifactIn += r.artifact_input_tokens ?? 0;
+      artifactOut += r.artifact_output_tokens ?? 0;
+    }
+    if (artifactIn + artifactOut > 0) {
+      log(`Artifact LLM tokens (resume+cover this run): input=${artifactIn} output=${artifactOut} total=${artifactIn + artifactOut}`);
+    }
+
+    printResults(results, SOURCE, scoringThreshold);
+
+    // --- Save results to disk (JSONL — always written when EXTRACT=1) ---
+    if (DO_EXTRACT) {
+      const outPath = path.join(SCRAPER_OUT_DIR, `results_${SOURCE}_${RUN_ID}.jsonl`);
+      const lines = results.map(r => JSON.stringify(r)).join("\n");
+      fs.writeFileSync(outPath, lines + "\n", "utf-8");
+      log(`Results saved: ${outPath}`);
+    }
+
+    // --- Finish run record in Postgres ---
+    if (!SKIP_PERSIST) {
+      await finishRun(RUN_ID, {
+        finished_at:  new Date().toISOString(),
+        jobs_total:   results.length,
+        jobs_passed:  results.filter(r => r.verdict !== "REJECT" && r.verdict !== "DEDUP").length,
+        jobs_gated:   results.filter(r => r.verdict === "GATE_PASS").length,
+        jobs_covered: results.filter(r => r.cover_letter_path != null || r.resume_pdf_path != null).length,
+        extractions_attempted: results.filter(r => r.extract_status === "ok" || r.extract_status === "error").length,
+        extractions_succeeded: results.filter(r => r.extract_status === "ok").length,
+        exit_code:    0,
+      });
+    }
+    ranFinishRun = true;
+
+    if (VERIFY && !SKIP_DEDUP && !SKIP_PERSIST) {
+      const seenIds = await listSeenJobIds(SOURCE);
+      const report = await verifyIntegrity(SOURCE, seenIds);
+      log(formatIntegrityReport(report));
+    }
+  } catch (e) {
+    // Only write the failure record when processJobs itself failed — not when
+    // disconnectRedis/closePool fail after a successful run (those are in finally).
+    if (!SKIP_PERSIST && !ranFinishRun) {
+      await finishRun(RUN_ID, {
+        finished_at: new Date().toISOString(),
+        jobs_total: 0,
+        jobs_passed: 0,
+        jobs_gated: 0,
+        jobs_covered: 0,
+        extractions_attempted: 0,
+        extractions_succeeded: 0,
+        exit_code: 1,
+      });
+    }
+    throw e;
+  } finally {
+    // Teardown runs regardless of success/failure; errors here are swallowed
+    // so they don't mask or overwrite a real processing error.
+    if (!SKIP_DEDUP)   await disconnectRedis().catch(() => {});
+    if (!SKIP_PERSIST) await closePool().catch(() => {});
   }
-  if (artifactIn + artifactOut > 0) {
-    log(`Artifact LLM tokens (resume+cover this run): input=${artifactIn} output=${artifactOut} total=${artifactIn + artifactOut}`);
-  }
-
-  printResults(results, SOURCE, scoringThreshold);
-
-  // --- Save results to disk (JSONL — always written when EXTRACT=1) ---
-  if (DO_EXTRACT) {
-    const outPath = path.join(SCRAPER_OUT_DIR, `results_${SOURCE}_${RUN_ID}.jsonl`);
-    const lines = results.map(r => JSON.stringify(r)).join("\n");
-    fs.writeFileSync(outPath, lines + "\n", "utf-8");
-    log(`Results saved: ${outPath}`);
-  }
-
-  // --- Finish run record in Postgres ---
-  if (!SKIP_PERSIST) {
-    await finishRun(RUN_ID, {
-      finished_at:  new Date().toISOString(),
-      jobs_total:   results.length,
-      jobs_passed:  results.filter(r => r.verdict !== "REJECT" && r.verdict !== "DEDUP").length,
-      jobs_gated:   results.filter(r => r.verdict === "GATE_PASS").length,
-      jobs_covered: results.filter(r => r.cover_letter_path != null || r.resume_pdf_path != null).length,
-      extractions_attempted: results.filter(r => r.extract_status === "ok" || r.extract_status === "error").length,
-      extractions_succeeded: results.filter(r => r.extract_status === "ok").length,
-    });
-  }
-
-  if (VERIFY && !SKIP_DEDUP && !SKIP_PERSIST) {
-    const seenIds = await listSeenJobIds(SOURCE);
-    const report = await verifyIntegrity(SOURCE, seenIds);
-    log(formatIntegrityReport(report));
-  }
-
-  // --- Disconnect ---
-  if (!SKIP_DEDUP)   await disconnectRedis();
-  if (!SKIP_PERSIST) await closePool();
 }
 
 // ---------------------------------------------------------------------------
@@ -799,6 +821,13 @@ async function processJobs(
     // resolved earlier-flagged uncertainty. filterResult.flags is stale
     // (snapshotted before extraction). Merge live flags with post-fetch checks.
     const allFlags = [...new Set([...(sanitized.meta?.flags ?? []), ...checked])];
+
+    // Flag jobs where extraction succeeded but returned no required skills.
+    // Signals uncertain technical fit to the judge — scored at EMPTY_SKILLS_SCORE
+    // rather than 1.0, but the flag lets the judge weigh this explicitly.
+    if (DO_EXTRACT && extractStatus === "ok" && (sanitized.required_skills?.length ?? 0) === 0) {
+      allFlags.push("skills_extraction_empty");
+    }
 
     // Stage 12.5 — pgvector cross-site semantic dedup
     // Only runs on GATE_PASS jobs with an embedding — avoids calling the
@@ -1377,7 +1406,26 @@ function printResults(results: JobResult[], source: string, threshold: number): 
     if (fetchFail.length) console.log(`  Fetch failures: ${fetchFail.length}`);
   }
 
-  if (DO_COVER) {
+  if (DO_RESUME_ARTIFACT) {
+    const resumes = results.filter(r => r.resume_pdf_path);
+    const failed  = results.filter(r => r.flags?.includes("resume_gen_failed"));
+    if (resumes.length) {
+      console.log(`\n  Resumes written: ${resumes.length}`);
+      for (const r of resumes) {
+        console.log(`    ${r.title} @ ${r.company} → ${r.resume_pdf_path}`);
+      }
+    } else {
+      console.log(`\n  Resumes: none`);
+    }
+    if (failed.length) {
+      console.log(`  Resume gen failed: ${failed.length}`);
+      for (const r of failed) {
+        console.log(`    ${r.title} @ ${r.company}`);
+      }
+    }
+  }
+
+  if (DO_COVER_ARTIFACT) {
     const letters = results.filter(r => r.cover_letter_path);
     if (letters.length) {
       console.log(`\n  Cover letters written: ${letters.length}`);

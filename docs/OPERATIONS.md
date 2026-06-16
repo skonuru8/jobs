@@ -22,6 +22,7 @@ This file controls LLM model selection, throttling, scoring weights, and thresho
 | `scoring` | object | gate threshold + weights |
 | `embeddings` | object | embedding model metadata (local) |
 | `pipeline` | object | **legacy/unused** schedule defaults (actual schedules are in `src/orchestrator/scheduler.ts`) |
+| `scraping` | object | Scraper config: Dice query, LinkedIn search terms, location, hours_old |
 
 #### `llm.extractor`
 
@@ -76,6 +77,15 @@ Metadata only; the embedder implementation is in `src/scorer/embed.ts`.
 #### `pipeline` (legacy/unused)
 
 This includes `schedule`, `sources`, etc. The project treats it as informative commentary; the orchestrator does not read this block. The actual schedules are hardcoded in `src/orchestrator/scheduler.ts`.
+
+#### `scraping`
+
+| Key | Type | Meaning |
+|---|---|---|
+| `scraping.dice.query` | string | Default search query for Dice. Overridable via `--query` CLI arg or `QUERY` env var. |
+| `scraping.linkedin.search_terms` | string[] | LinkedIn search terms (run sequentially, one JobSpy call per term). |
+| `scraping.linkedin.location` | string | LinkedIn geo scope (e.g., `"United States"`). |
+| `scraping.linkedin.hours_old` | number | Max age of LinkedIn postings in hours. Default 5 (run interval + 1h buffer). Redis dedup handles the overlap window. |
 
 ---
 
@@ -206,6 +216,16 @@ docker compose up -d postgres
   - **Cause**: selectors broken, network blocked, API changed, query too strict.
   - **Fix**: run scraper in headed mode and update selectors; for Jobright prefer API adapter.
 
+- **LinkedIn returns 0 jobs / `is_remote` validation error**
+  - **Symptom**: all LinkedIn searches fail with a pydantic validation error on `is_remote`.
+  - **Cause**: python-jobspy >= 1.1.82 requires `is_remote: bool`, not `None`.
+  - **Fix**: already fixed — `is_remote: False` in `DEFAULT_PARAMS`. If it recurs, check the installed jobspy version (`pip show python-jobspy`).
+
+- **LinkedIn IP rate-limit / 429**
+  - **Symptom**: LinkedIn searches return empty results or HTTP errors.
+  - **Cause**: too many requests from one IP in a short window.
+  - **Fix**: at MAX=30 4×/day, most home IPs are fine. If blocked, add `proxies` to `DEFAULT_PARAMS` via env var (jobspy supports `proxies=[“http://user:pass@host:port”]`).
+
 ### 7.3 Scoring calibration (M9)
 
 Goal: use `labels` from the UI to tune the scoring weights and gate threshold.
@@ -304,6 +324,7 @@ These are open items from THE-BIBLE-v7 §12 — accepted trade-offs, not bugs to
 | M7 | Persistence: Postgres + pgvector + Redis; dedup wired |
 | M8 | Orchestrator: node-cron + Redis lock + heartbeat + ghost reaper + monitor (2026-04-25) |
 | M9 | Review UI at `localhost:3001` (2026-04-29): Apply Queue + Hard/Soft Rejections, labeling, note chips, application tracking |
+| v15 | Track A–E (2026-06-12): LinkedIn scraper fix (`is_remote` bool, `hours_old=5`, config-driven search terms, US location, `linkedin_fetch_description=True`); patch root repair (`extractRoleLabels`, `allowed_role_labels` gating, `diff-lint`, `ops_dropped_unknown_role`); eval harness (export-fixtures, replay-resume, diff-reports); verification sweep; config extraction (`scraping` block in config.json, `app_config.py`, cover-letter prompt fix, `validateProfile` target_titles guard). |
 
 **Active — Scoring calibration (M10 prerequisites):**
 

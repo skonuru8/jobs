@@ -3,13 +3,13 @@ import { pct, scoreColor, scoreDisplayColor } from '../utils';
 
 export function ScoreRing({ value }: { value: number }) {
   const p = pct(value);
-  const R = 23;
+  const R = 28;
   const C = 2 * Math.PI * R;
   return (
     <div className="score-ring" aria-label={`Match ${p}%`}>
-      <svg viewBox="0 0 54 54">
-        <circle className="track" cx="27" cy="27" r={R} fill="none" strokeWidth="4" />
-        <circle className="val" cx="27" cy="27" r={R} fill="none" strokeWidth="4"
+      <svg viewBox="0 0 64 64">
+        <circle className="track" cx="32" cy="32" r={R} fill="none" strokeWidth="5" />
+        <circle className="val" cx="32" cy="32" r={R} fill="none" strokeWidth="5"
           style={{ stroke: scoreColor(p), strokeDasharray: C, strokeDashoffset: C * (1 - value) }} />
       </svg>
       <span className="rt">{p}</span>

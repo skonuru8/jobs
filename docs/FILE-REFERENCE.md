@@ -452,13 +452,17 @@ This is the low-level reference for **every file** in the system. For each file:
 
 **Exports / public interface:** `JudgeInput`, `JudgeResult`, `JudgeVerdict`, `FinalBucket`, etc.
 
+**v15 changes:** `JudgeInput.profile` is now **required** (was optional). `JudgeInput.allowed_role_labels?: string[]` added — fed from `extractRoleLabels(canonicalResumeTex)` in the pipeline to gate which role labels the judge may emit.
+
 ---
 
 ## src/judge/prompt.ts
 
 **Purpose:** System prompt and input formatter for LLM judge.
 
-**Exports / public interface:** `PROMPT_VERSION`, `SYSTEM_PROMPT`, `buildJudgePrompt(input)`.
+**Exports / public interface:** `PROMPT_VERSION`, `SYSTEM_PROMPT`, `buildSystemPrompt(allowedRoleLabels?: string[])`, `buildJudgePrompt(input)`.
+
+**v15 changes:** `buildSystemPrompt` takes optional `allowedRoleLabels`; when provided, emits a dynamic "ALLOWED target_role VALUES — copy ONE verbatim" block with the exact label list so the judge cannot fabricate role labels.
 
 ---
 
@@ -466,7 +470,9 @@ This is the low-level reference for **every file** in the system. For each file:
 
 **Purpose:** Zod validation and JSON parsing for judge responses.
 
-**Exports / public interface:** `JudgeFieldsSchema`, `validateJudge(raw)`, `ValidatedJudgeFields`.
+**Exports / public interface:** `JudgeFieldsSchema`, `validateJudge(raw, allowedLabels?: string[])`, `ValidatedJudgeFields`.
+
+**v15 changes:** `validateJudge` takes optional `allowedLabels`; after Zod parse, gates `gap_directives` and `tailoring_hints.tech_swaps` by exact normalized role label. Unknown roles are downgraded (handling→`"acknowledge"`, `target_role`→`null`) with concern flags `directive_role_unresolved:<label>` / `swap_role_unresolved:<label>`.
 
 ---
 
@@ -483,6 +489,8 @@ This is the low-level reference for **every file** in the system. For each file:
 **Purpose:** Judge orchestration (LLM call, retry, error wrapping) and bucket routing logic.
 
 **Exports / public interface:** `judge(input, config)`, `getBucket(judgeResult, totalScore)`.
+
+**v15 changes:** `defaultProfileForJudge()` removed. `allowed_role_labels` from `JudgeInput` is passed to `buildSystemPrompt` and `validateJudge`.
 
 ---
 
@@ -730,7 +738,7 @@ This is the low-level reference for **every file** in the system. For each file:
 - `--headed`
 - `--cookies PATH`
 - `--hours-old` (LinkedIn)
-- `--query` (Dice)
+- `--query` (Dice; default `None` — falls back to `load_scraping_config()["dice"]["query"]` at runtime)
 - `--posted-within {ONE|THREE|SEVEN}` (Dice)
 
 Exit codes: 0 success, 1 adapter error, 2 cookie file missing.
@@ -763,9 +771,16 @@ Exit codes: 0 success, 1 adapter error, 2 cookie file missing.
 
 ## scraper/jobspy_adapter.py
 
-**Purpose:** LinkedIn scraping via `python-jobspy`, dedup across multiple queries.
+**Purpose:** LinkedIn scraping via `python-jobspy` (requires `>= 1.1.82`), dedup across multiple search-term queries.
 
-**Public interface:** `scrape(max_jobs, run_id, location="...", hours_old=72, search_terms=None) -> Iterator[dict]`.
+**Public interface:** `scrape(max_jobs, run_id, location="United States", hours_old=None, search_terms=None) -> Iterator[dict]`.
+
+**Key behavior:**
+
+- `hours_old` defaults to `None`; at runtime resolved from `load_scraping_config()["linkedin"]["hours_old"]` if not passed, falling back to `DEFAULT_PARAMS["hours_old"]` (5).
+- `is_remote=False` in `DEFAULT_PARAMS` — required bool in python-jobspy ≥ 1.1.82; `False` includes both remote and onsite listings.
+- `linkedin_fetch_description=True` — fetches full JD text via JobSpy.
+- Runs one JobSpy call per search term from `config.scraping.linkedin.search_terms`; deduplicates results by URL before yielding.
 
 ---
 
@@ -801,6 +816,19 @@ Exit codes: 0 success, 1 adapter error, 2 cookie file missing.
 
 ---
 
+## scraper/common/app_config.py
+
+**Purpose:** Load the project `config/config.json` and return the `scraping` sub-dict for use by Python scraper components.
+
+**Public interface:**
+
+- `load_scraping_config() -> dict`
+  - **What it does:** Reads `config/config.json` relative to the repo root and returns the `scraping` key as a plain dict.
+  - **Raises:** `FileNotFoundError` if `config/config.json` is not found.
+  - **Used by:** `scraper/cli.py` (Dice query default), `scraper/jobspy_adapter.py` (LinkedIn search terms, location, hours_old).
+
+---
+
 ## migrations/001_initial.sql
 
 **Purpose:** Core schema: `runs`, `jobs` (with pgvector embedding), `filter_results`, `scores`, `judge_verdicts`, `cover_letters`, `seen_jobs`.
@@ -822,6 +850,67 @@ Exit codes: 0 success, 1 adapter error, 2 cookie file missing.
 ## migrations/004_ui_application_tracking.sql
 
 **Purpose:** Adds `application_status` and `applied_at` to `labels`, and check constraint/index for UI tracking.
+
+---
+
+## src/resume-generator/patch/diff-lint.ts
+
+**Purpose:** Post-apply lint for patch tailoring mode. Checks the patched LaTeX for quality and constraint violations before the result is accepted.
+
+**Exports / public interface:**
+
+- `runDiffLint(patchedTex: string, ops: PatchOp[], directives: GapDirective[], wordCountMin?: number, wordCountMax?: number): { violations: string[]; flags: string[] }`
+  - **What it does:** Three checks in order: (1) for every `forbid` directive, verify that the term is absent from all inserted/rewritten bullets in the patched TeX; (2) scan every inserted/rewritten bullet for banned style phrases; (3) check total word count falls within `[wordCountMin, wordCountMax]` bounds when provided.
+  - **Returns:** `violations` (human-readable descriptions of each failure) and `flags` (machine-readable strings like `patch_diff_lint_failed:<check>` appended to the result's warning list).
+  - **Side effects:** none (pure).
+
+---
+
+## scripts/eval/export-fixtures.ts
+
+**Purpose:** Query Postgres for STRONG/MAYBE jobs that have `gap_directives` and write them as eval fixtures for the offline replay harness.
+
+**Exports / public interface:** None (script).
+
+**Key behavior:**
+
+- Gated on `EVAL_LIVE=1` env var; exits with a clear error if not set, to prevent accidental live DB use.
+- Writes one JSON file per job to `fixtures/eval/jobs/{slug}.json`.
+- Reports diversity stats (by source, verdict, number of directives) to stdout.
+
+---
+
+## scripts/eval/replay-resume.ts
+
+**Purpose:** Deterministic replay runner for the eval harness. Loads eval fixtures and runs the resume generator in each configured mode, recording quality metrics.
+
+**Exports / public interface:** None (script).
+
+**Key behavior:**
+
+- Gated on `EVAL_LIVE=1` env var.
+- Loads fixtures from `fixtures/eval/jobs/`, runs each through modes `["patch_tailoring", "full_regen"]`.
+- Records per-fixture: directive coverage, `ops_dropped`, banned phrase hits, forbid violations, input/output tokens.
+- Emits `output/audits/eval-{timestamp}.md` (human-readable) and `output/audits/eval-{timestamp}.json` (machine-readable).
+
+---
+
+## scripts/eval/diff-reports.ts
+
+**Purpose:** Diff two eval JSON reports (produced by `replay-resume.ts`) to compare quality across code changes.
+
+**Exports / public interface:** None (script).
+
+**Usage:**
+
+```bash
+npx tsx scripts/eval/diff-reports.ts output/audits/eval-OLD.json output/audits/eval-NEW.json
+```
+
+**Key behavior:**
+
+- Produces a per-fixture per-check delta table.
+- Emits summary: zero-op rate, mean coverage, banned total, compile fails, dropped total.
 
 ---
 

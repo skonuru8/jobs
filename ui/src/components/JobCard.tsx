@@ -56,7 +56,7 @@ function RiskBadge({ label, status, summary }: { label: string; status: 'ok' | '
           <strong>Items to review</strong>
           <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
             {summary.human_review_items.map((it, i) => (
-              <li key={i}><strong>{it.text}</strong> ({it.relationship}) — {it.reason}</li>
+              <li key={i}><strong>{it.text}</strong> ({it.relationship}): {it.reason}</li>
             ))}
           </ul>
         </div>
@@ -275,7 +275,7 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
                 {applyRow?.resume_pdf_url && <RiskBadge label="Résumé" status={applyRow.resume_export_status} summary={applyRow.resume_risk_summary} />}
                 {applyRow?.cover_pdf_url && <RiskBadge label="Cover" status={applyRow.cover_export_status} summary={applyRow.cover_risk_summary} />}
               </div>
-              {gen && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 9 }}>Tailoring résumé &amp; cover letter — usually 1–2 min. Keep this tab open.</div>}
+              {gen && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 9 }}>Tailoring resume and cover letter, usually 1-2 min. Keep this tab open.</div>}
               {genError && <div className="card-error" style={{ color: 'var(--neg)', fontSize: 12, marginTop: 8 }}>{genError} <button onClick={handleGenerate} style={{ background: 'none', border: 'none', color: 'var(--info)', textDecoration: 'underline', cursor: 'pointer' }}>Try again</button></div>}
             </div>
           )}

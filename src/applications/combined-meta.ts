@@ -129,7 +129,7 @@ function resumeBlock(
       model: null, prompt_sha: null, input_tokens: null, output_tokens: null,
       word_count: null, compile_status: "skipped", flags: ["resume_gen_skipped_no_reason"],
       tex_path: null, pdf_path: null,
-      risk_summary: null, export_status: "ok",
+      risk_summary: null, export_status: "skipped",
       resume_mode: null, directives_hash: null, tech_swaps_hash: null,
       patch_prompt_sha: null, patch_ops: [], patch_coverage: null,
       patch_retry_count: null, patch_failed_directives: [],
@@ -157,7 +157,7 @@ function resumeBlock(
       flags,
       error:          (o.meta as Record<string, unknown>)?.error ?? null,
       tex_path: null, pdf_path: null,
-      risk_summary: null, export_status: "ok",
+      risk_summary: null, export_status: (o.meta as Record<string, unknown>).export_status ?? "failed",
     };
   }
   const m = o.meta;
@@ -209,7 +209,7 @@ function coverBlock(
       flags:          o?.flags ?? [],
       error:          (o?.meta as Record<string, unknown> | undefined)?.error ?? null,
       tex_path: null, pdf_path: null,
-      risk_summary: null, export_status: "ok",
+      risk_summary: null, export_status: (o?.meta as Record<string, unknown> | undefined)?.export_status ?? (o ? "failed" : "skipped"),
     };
   }
   const m = o.meta;

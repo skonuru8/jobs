@@ -18,7 +18,7 @@ import type { JudgeInput } from "./types";
  * Schema version for judge prompt contract and expected JSON response shape.
  * Bump only when prompt semantics or output fields change in a nontrivial way.
  */
-export const PROMPT_VERSION = "v5";
+export const PROMPT_VERSION = "v6";
 
 /**
  * Converts profile object into compact narrative block judge can reason over.
@@ -185,10 +185,30 @@ GUIDANCE FOR THE NEW FIELDS:
 - why_apply: NOT generic. Name a domain, project, team, or stated company value from the JD that intersects the candidate's history.
 - gap_directives: REQUIRED. Emit this array even when empty.
 - Never emit a gap_directive whose jd_requirement is empty, "none", "none extracted", or not a real term taken from the JD. If the JD requirement list is empty, emit an empty array.
-- tailoring_hints.emphasize_roles: pull from CANDIDATE WORK HISTORY block above by exact role string.
-- tailoring_hints.emphasize_skills / downplay_skills: pull from the candidate profile skills, NOT invent new ones.
+- tailoring_hints.emphasize_roles: REQUIRED and NON-EMPTY for STRONG and MAYBE verdicts. Pull 1–3 exact role strings from CANDIDATE WORK HISTORY whose canonical bullets already show the most overlap with the JD's core stack. These are the roles the patch generator will target for rewrites — pick the ones whose bullets can most credibly surface the JD's key requirements. Empty array is only acceptable for WEAK.
+- tailoring_hints.emphasize_skills: REQUIRED and NON-EMPTY for STRONG and MAYBE verdicts. Pull 3–6 skills from the candidate's profile (not invented) that the JD most prominently features. These drive which terms get foregrounded in bullet rewrites. Empty array is only acceptable for WEAK.
+- tailoring_hints.downplay_skills: pull from the candidate profile skills, NOT invent new ones.
 - tailoring_hints.tech_swaps: emit ONLY when a JD required_skill has risk_entry.relationship === "direct_equivalent" AND risk_entry.swap_allowed === true. from = risk_entry.candidate_source_skill, to = risk_entry.target_skill, confidence = risk_entry.confidence. Also emit target_role to scope the swap to one exact employer header when appropriate; set target_role: null when it genuinely applies everywhere. Empty array when no swaps apply.
 - Empty arrays/strings are fine when nothing applies. Do not invent.
+
+STRONG/MAYBE EXAMPLE — tailoring_hints with required fields populated:
+Job: AI startup (YC-backed) seeking founding engineer with React, TypeScript, Node.js, REST API design
+Candidate has AquilaEdge LLC (startup, customer-facing portal, REST APIs), Hitachi/Nokia (enterprise Spring Boot microservices)
+CORRECT tailoring_hints:
+{
+  "emphasize_roles": ["AquilaEdge LLC"],
+  "emphasize_skills": ["React", "TypeScript", "Node.js", "REST APIs", "Spring Boot"],
+  "downplay_skills": ["Camunda BPMN", "Guidewire"],
+  "domain_reframe_angle": "",
+  "tech_swaps": [],
+  "gap_directives": []
+}
+WRONG (empty emphasize_roles for STRONG verdict — DO NOT DO THIS):
+{
+  "emphasize_roles": [],
+  "emphasize_skills": [],
+  ...
+}
 
 GAP DIRECTIVES (REQUIRED — emit this array even if empty)
 

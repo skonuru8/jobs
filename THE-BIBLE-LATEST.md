@@ -1,14 +1,41 @@
-# THE BIBLE — v14 (2026-06-03)
+# THE BIBLE — v15 (2026-06-12)
 
 > Project: **job-hunter** — automated job discovery + filter + score + judge + cover letter pipeline for Sarath Konuru.
 >
-> This is the authoritative document. Supersedes v13 (2026-06-02), v12 (2026-05-27), v11 (2026-05-27), v10 (2026-05-27), v9 (2026-05-26), v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
+> This is the authoritative document. Supersedes v14 (2026-06-03), v13 (2026-06-02), v12 (2026-05-27), v11 (2026-05-27), v10 (2026-05-27), v9 (2026-05-26), v8 (2026-05-14), v7 (2026-04-29), v6 (2026-04-25), v5 (2026-04-25), v4 (2026-04-23), v3 (2026-04-20), v2 (2026-04-18), and v1 (2026-04-17).
 >
 > Read this before writing code. Update this file when module status changes.
 >
 > Bible file policy: keep only two Bible files in the repo. `THE-BIBLE-v1.md`
 > is the original architecture snapshot. `THE-BIBLE-LATEST.md` is the single
 > rolling source of truth. Do not create per-version Bible archives.
+
+---
+
+## What changed since v14
+
+v15 is a five-track correctness, reliability, and eval update. Tracks A–E landed together; the scheduler and scraper fixes are included in the same wave.
+
+**Track A — LinkedIn scraper fix.**
+`scraper/jobspy_adapter.py` `DEFAULT_PARAMS` updated: `linkedin_fetch_description` set to `True` (was `False`), `is_remote` set to `False` (was `None` — broke in python-jobspy 1.1.82+ which requires a bool, not `None`; `False` means include both remote and onsite), and `hours_old` set to `5` (was `72`). `hours_old` is now config-driven: the adapter reads `config.scraping.linkedin.hours_old` if not passed as an argument, falling back to `DEFAULT_PARAMS["hours_old"]`. Location is now `"United States"` (was NY-only). Search terms come from `config.scraping.linkedin.search_terms` (three terms: `"senior full stack developer"`, `"senior java engineer"`, `"senior backend engineer"`), giving up to 45 raw results (15 per term × 3 terms) capped at `max_jobs`. The LinkedIn cron schedule changed from a single daily tick at 14h to `"0 9,13,17,21 * * 1-6"` (Mon–Sat) and `"0 13,17,21 * * 0"` (Sun afternoons), matching the Dice/Jobright cadence.
+
+**Track B — Patch root repair.**
+`src/resume-generator/patch/parser.ts` now exports `extractRoleLabels(tex): string[]`, which maps role blocks to their canonical label strings. `src/judge/types.ts` makes `JudgeInput.profile` **required** (was optional) and adds `allowed_role_labels?: string[]`. `src/judge/judge.ts` removes `defaultProfileForJudge()` entirely; `allowed_role_labels` is now passed to `buildSystemPrompt` and `validateJudge`. `src/judge/prompt.ts` `buildSystemPrompt` takes `allowedRoleLabels?: string[]`; when provided it emits a dynamic "ALLOWED target_role VALUES — copy ONE verbatim" block with the exact label list. `src/judge/validate.ts` `validateJudge(raw, allowedLabels?)` gates `gap_directives` and `tailoring_hints.tech_swaps` by exact normalized role label after Zod parse; unknown roles are downgraded with concern flags `directive_role_unresolved:<label>` / `swap_role_unresolved:<label>`. `scripts/run-pipeline.ts` passes `allowed_role_labels: extractRoleLabels(canonicalResumeTex)` to `judgeInput`. `src/resume-generator/patch/types.ts` gains `PatchResult.ops_dropped_unknown_role: number`. `src/resume-generator/patch/generator.ts` renames `sameRoleish` to `sameRole`; `generatePatchOps` selects the premium model for STRONG + score ≥ `premium_min_score`; drops ops referencing unknown roles (counted as `ops_dropped_unknown_role`); `PATCH_MODE_PROMPT` has two appended few-shot examples (Nokia rewrite, PHIA rewrite). `src/resume-generator/patch/diff-lint.ts` (new file): `runDiffLint(patchedTex, ops, directives, wordCountMin?, wordCountMax?)` checks forbid directive terms absent from inserted/rewritten bullets, banned style phrases per-bullet, and word count bounds; returns `{ violations, flags }`. `src/resume-generator/patch/orchestrator.ts` imports `runDiffLint`, calls it after apply, appends lint flags to warnings on the final attempt, and tracks `totalDroppedUnknownRole`. `src/resume-generator/index.ts` adds `patch_ops_dropped_unknown_role` to `meta.json`.
+
+**Track C — Eval harness (new scripts).**
+Three new scripts under `scripts/eval/`: `export-fixtures.ts` queries Postgres for STRONG/MAYBE jobs with `gap_directives` and writes `fixtures/eval/jobs/{slug}.json` with diversity stats (gated on `EVAL_LIVE=1`); `replay-resume.ts` loads fixtures × modes (`patch_tailoring`, `full_regen`), records coverage/dropped/banned phrases/forbid violations/tokens, and emits `output/audits/eval-{timestamp}.md` + `.json` (also gated on `EVAL_LIVE=1`); `diff-reports.ts` takes two eval JSON paths, produces a per-fixture per-check delta table, and summarizes zero-op rate, mean coverage, banned total, compile fails, and dropped total.
+
+**Track D — Verification sweep.**
+`output/audits/track-d-report.md` (new file): PASS/FAIL table for D1–D6 checks verifying that prior-wave fixes hold.
+
+**Track E — Config extraction.**
+`config/config.json` gains a new top-level `scraping` block: `{ "dice": { "query": "java developer" }, "linkedin": { "search_terms": [...], "location": "United States", "hours_old": 5 } }`. `scraper/common/app_config.py` (new file): `load_scraping_config()` reads `config/config.json` and returns the `.scraping` dict, raising `FileNotFoundError` if config not found. `scraper/cli.py` `--query` default changed from `"java developer"` to `None`; at runtime falls back to `load_scraping_config()["dice"]["query"]`. `src/cover-letter/prompt.ts` hardcoded metric examples replaced with canonical-fact-safe placeholders. `src/filter/validate.ts` adds an early guard throwing if `profile.target_titles` is empty. `src/shared/artifact-bundle.ts` removes the `"Senior Software Engineer"` fallback in `coverLetterInputFromBundle`; now uses `bundle.profile.target_titles[0]`. `docs/RESUME-FORMAT-CONTRACT.md` (new file) documents the required LaTeX dialect for parsers. `test/resume-generator/canonical-contract.test.ts` (new file) is a smoke test against the real `config/resume_master.tex`.
+
+**Scheduler change.**
+LinkedIn changed from `"0 14 * * *"` (daily at 14h) to `"0 9,13,17,21 * * 1-6"` (Mon–Sat) and `"0 13,17,21 * * 0"` (Sun afternoons), matching Dice/Jobright. The previous 1h offset from Dice is no longer applicable.
+
+**Test counts.**
+Was: 322 passing, 27 files. Now: **327 passing, 8 skipped, 29 files**.
 
 ---
 
@@ -65,7 +92,7 @@ cache-relevant row. `scripts/ui-server.ts` now compares tailored resumes against
 the generation source.
 
 **Validation for v14.**
-`npm test` passed: 27 test files passed, 1 skipped; 310 tests passed, 8 skipped.
+`npm test` passed: 27 test files passed, 1 skipped; 322 tests passed, 8 skipped.
 `npm run build` passed. New coverage includes patch role parsing, deterministic
 op application, role-scoped coverage, mode-specific signatures, and invalid
 patch JSON returning a failed resume result instead of aborting the artifact
@@ -594,7 +621,7 @@ The pipeline is a 19-stage flow inside one `main()` function in `scripts/run-pip
 | 1 | Storage init: run migrations, save run record. On failure, call `markStorageDisabled` and continue without persistence | `SKIP_PERSIST=1` |
 | 2 | Dedup init: connect to Redis | `SKIP_DEDUP=1` |
 | 3 | Profile embedding: compute once, reused for all jobs | scoring disabled |
-| 4 | Scrape (subprocess to Python): `python -m scraper --source ... --max ... [--query ...] [--posted-within ONE\|THREE\|SEVEN]` | `JSONL=...` skips scrape |
+| 4 | Scrape (subprocess to Python): `python -m scraper --source ... --max ... [--query ...] [--posted-within ONE\|THREE\|SEVEN]`. LinkedIn uses `hours_old` from `config.scraping.linkedin.hours_old` (default 5); `linkedin_fetch_description=True` is set by default. | `JSONL=...` skips scrape |
 | 5 | Sanitize each job (clamp suspect values, fix shapes) | — |
 | 6 | Hard filter — REJECTs dropped here | — |
 | 7 | **Phase 1.5 — Cross-run exact dedup (Redis)** — batch `isSeen()` for every PASS job, drop matches | `SKIP_DEDUP=1` or Redis down |
@@ -713,7 +740,7 @@ Indexes on `001_initial.sql`: `jobs_run_idx`, `jobs_source_idx`, `jobs_posted_id
 | Docker Compose (Postgres + Redis) | ✅ Built | `docker compose up -d` |
 | **Review UI (M9)** | ✅ **Built** | **Express API + Vite/React SPA, port 3001** |
 
-**Test totals: 310 tests green, 8 skipped** across 27 passing test files plus 1 skipped file. New v14 coverage includes patch role parsing, deterministic patch application, role-scoped coverage, mode-specific signatures, and invalid patch JSON failure handling. UI still has no automated tests (manual verification only per spec).
+**Test totals: 327 tests passing, 8 skipped** across 29 test files (28 passing + 1 skipped). v15 coverage adds: `extractRoleLabels`, `allowed_role_labels` gating in judge validate, `ops_dropped_unknown_role`, `runDiffLint`, and canonical-contract smoke test. UI still has no automated tests (manual verification only per spec).
 
 ### Designed but not built
 
@@ -751,8 +778,8 @@ Three adapters under `scraper/`. CLI in `cli.py` dispatches by `--source`.
 
 - `dice.py` — Playwright, paginated. Semantic `data-testid` selectors (stable). Supports `posted_within` for server-side recency filter.
 - `jobright.py` — Playwright, infinite scroll. CSS-module hashed selectors (FRAGILE — breaks on frontend rebuilds). Selector constants centralized for fast updates.
-- `jobspy_adapter.py` — LinkedIn via python-jobspy. 3 sequential searches, dedup by URL. Does not support `POSTED_WITHIN` — JobSpy doesn't expose LinkedIn's recency filter.
-- Common modules (`scraper/common/`): `schema.py`, `normalize.py`, `cookies.py`, `output.py`.
+- `jobspy_adapter.py` — LinkedIn via python-jobspy (requires `>= 1.1.82`). 3 sequential searches using `config.scraping.linkedin.search_terms`, dedup by URL. `linkedin_fetch_description=True` ensures full JD text is fetched. `is_remote=False` (required bool since 1.1.82; `False` = include both remote and onsite). `hours_old` is config-driven from `config.scraping.linkedin.hours_old` (default 5). Location set to `"United States"`. Does not support `POSTED_WITHIN`.
+- Common modules (`scraper/common/`): `schema.py`, `normalize.py`, `cookies.py`, `output.py`, `app_config.py` (new: `load_scraping_config()` reads `config/config.json` and returns the `.scraping` dict).
 
 ### `fetcher/` — BUILT
 
@@ -810,6 +837,13 @@ Backward-compat rule: if `gap_directives` is missing or empty, generators behave
 Two retry layers remain: HTTP-level (1 retry on network error, 2s backoff) and validation-level (1 retry on Zod failure, 2s backoff). After the validation retry fails, v10 writes the raw payload plus schema error to `output/logs/judge_failures/{run_id}_{job_id}.json`; the capture path is best-effort and never crashes the pipeline.
 
 v10 judge hard blockers: prior-employer-only restrictions (for example `Ex-American Express only`) are WEAK unless the employer appears in the work-history block; active credentials the candidate does not have (Top Secret clearance, Series 7, CPA, PE license, etc.) are also WEAK. Fabricate directives must pick the role with strongest contextual fit, not merely the newest role.
+
+**v15 judge changes:**
+- `JudgeInput.profile` is now **required** (was optional).
+- `defaultProfileForJudge()` removed from `src/judge/judge.ts`.
+- `allowed_role_labels?: string[]` added to `JudgeInput`; fed from `extractRoleLabels(canonicalResumeTex)` in `scripts/run-pipeline.ts`.
+- `buildSystemPrompt` in `src/judge/prompt.ts` takes `allowedRoleLabels?: string[]`; when provided, emits a dynamic "ALLOWED target_role VALUES — copy ONE verbatim" block.
+- `validateJudge(raw, allowedLabels?)` in `src/judge/validate.ts` gates `gap_directives` and `tailoring_hints.tech_swaps` by exact normalized role label; unknown roles downgraded with concern flags.
 
 `getBucket(judgeResult, totalScore)` still routes STRONG+score≥0.70 → COVER_LETTER, STRONG+score<0.70 → RESULTS, MAYBE → REVIEW_QUEUE, WEAK or judge error → ARCHIVE.
 
@@ -913,6 +947,14 @@ v10 hard guards:
   `generated_by: "cached"` and `input_tokens/output_tokens = 0` for the resume. Cache hits are
   rejected when prior flags indicate an unsafe or review-needed artifact.
 
+**v15 resume-generator additions:**
+- `src/resume-generator/patch/parser.ts` exports `extractRoleLabels(tex): string[]` — returns canonical role label strings from the LaTeX resume.
+- `src/resume-generator/patch/types.ts` gains `PatchResult.ops_dropped_unknown_role: number`.
+- `src/resume-generator/patch/generator.ts`: `sameRoleish` renamed to `sameRole`; `generatePatchOps` selects the premium model for STRONG + score ≥ `premium_min_score`; drops ops referencing unknown roles and counts them as `ops_dropped_unknown_role`; `PATCH_MODE_PROMPT` has two appended few-shot examples (Nokia rewrite, PHIA rewrite).
+- `src/resume-generator/patch/diff-lint.ts` (new): `runDiffLint(patchedTex, ops, directives, wordCountMin?, wordCountMax?)` — three checks: (1) forbid directive terms absent from inserted/rewritten bullets, (2) banned style phrases per-bullet, (3) word count bounds; returns `{ violations: string[], flags: string[] }`.
+- `src/resume-generator/patch/orchestrator.ts` imports `runDiffLint`; calls it after apply; appends lint flags to warnings on the final attempt; tracks `totalDroppedUnknownRole`.
+- `src/resume-generator/index.ts` adds `patch_ops_dropped_unknown_role` to `meta.json`.
+
 ### `dedup/` — BUILT
 
 Two complementary mechanisms.
@@ -998,6 +1040,28 @@ soft gate for human review before applying.
   `as required by the role`, `gained hands-on exposure`. Zero false-positive risk; these phrases
   never appear in legitimate professional writing.
 
+### `scripts/eval/` — BUILT (new in v15)
+
+Three eval scripts for deterministic offline harness testing. All require the Python venv and Postgres to be running.
+
+- `scripts/eval/export-fixtures.ts` — queries Postgres for STRONG/MAYBE jobs with `gap_directives`; writes `fixtures/eval/jobs/{slug}.json`; reports diversity stats. Gated on `EVAL_LIVE=1` to prevent accidental DB use.
+- `scripts/eval/replay-resume.ts` — deterministic replay runner; loads fixtures × modes (`patch_tailoring`, `full_regen`); records coverage, dropped ops, banned phrases, forbid violations, tokens; emits `output/audits/eval-{timestamp}.md` + `.json`. Gated on `EVAL_LIVE=1`.
+- `scripts/eval/diff-reports.ts` — `npx tsx scripts/eval/diff-reports.ts old.json new.json`; produces per-fixture per-check delta table and summary: zero-op rate, mean coverage, banned total, compile fails, dropped total.
+
+**Commands:**
+```bash
+# Export fixtures from Postgres
+EVAL_LIVE=1 npx tsx scripts/eval/export-fixtures.ts
+
+# Replay against fixtures
+EVAL_LIVE=1 npx tsx scripts/eval/replay-resume.ts
+
+# Diff two eval reports
+npx tsx scripts/eval/diff-reports.ts output/audits/eval-OLD.json output/audits/eval-NEW.json
+```
+
+---
+
 ### `ui-server` + `ui/` — BUILT (new in v7)
 
 **`scripts/ui-server.ts`** — single Express file. Runs on **port 3001** (the default port is occupied). On startup: runs migration 004, then serves the app. In production, serves `ui/dist` as a static SPA. In dev, the Vite dev server (`cd ui && npm run dev`, default port 5173) proxies `/api/*` to `:3001`.
@@ -1064,10 +1128,11 @@ Run-level orchestration. Schedules `run-pipeline.ts` via node-cron, prevents ove
 | Dice Sun afternoons | `0 13,17,21 * * 0` | ONE | 50 | 4h |
 | Jobright API (Mon–Sat) | `0 9,13,17,21 * * 1-6` | — | 40 | 4h |
 | Jobright API (Sun afternoons) | `0 13,17,21 * * 0` | — | 40 | 4h |
-| LinkedIn (daily) | `0 14 * * *` | — | 30 | 4h |
+| LinkedIn (Mon–Sat) | `0 9,13,17,21 * * 1-6` | — | 30 | 4h |
+| LinkedIn (Sun afternoons) | `0 13,17,21 * * 0` | — | 30 | 4h |
 | Ghost reaper | `*/10 * * * *` | — | — | — |
 
-LinkedIn is offset from Dice by 1h to avoid hitting OpenRouter simultaneously from multiple sources. Jobright runs via the **Jobright API** on the same cadence as Dice (MAX=40 to stay under Jobright rate limits). Sunday 9am uses the backfill config only — the `1-6` constraint on the daily schedule prevents a conflict. Sunday afternoons get their own schedule so they're not dark after the backfill.
+LinkedIn now runs on the same cadence as Dice and Jobright (Mon–Sat 4× daily + Sun afternoons). The previous 1h offset from Dice is gone; `hours_old=5` (run interval + 1h buffer) combined with Redis dedup handles overlap safely. Jobright runs via the **Jobright API** on the same cadence as Dice (MAX=40 to stay under Jobright rate limits). Sunday 9am uses the backfill config only — the `1-6` constraint on the daily schedule prevents a conflict. Sunday afternoons get their own schedule so they're not dark after the backfill.
 
 **Ghost reaper:** Runs every 10 minutes. Finds `runs` rows where `finished_at IS NULL AND last_heartbeat IS NOT NULL AND last_heartbeat < NOW() - '5 minutes'::INTERVAL` (these are processes that died without calling `finishRun` — OOM, SIGKILL, hard crash). For each ghost: releases the Redis lock unconditionally, sets `exit_code = -1`, sets `finished_at = NOW()`. Writes to `output/logs/reaper.log`. Note: the `last_heartbeat IS NOT NULL` guard means pre-migration rows and runs shorter than 60s (never got a heartbeat) are correctly ignored.
 
@@ -1164,6 +1229,8 @@ percentile of those counts. Expected new threshold: somewhere in the 5–8 range
 Do not change the threshold before seeing real data.
 
 ### Open — operational reminders
+
+4. **LinkedIn `hours_old=5` overlap.** LinkedIn runs every 4 hours and `hours_old=5` gives a 1-hour buffer. Postings from the last hour of the prior run will be re-fetched, but Redis exact dedup (key `seen:{source}:{job_id}`, TTL 7 days) silently drops them before any processing. This is intentional: a 5h window is safer than a 4h window given clock skew and LinkedIn's posting-timestamp rounding.
 
 5. **Cookie rotation (Jobright).** Jobright runs via the API path (`jobright_api`) but still relies on an authenticated session. If Jobright starts returning auth errors / empty results, rotate cookies via browser extension → `config/cookies/jobright.json` (never commit).
 
@@ -1296,15 +1363,15 @@ Use this command for normal day-to-day manual runs. It means:
 
 - `SOURCE=dice` — scrape Dice
 - `MAX=20` — inspect up to 20 listings
-- `POSTED_WITHIN=ONE` — only listings from the last 24 hours
+- `POSTED_WITHIN=ONE` — only listings from the last 24 hours (Dice only; passed to the scraper subprocess)
 - `EXTRACT=1` — enable extraction; scoring, judge, and cover routing auto-enable
 - resume generation is enabled by default unless `DO_RESUME=0` or `DO_RESUME=false`
 - cover-letter generation is enabled by default unless `DO_COVER=0` or `DO_COVER=false`
 - direct-run logs are written to `output/logs/runs/{YYYY-MM-DD}/log_{timestamp}_{run-folder}_{source}_{runid}.log`
 
-`EXTRACT=1` and `EXTRACT=true` both work because the pipeline treats any
-non-empty `EXTRACT` value as enabled. Prefer `EXTRACT=1` in docs for
-consistency.
+**Note on `POSTED_WITHIN`:** this is passed by the orchestrator to the scraper subprocess for Dice. It is NOT a user-facing env var read by the TypeScript pipeline directly. Do not set it expecting the TS pipeline to use it.
+
+**Note on `EXTRACT`:** truthy value (e.g. `EXTRACT=1`) enables LLM extraction. Any non-empty value is treated as enabled. Prefer `EXTRACT=1` in docs for consistency.
 
 Only jobs routed to `COVER_LETTER` or eligible `REVIEW_QUEUE` produce resume and
 cover artifacts. A run can complete correctly and still generate no artifacts if
@@ -1315,6 +1382,21 @@ no jobs pass score/judge routing.
 Use these only for the specific scenario named in the comment.
 
 ```bash
+# Scraper test — LinkedIn, fetch 10 jobs from the last 2 hours
+python -m scraper --source linkedin --max 10 --hours-old 2
+
+# Full pipeline for LinkedIn
+SOURCE=linkedin MAX=10 EXTRACT=1 npx tsx scripts/run-pipeline.ts
+
+# Eval: export fixtures from Postgres (requires EVAL_LIVE=1)
+EVAL_LIVE=1 npx tsx scripts/eval/export-fixtures.ts
+
+# Eval: replay against fixtures (requires EVAL_LIVE=1)
+EVAL_LIVE=1 npx tsx scripts/eval/replay-resume.ts
+
+# Eval: diff two eval reports
+npx tsx scripts/eval/diff-reports.ts output/audits/eval-OLD.json output/audits/eval-NEW.json
+
 # Same as the default command, but explicit about artifacts
 POSTED_WITHIN=ONE EXTRACT=1 DO_RESUME=true DO_COVER=true SOURCE=dice MAX=20 \
   npx tsx scripts/run-pipeline.ts
@@ -1504,6 +1586,12 @@ redis-cli --scan --pattern 'orchestrator:lock:*'
 - **`full_regen`** — explicit resume mode that preserves the old total-mode full LaTeX generation path.
 - **Resume signature** — cache key made from `canonical_sha`, sorted `directives_hash`, sorted `tech_swaps_hash`, mode-specific `prompt_sha`, and `resume_mode`.
 - **Resume cache hit** — prior healthy resume artifact reused because the signature matches. The resume outcome records `generated_by: "cached"` and zero resume LLM tokens.
+- **`hours_old`** — LinkedIn recency filter passed to JobSpy; maps to `f_TPR=r{hours*3600}` in the LinkedIn URL. Default 5 (run interval + 1h buffer); config-driven via `config.scraping.linkedin.hours_old`. Redis dedup handles the 1-hour overlap window safely.
+- **`extractRoleLabels`** — exported from `src/resume-generator/patch/parser.ts`; returns the canonical role label strings from the LaTeX resume; fed to the judge as `allowed_role_labels` to gate `target_role` values.
+- **`allowed_role_labels`** — `JudgeInput` field; fed from `extractRoleLabels(canonicalResumeTex)` in the pipeline; gates which role labels the judge may emit in `gap_directives` and `tech_swaps`.
+- **`diff-lint`** — post-apply lint in `src/resume-generator/patch/diff-lint.ts`; checks forbid directive coverage, banned style phrases, word count bounds in the patched resume; returns flags like `patch_diff_lint_failed:<check>`.
+- **`ops_dropped_unknown_role`** — `PatchResult` field counting how many patch ops were silently dropped because they referenced a role label not present in the canonical resume.
+- **`EVAL_LIVE`** — env var gating `scripts/eval/export-fixtures.ts` and `scripts/eval/replay-resume.ts`; prevents accidental DB/LLM use during normal testing.
 
 ---
 
@@ -1819,3 +1907,34 @@ the DB row's `meta_path`. No DB migration was added.
 - Manual `{ force: true }` bypasses the cache.
 - UI resume diff uses `config/resume_master.tex` before `config/resume.tex`,
   matching the generation source.
+
+### 18.9 — v15 Track A–E changes (2026-06-12)
+
+**Track A — LinkedIn scraper fix:**
+- `scraper/jobspy_adapter.py`: `is_remote=False` (required bool in python-jobspy ≥ 1.1.82), `linkedin_fetch_description=True`, `hours_old=5` (config-driven), location `"United States"`, search terms from `config.scraping.linkedin.search_terms`.
+- LinkedIn cron schedule changed to match Dice/Jobright cadence (Mon–Sat 4×/day + Sun afternoons); the previous 1h offset from Dice is removed.
+
+**Track B — Patch root repair:**
+- `extractRoleLabels(tex): string[]` exported from `patch/parser.ts`; fed to judge as `allowed_role_labels`.
+- Judge `profile` is now required; `defaultProfileForJudge()` removed.
+- `validateJudge` gates directives and tech_swaps by exact normalized role label.
+- `runDiffLint` added in `patch/diff-lint.ts`; called post-apply in `patch/orchestrator.ts`.
+- `ops_dropped_unknown_role` added to `PatchResult` and `meta.json`.
+- `generatePatchOps` selects premium model for STRONG + score ≥ `premium_min_score`; drops ops for unknown roles; `PATCH_MODE_PROMPT` gains two few-shot examples.
+
+**Track C — Eval harness:**
+- `scripts/eval/export-fixtures.ts`, `scripts/eval/replay-resume.ts`, `scripts/eval/diff-reports.ts` — all new. `EVAL_LIVE=1` gates the first two to prevent accidental DB/LLM use.
+
+**Track D — Verification sweep:**
+- `output/audits/track-d-report.md` — PASS/FAIL table for D1–D6 checks.
+
+**Track E — Config extraction:**
+- `config/config.json` gains `scraping` block.
+- `scraper/common/app_config.py` (new): `load_scraping_config()`.
+- `scraper/cli.py` `--query` defaults to `None`, falls back to config at runtime.
+- Cover-letter prompt hardcoded metrics replaced with canonical-fact-safe placeholders.
+- `validateProfile` now throws if `target_titles` is empty.
+- `coverLetterInputFromBundle` removes `"Senior Software Engineer"` fallback.
+- `docs/RESUME-FORMAT-CONTRACT.md` and `test/resume-generator/canonical-contract.test.ts` added.
+
+**Test counts:** 327 passing, 8 skipped, 29 files (was 322 passing, 27 files).

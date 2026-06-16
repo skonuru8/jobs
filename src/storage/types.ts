@@ -30,6 +30,7 @@ export interface RunStats {
   jobs_covered:          number;
   extractions_attempted: number;  // jobs where extract was tried (ok | error)
   extractions_succeeded: number;  // jobs where extract returned "ok"
+  exit_code?:            number;  // set by direct invocations; runner may override later
 }
 
 export interface JobRecord {

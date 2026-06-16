@@ -7,6 +7,7 @@
     "start": "tsx src/orchestrator/index.ts",
     "migrate": "tsx src/storage/migrate.ts",
     "pipeline": "tsx scripts/run-pipeline.ts",
+    "clean-slate": "tsx scripts/clean-slate.ts",
     "audit:artifacts": "tsx scripts/audit-artifacts.ts",
     "test": "vitest run",
     "test:watch": "vitest",

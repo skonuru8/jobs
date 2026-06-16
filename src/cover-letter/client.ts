@@ -97,13 +97,21 @@ async function _complete(opts: CompletionOptions): Promise<CompletionResult> {
 
   const data    = await response.json() as any;
   const raw     = (data?.choices?.[0]?.message?.content ?? "").trim();
-  const content = stripThinkBlocks(raw);
   const model   = data?.model ?? opts.model;
   const usage   = data?.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
 
-  if (!content) {
-    throw new Error("OpenRouter returned empty content");
+  // Debug: log response shape when content is empty so we can identify the root cause
+  if (!raw) {
+    const finish_reason = data?.choices?.[0]?.finish_reason ?? "unknown";
+    const has_reasoning = Boolean(data?.choices?.[0]?.message?.reasoning);
+    const reasoning_preview = typeof data?.choices?.[0]?.message?.reasoning === "string"
+      ? data.choices[0].message.reasoning.slice(0, 200)
+      : null;
+    console.warn("[client] empty content from model=%s finish_reason=%s has_reasoning=%s reasoning_preview=%s",
+      model, finish_reason, has_reasoning, reasoning_preview);
   }
+
+  const content = resolveContent(raw);
 
   return {
     content,
@@ -180,6 +188,42 @@ async function readStreamingCompletion(response: Response, fallbackModel: string
     input_tokens: inputTokens,
     output_tokens: outputTokens,
   };
+}
+
+/**
+ * Resolves final content from raw model response.
+ *
+ * Primary: strip think blocks and return what's outside them.
+ * Fallback: if outside is empty (model buried its answer inside a think block,
+ * or max_tokens was hit mid-think), scan inside think blocks for a JSON object
+ * or array and return the last one found. Throws if neither path yields content.
+ */
+function resolveContent(raw: string): string {
+  const outside = stripThinkBlocks(raw);
+  if (outside) return outside;
+
+  // Fallback: model put JSON inside the think block
+  const inside = extractJsonFromThinkBlocks(raw);
+  if (inside) return inside;
+
+  throw new Error("OpenRouter returned empty content");
+}
+
+/**
+ * Scans inside think blocks for the last JSON object or array.
+ * Used when the model mistakenly emits its answer inside <think>...</think>.
+ */
+function extractJsonFromThinkBlocks(raw: string): string {
+  const blockRe = /<(?:redacted_thinking|think)>([\s\S]*?)<\/(?:redacted_thinking|think)>/gi;
+  let lastJson = "";
+  let match: RegExpExecArray | null;
+  while ((match = blockRe.exec(raw)) !== null) {
+    const inner = match[1];
+    // Find the last top-level JSON object or array in this block
+    const jsonMatch = inner.match(/(\{[\s\S]*\}|\[[\s\S]*\])(?=[^{[]*$)/);
+    if (jsonMatch) lastJson = jsonMatch[1].trim();
+  }
+  return lastJson;
 }
 
 /** Remove <think>...</think> blocks from response content.

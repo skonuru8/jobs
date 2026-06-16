@@ -39,15 +39,16 @@ Output schema:
 
 Rules:
 - Return only valid JSON. No markdown.
-- Apply only fabricate and reframe directives.
+- Apply fabricate and reframe directives AND EMPHASIS_ROLES rewrites.
 - Never delete bullets.
 - Never edit SUMMARY or SKILLS.
 - Never invent metrics not present in the role block or directive.
-- Keep every op scoped to the directive target_role.
+- Keep every op scoped to the directive target_role or an EMPHASIS_ROLES role.
 - Use role names exactly as provided in ROLE_BLOCKS.
 - If a directive cannot fit a role naturally, omit it.
 - frame_as is briefing guidance only — extract the factual content, do NOT copy its phrasing verbatim into bullets.
 - Write bullets as confident factual statements about what the candidate did. No hedging.
+- EMPHASIS pass: when EMPHASIS_ROLES is present, rewrite 1–2 existing bullets per listed role to foreground the skills in EMPHASIS_SKILLS. Select bullets that already touch those skills or closely adjacent work — reshape language to put the EMPHASIS_SKILLS terms front and center. Do NOT add new bullets, do NOT invent metrics — only reshape existing bullet text. Emit these as "rewrite" ops alongside any directive ops.
 
 BANNED phrases — NEVER use any of these in any bullet text:
 ${BANNED_STYLE_PHRASE_STRINGS.map(p => `  "${p}"`).join("\n")}
@@ -73,6 +74,15 @@ ROLE_BLOCKS (excerpt):
 {"role":"Project: PHIA","items":[{"item":6,"text":"\\\\item Wrote optimized \\\\textbf{SQL Server} queries for client-facing task-listing reports, improving generation times by \\\\textbf{15\\\\%} and enabling real-time queue visibility for PHIA Group clients."}]}
 CORRECT OP:
 {"ops":[{"type":"rewrite","role":"Project: PHIA","item":6,"new_item":"\\\\item Tuned \\\\textbf{SQL Server} queries for client-facing task-listing and reporting workflows, achieving \\\\textbf{15\\\\%} faster generation times and enabling real-time queue visibility for PHIA Group stakeholders."}]}
+
+Example 3 — emphasis: rewrite AquilaEdge LLC bullet to foreground React + TypeScript for an AI startup JD
+DIRECTIVES: []
+EMPHASIS_ROLES: ["AquilaEdge LLC"]
+EMPHASIS_SKILLS: ["React", "TypeScript", "REST APIs", "Node.js"]
+ROLE_BLOCKS (excerpt):
+{"role":"AquilaEdge LLC","items":[{"item":1,"text":"\\\\item Architected and delivered a customer-facing web portal for scheduling and job tracking, replacing a manual spreadsheet workflow used by 50+ field service teams."}]}
+CORRECT OP:
+{"ops":[{"type":"rewrite","role":"AquilaEdge LLC","item":1,"new_item":"\\\\item Architected and delivered a customer-facing \\\\textbf{React + TypeScript} portal for scheduling and job tracking, exposing \\\\textbf{REST APIs} consumed by 50+ field service teams and replacing a manual spreadsheet workflow."}]}
 `.trim();
 
 /** Stable short hash for patch prompt versioning in artifacts and diagnostics. */
@@ -104,7 +114,8 @@ export async function generatePatchOps(
   retryHint?: string,
 ): Promise<{ ops: PatchOp[]; model: string; tokens: { input: number; output: number }; ops_dropped_unknown_role: number }> {
   const activeDirectives = activeGapDirectives(input.gap_directives ?? input.judge_json.gap_directives ?? []);
-  if (activeDirectives.length === 0) {
+  const emphRoles = emphasisRoles(input);
+  if (activeDirectives.length === 0 && emphRoles.length === 0) {
     return { ops: [], model: "deterministic-noop", tokens: { input: 0, output: 0 }, ops_dropped_unknown_role: 0 };
   }
 
@@ -113,29 +124,25 @@ export async function generatePatchOps(
     && input.score.total >= (config.premium_min_score ?? 0.70);
   const model = usePremium ? config.premium_model! : config.model;
 
+  const patchMessages = [
+    { role: "system" as const, content: PATCH_MODE_PROMPT },
+    { role: "user" as const, content: buildPatchUserMessage(input, roleBlocks, activeDirectives, retryHint, emphRoles) },
+  ];
+  // Cap at 6000: complex jobs (3 directives + emphasis) consume ~2500-3200 tokens
+  // in DeepSeek reasoning before emitting JSON — 3200 caused finish_reason=length
+  // on those jobs, producing empty content. 6000 gives enough headroom for both.
+  const patchOpts = {
+    max_tokens: Math.min(config.max_tokens, 6000),
+    temperature: Math.min(config.temperature, 0.2),
+  };
+
   let r;
   try {
-    r = await complete({
-      model,
-      messages: [
-        { role: "system", content: PATCH_MODE_PROMPT },
-        { role: "user", content: buildPatchUserMessage(input, roleBlocks, activeDirectives, retryHint) },
-      ],
-      max_tokens: Math.min(config.max_tokens, 1600),
-      temperature: Math.min(config.temperature, 0.2),
-    });
+    r = await complete({ model, messages: patchMessages, ...patchOpts });
   } catch (e) {
     if (!usePremium) throw e;
     // Premium failure: fall back to config.model once
-    r = await complete({
-      model: config.model,
-      messages: [
-        { role: "system", content: PATCH_MODE_PROMPT },
-        { role: "user", content: buildPatchUserMessage(input, roleBlocks, activeDirectives, retryHint) },
-      ],
-      max_tokens: Math.min(config.max_tokens, 1600),
-      temperature: Math.min(config.temperature, 0.2),
-    });
+    r = await complete({ model: config.model, messages: patchMessages, ...patchOpts });
   }
 
   const parsed = parsePatchOps(r.content);
@@ -168,15 +175,32 @@ export function activeGapDirectives(directives: GapDirective[]): GapDirective[] 
 }
 
 /**
+ * Returns emphasis roles from judge tailoring hints.
+ *
+ * Non-empty list means judge identified roles whose existing bullets should be
+ * rewritten to foreground the JD's key skills — the primary signal for STRONG
+ * jobs that have no gap directives.
+ *
+ * @param input - Resume generation inputs.
+ * @returns Array of exact role strings to emphasize; empty when not set.
+ */
+export function emphasisRoles(input: ResumeGenInput): string[] {
+  return input.judge_json.tailoring_hints?.emphasize_roles ?? [];
+}
+
+/**
  * Builds compact user prompt payload for patch planner.
  *
- * Only role blocks relevant to targeted directives are included so prompt cost
- * stays low and planner cannot drift into unrelated resume sections.
+ * Directive-target role blocks are always included. When emphRoles is non-empty
+ * (STRONG/MAYBE jobs with no gap directives or in addition to directives), the
+ * emphasis role blocks plus EMPHASIS_ROLES/EMPHASIS_SKILLS sections are appended
+ * so the planner can generate targeted rewrites of existing bullets.
  *
  * @param input - Resume generation inputs containing JD and optional tech swaps.
  * @param roleBlocks - Parsed canonical role blocks from EXPERIENCE section.
  * @param directives - Patch-eligible directives for this attempt.
  * @param retryHint - Optional miss feedback from prior coverage failure.
+ * @param emphRoles - Roles from judge tailoring_hints.emphasize_roles.
  * @returns Serialized prompt body consumed by `PATCH_MODE_PROMPT`.
  */
 function buildPatchUserMessage(
@@ -184,11 +208,19 @@ function buildPatchUserMessage(
   roleBlocks: RoleBlock[],
   directives: GapDirective[],
   retryHint?: string,
+  emphRoles: string[] = [],
 ): string {
   const targetRoles = new Set(directives.map(d => d.target_role).filter(Boolean) as string[]);
-  const relevantBlocks = roleBlocks.filter(b =>
+  const directiveBlocks = roleBlocks.filter(b =>
     [...targetRoles].some(role => sameRole(b.role, role)),
   );
+  // Emphasis blocks: roles from emphasize_roles not already covered by directives
+  const emphasisBlocks = emphRoles.length > 0
+    ? roleBlocks.filter(b =>
+        emphRoles.some(r => sameRole(b.role, r)) &&
+        !directiveBlocks.some(db => sameRole(db.role, b.role)),
+      )
+    : [];
   const techSwaps = input.tech_swaps ?? input.judge_json.tailoring_hints?.tech_swaps ?? [];
 
   const parts = [
@@ -196,7 +228,7 @@ function buildPatchUserMessage(
     JSON.stringify(directives, null, 2),
     "",
     "ROLE_BLOCKS:",
-    JSON.stringify(relevantBlocks.map(renderRoleBlock), null, 2),
+    JSON.stringify([...directiveBlocks, ...emphasisBlocks].map(renderRoleBlock), null, 2),
     "",
     "SLIM_JD:",
     JSON.stringify(buildSlimJdForPrompts(input.jd_json), null, 2),
@@ -204,6 +236,11 @@ function buildPatchUserMessage(
     "TECH_SWAPS:",
     JSON.stringify(renderTechSwaps(techSwaps), null, 2),
   ];
+  if (emphRoles.length > 0) {
+    const emphSkills = input.judge_json.tailoring_hints?.emphasize_skills ?? [];
+    parts.push("", "EMPHASIS_ROLES:", JSON.stringify(emphRoles));
+    parts.push("", "EMPHASIS_SKILLS:", JSON.stringify(emphSkills));
+  }
   if (retryHint) parts.push("", "RETRY_HINT:", retryHint);
   return parts.join("\n");
 }

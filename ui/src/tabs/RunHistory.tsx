@@ -13,9 +13,36 @@ export function RunHistory({ refreshKey }: { refreshKey?: number }) {
     getRunHistory().then(setRows).catch(e => setError((e as Error).message)).finally(() => setLoading(false));
   }, [refreshKey]);
 
-  if (loading) return <div className="loading">Loading…</div>;
+  if (loading) return (
+    <div className="content-inner">
+      <div className="panel">
+        <table className="rtable">
+          <thead><tr><th>Run</th><th>Source</th><th>Status</th><th>Scraped</th><th>Passed</th><th>Yield</th><th>Started</th><th>Duration</th></tr></thead>
+          <tbody>
+            {[...Array(5)].map((_, i) => (
+              <tr key={i} className="skeleton-row">
+                {[...Array(8)].map((_, j) => <td key={j}><span /></td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
   if (error) return <div className="tab-error">Error: {error}</div>;
-  if (!rows.length) return <div className="content-inner"><div className="empty"><h4>No runs yet</h4><p>Pipeline runs will appear here.</p></div></div>;
+  if (!rows.length) return (
+    <div className="content-inner">
+      <div className="empty">
+        <div className="empty-mark">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+          </svg>
+        </div>
+        <h4>No runs yet</h4>
+        <p>Pipeline runs will appear here.</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="content-inner">

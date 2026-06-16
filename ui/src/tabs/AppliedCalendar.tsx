@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import type { CSSProperties } from 'react';
 import { getAppliedJobs, getStats } from '../api';
 import type { ApplyQueueRow, Stats } from '../api';
 import { JobCard } from '../components/JobCard';
@@ -51,8 +52,8 @@ export function AppliedCalendar({ onStatsUpdate, refreshKey }: Props) {
         ))}
       </div>
 
-      {shown.map(([k, arr]) => (
-        <div className="day-group" key={k}>
+      {shown.map(([k, arr], i) => (
+        <div className="day-group" key={k} style={{ '--i': i } as CSSProperties}>
           <div className="day-head">
             <span className="day-name">{label(k)}</span>
             <span className={`day-badge${k === todayKey ? '' : ' muted'}`}>{arr.length} sent</span>

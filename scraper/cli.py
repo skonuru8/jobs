@@ -65,9 +65,9 @@ def main() -> int:
     parser.add_argument(
         "--hours-old",
         type=int,
-        default=72,
+        default=None,
         dest="hours_old",
-        help="LinkedIn only: max age of postings in hours (default: 72).",
+        help="LinkedIn only: max age of postings in hours (default: from config scraping.linkedin.hours_old).",
     )
     parser.add_argument(
         "--query",

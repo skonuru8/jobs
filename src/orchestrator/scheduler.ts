@@ -8,7 +8,8 @@
  *   Dice Sun afternoons:    0 13,17,21 * * 0        POSTED_WITHIN=ONE   MAX=50
  *   Jobright API (Mon–Sat): 0 9,13,17,21 * * 1-6    MAX=40
  *   Jobright API (Sun):     0 13,17,21 * * 0        MAX=40
- *   LinkedIn (daily):       0 14 * * *              (no POSTED_WITHIN)  MAX=30
+ *   LinkedIn (Mon–Sat):     0 9,13,17,21 * * 1-6    (no POSTED_WITHIN)  MAX=30
+ *   LinkedIn (Sun):         0 13,17,21 * * 0        (no POSTED_WITHIN)  MAX=30
  *   Ghost reaper:           *\/10 * * * *           sweeps stale runs (every 10 minutes)
  *
  * Jobright and LinkedIn are offset from Dice by 1h to avoid hitting
@@ -222,12 +223,23 @@ export function registerSchedules(): ScheduledTask[] {
   //   });
   // });
 
-  // ── LinkedIn (daily, offset by 1h from Jobright) ─────────────────────────
+  // ── LinkedIn (Mon–Sat, matching Dice cadence) ────────────────────────────
   // LinkedIn does not support POSTED_WITHIN — JobSpy doesn't expose it
-  schedule("0 14 * * *", "linkedin-daily", async () => {
+  schedule("0 9,13,17,21 * * 1-6", "linkedin-daily", async () => {
     await spawnRun({
       source:       "linkedin",
       postedWithin: "",        // no recency filter for LinkedIn
+      max:          30,
+      runId:        newRunId(),
+      lockTtlSecs:  14_400,
+    });
+  });
+
+  // ── LinkedIn Sunday afternoons ────────────────────────────────────────────
+  schedule("0 13,17,21 * * 0", "linkedin-sunday", async () => {
+    await spawnRun({
+      source:       "linkedin",
+      postedWithin: "",
       max:          30,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
