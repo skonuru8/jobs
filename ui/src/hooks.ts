@@ -38,10 +38,12 @@ export function useSmoothScroll(ref: RefObject<HTMLElement>, dep: unknown) {
 
     const onWheel = (e: WheelEvent) => {
       if (e.ctrlKey) return;
-      const doc = (e.target as HTMLElement)?.closest?.('.doc') as HTMLElement | null;
-      if (doc) {
-        const m = doc.scrollHeight - doc.clientHeight;
-        if (m > 1 && ((e.deltaY < 0 && doc.scrollTop > 0) || (e.deltaY > 0 && doc.scrollTop < m - 1))) return;
+      // Carve out any nested scroll container that has actual overflow to scroll —
+      // without this, e.preventDefault() below kills native child scroll.
+      const nested = (e.target as HTMLElement)?.closest?.('.doc, .diff-container') as HTMLElement | null;
+      if (nested) {
+        const m = nested.scrollHeight - nested.clientHeight;
+        if (m > 1 && ((e.deltaY < 0 && nested.scrollTop > 0) || (e.deltaY > 0 && nested.scrollTop < m - 1))) return;
       }
       const max = el.scrollHeight - el.clientHeight;
       if (max <= 0) return;

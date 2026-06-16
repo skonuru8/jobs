@@ -24,8 +24,8 @@ interface Props {
   cardRef?: (el: HTMLDivElement | null) => void;
 }
 
-const NO_CHIPS = ['Not a good fit', 'Too senior', 'Too junior', 'No sponsorship', 'Location', 'Contract / not FTE', 'Low comp', 'Already applied'];
-const YES_CHIPS = ['Not a good fit', 'Already applied elsewhere', 'Too senior / too junior'];
+const NO_CHIPS = ['Not a good fit', 'Too senior', 'Too junior', 'No sponsorship', 'Location', 'Contract / not FTE', 'Low comp', 'Already applied', 'No longer available'];
+const YES_CHIPS = ['Not a good fit', 'Already applied elsewhere', 'Too senior / too junior', 'No longer available'];
 
 function artifactFlagsWarn(flags: string[]): boolean {
   const warn = /compile|malformed|too_short|length_off|failed|invalid|missing|leak/i;
@@ -185,6 +185,10 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
         </div>
         <div className="score-zone">
           {hasScore && <><ScoreNum value={(row as ApplyQueueRow).score_total} /><ScoreRing value={(row as ApplyQueueRow).score_total} /></>}
+          <div className="head-links" onClick={e => e.stopPropagation()}>
+            {row.source_url && <a className="head-link" href={row.source_url} target="_blank" rel="noopener noreferrer" title="Open job posting"><Ext /></a>}
+            {row.jobright_id && <a className="head-link" href={`https://jobright.ai/jobs/info/${row.jobright_id}`} target="_blank" rel="noopener noreferrer" title="Jobright">JR</a>}
+          </div>
           <Chevron className="chev" />
         </div>
       </div>
@@ -287,10 +291,6 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
                 <button className={label === 'yes' ? 'on-yes' : ''} disabled={saving} onClick={() => handleLabel('yes')}>Yes</button>
                 <button className={label === 'maybe' ? 'on-maybe' : ''} disabled={saving} onClick={() => handleLabel('maybe')}>Maybe</button>
                 <button className={label === 'no' ? 'on-no' : ''} disabled={saving} onClick={() => handleLabel('no')}>No</button>
-              </div>
-              <div className="openrow" style={{ marginLeft: 'auto' }}>
-                <a className="btn btn-ghost" style={{ fontSize: 12, padding: '7px 13px' }} href={row.source_url} target="_blank" rel="noopener noreferrer">Open job <Ext /></a>
-                {row.jobright_id && <a className="btn btn-ghost" style={{ fontSize: 12, padding: '7px 13px' }} href={`https://jobright.ai/jobs/info/${row.jobright_id}`} target="_blank" rel="noopener noreferrer">Jobright <Ext /></a>}
               </div>
             </div>
 

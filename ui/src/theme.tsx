@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import type { ReactNode } from 'react';
+import type { ReactNode, CSSProperties } from 'react';
 import { Cog } from './icons';
 
 export type ThemeName = 'light' | 'dark';
@@ -88,10 +88,17 @@ export function SettingsMenu() {
       </button>
       {open && createPortal(
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onClick={() => setOpen(false)} aria-hidden="true" />
+          <div className="settings-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onClick={() => setOpen(false)} aria-hidden="true" />
           <div
             className="settings-pop"
-            style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
+            data-theme={theme}
+            style={{
+              position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999,
+              '--accent': accent,
+              '--accent-ink': theme === 'dark' ? '#F2EFE8' : '#1A1917',
+              '--accent-soft': `color-mix(in srgb, ${accent} ${theme === 'dark' ? '16%' : '18%'}, transparent)`,
+              '--accent-line': `color-mix(in srgb, ${accent} ${theme === 'dark' ? '44%' : '56%'}, transparent)`,
+            } as CSSProperties}
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >
