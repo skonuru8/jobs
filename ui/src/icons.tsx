@@ -1,5 +1,6 @@
 // Icon surface — re-exports Phosphor icons under the same names used throughout the app.
 // All callers (Sidebar, JobCard, App, bits) stay unchanged.
+import React from 'react';
 import type { SVGProps } from 'react';
 import {
   Briefcase as PhBriefcase,
@@ -22,7 +23,7 @@ type P = SVGProps<SVGSVGElement>;
 
 // Bridges SVGProps (className, style, width, height attrs) to Phosphor props.
 // style.width/height override via inline style; SVG attr width/height map to size.
-function wrap(PhIcon: (props: any) => JSX.Element | null) {
+function wrap(PhIcon: React.ComponentType<any>) {
   return function Icon({ className, style, width, height }: P) {
     const attrSize = Number(width || height) || undefined;
     return <PhIcon className={className} style={style} size={attrSize} weight="bold" />;
