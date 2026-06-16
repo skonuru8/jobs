@@ -58,7 +58,11 @@ export function useSmoothScroll(ref: RefObject<HTMLElement>, dep: unknown) {
       else if (e.deltaMode === 2) d *= el.clientHeight;
       if (!animating) target = el.scrollTop;
       const next = clamp(target + d);
-      if (next === target) return;
+      if (next === target) {
+        // At scroll boundary — consume the event to block OS overscroll bounce
+        if ((target === 0 && d < 0) || (target === max && d > 0)) e.preventDefault();
+        return;
+      }
       target = next;
       e.preventDefault();
       if (!animating) {

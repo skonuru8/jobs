@@ -17,6 +17,17 @@ interface Props {
 const SL: Record<StatusFilter, string> = { pending: 'Pending', apply_later: 'Later', applied: 'Applied', not_applied: 'Not applied', all: 'All' };
 const titleCase = (s: string) => s.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
+function SourceDropdown({ value, options, onChange }: { value: string; options: SegOption<string>[]; onChange: (v: string) => void }) {
+  return (
+    <div className="src-select">
+      <select value={value} onChange={e => onChange(e.target.value)}>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      <span className="src-caret">▾</span>
+    </div>
+  );
+}
+
 export function ApplyQueue({ onStatsUpdate, refreshKey, searchQuery }: Props) {
   const [rows, setRows] = useState<ApplyQueueRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,7 +93,7 @@ export function ApplyQueue({ onStatsUpdate, refreshKey, searchQuery }: Props) {
       <div className="filters">
         <div className="fgroup"><span className="fgroup-lbl">Status</span><Segmented value={status} options={statusOpts} onChange={setStatus} /></div>
         <div className="fgroup"><span className="fgroup-lbl">Bucket</span><Segmented value={bucket} options={bucketOpts} onChange={setBucket} /></div>
-        <div className="fgroup"><span className="fgroup-lbl">Source</span><Segmented value={src} options={sourceOpts} onChange={setSrc} /></div>
+        <div className="fgroup"><span className="fgroup-lbl">Source</span><SourceDropdown value={src} options={sourceOpts} onChange={setSrc} /></div>
       </div>
 
       {status === 'applied' && appliedDays.length > 0 && (

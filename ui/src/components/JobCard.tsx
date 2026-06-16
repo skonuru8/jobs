@@ -177,6 +177,13 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
             <span className="j-dot" />
             <span className="j-time">{timeAgo(row.scraped_at)}</span>
           </div>
+          {mode === 'apply' && label && label !== 'no' && (
+            <div className="head-status-row" onClick={e => e.stopPropagation()}>
+              <button className={appStatus === 'applied' ? 'on-applied' : ''} disabled={saving} onClick={() => handleStatus('applied')}>Applied</button>
+              <button className={appStatus === 'apply_later' ? 'on-later' : ''} disabled={saving} onClick={() => handleStatus('apply_later')}>Later</button>
+              <button className={appStatus === 'skipped' ? 'on-skip' : ''} disabled={saving} onClick={() => handleStatus('skipped')}>Skip</button>
+            </div>
+          )}
           {hardRow && <div className="flag-strip"><Warn /> {hardRow.reason}</div>}
           {hasScore && <MiniScores row={row as ApplyQueueRow} />}
           {applyRow?.artifact_flags && applyRow.artifact_flags.length > 0 && (
