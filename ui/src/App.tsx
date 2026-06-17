@@ -11,6 +11,7 @@ import { HardRejections } from './tabs/HardRejections';
 import { SoftRejections } from './tabs/SoftRejections';
 import { RunHistory } from './tabs/RunHistory';
 import { AppliedCalendar } from './tabs/AppliedCalendar';
+import { PipelineControl } from './tabs/PipelineControl';
 
 const TAB_IDS = TABS.map(t => t.id);
 
@@ -18,7 +19,7 @@ function Shell() {
   const { theme, accent, card } = useTheme();
   const [activeTab, setActiveTab] = useState('apply');
   const [stats, setStats] = useState<Stats | null>(null);
-  const [refreshKeys, setRefreshKeys] = useState<Record<string, number>>({ apply: 0, hard: 0, soft: 0, applied: 0, history: 0 });
+  const [refreshKeys, setRefreshKeys] = useState<Record<string, number>>({ apply: 0, hard: 0, soft: 0, applied: 0, history: 0, pipeline: 0 });
   const [search, setSearch] = useState('');
   const [scope, setScope] = useState<'total' | 'today'>('total');
   const [collapsed, setCollapsed] = useState(false);
@@ -117,6 +118,7 @@ function Shell() {
             {activeTab === 'soft' && <SoftRejections onStatsUpdate={handleStatsUpdate} refreshKey={refreshKeys.soft} searchQuery={search} />}
             {activeTab === 'applied' && <AppliedCalendar onStatsUpdate={handleStatsUpdate} refreshKey={refreshKeys.applied} />}
             {activeTab === 'history' && <RunHistory refreshKey={refreshKeys.history} />}
+            {activeTab === 'pipeline' && <PipelineControl refreshKey={refreshKeys.pipeline} />}
           </div>
         </div>
       </div>

@@ -17,6 +17,11 @@ import {
   Sidebar as PhSidebar,
   Tray as PhTray,
   Gear as PhGear,
+  Terminal as PhTerminal,
+  Power as PhPower,
+  Copy as PhCopy,
+  Eraser as PhEraser,
+  ArrowLineDown as PhArrowLineDown,
 } from '@phosphor-icons/react';
 
 type P = SVGProps<SVGSVGElement>;
@@ -44,3 +49,8 @@ export const Warn      = wrap(PhWarning);
 export const Panel     = wrap(PhSidebar);
 export const Inbox     = wrap(PhTray);
 export const Cog       = wrap(PhGear);
+export const Terminal  = wrap(PhTerminal);
+export const Power     = wrap(PhPower);
+export const Copy      = wrap(PhCopy);
+export const Eraser    = wrap(PhEraser);
+export const ScrollDown = wrap(PhArrowLineDown);

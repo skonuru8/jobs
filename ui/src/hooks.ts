@@ -42,7 +42,7 @@ export function useSmoothScroll(ref: RefObject<HTMLElement>, dep: unknown) {
       // When the nested container still has room to scroll: return early so the
       // browser handles it natively. When it's at its boundary: call
       // preventDefault() to prevent scroll chaining up to the page.
-      const nested = (e.target as HTMLElement)?.closest?.('.doc, .diff-container, .sdiff') as HTMLElement | null;
+      const nested = (e.target as HTMLElement)?.closest?.('.doc, .diff-container, .sdiff, .pc-term') as HTMLElement | null;
       if (nested) {
         const m = nested.scrollHeight - nested.clientHeight;
         if (m > 1) {

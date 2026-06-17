@@ -1,5 +1,5 @@
 import type { Stats } from '../api';
-import { Briefcase, XCircle, Wave, Check, Clock, Panel } from '../icons';
+import { Briefcase, XCircle, Wave, Check, Clock, Panel, Terminal } from '../icons';
 import type { SVGProps } from 'react';
 
 export const BRAND = { mark: 'J', a: 'jo', b: 'bs', sub: 'job copilot', name: 'jobs' };
@@ -17,10 +17,11 @@ export const TABS: NavTab[] = [
   { id: 'soft', label: 'Soft Rejections', title: 'Soft Rejections', sub: 'Scored below threshold — second-look queue' },
   { id: 'applied', label: 'Applied', title: 'Applied', sub: 'Everything you have sent out, by day' },
   { id: 'history', label: 'Run History', title: 'Run History', sub: 'Scrape & score pipeline runs' },
+  { id: 'pipeline', label: 'Run Pipeline', title: 'Pipeline Control', sub: 'Launch runs, toggle orchestrator, stream live output' },
 ];
 
 const ICONS: Record<string, (p: SVGProps<SVGSVGElement>) => JSX.Element> = {
-  apply: Briefcase, hard: XCircle, soft: Wave, applied: Check, history: Clock,
+  apply: Briefcase, hard: XCircle, soft: Wave, applied: Check, history: Clock, pipeline: Terminal,
 };
 
 interface Props {
@@ -40,6 +41,7 @@ export function Sidebar({ activeTab, onChange, stats, scope, onToggleScope, coll
     soft: stats?.softRejectionsUnreviewed ?? null,
     applied: stats?.applied ?? null,
     history: null,
+    pipeline: null,
   };
   const spark = [5, 8, 6, 11, 7, 9, 14, 10, 12, 8];
   const mx = Math.max(...spark);
