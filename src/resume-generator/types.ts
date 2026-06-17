@@ -85,18 +85,19 @@ export interface ResumeGenResult {
 export interface ResumeGenConfig {
   /** Generation strategy. Defaults to `patch_tailoring` when absent. See `ResumeMode`. */
   mode?: ResumeMode;
-  /** Default model (and flash fallback when premium fails). */
+  /** Primary model for all patch and full_regen generation. */
   model: string;
-  /** Optional second fallback if both primary and premium models fail. */
+  /** Fallback model used on exception (timeout / empty content). */
   fallback_model?: string;
-  /** Used instead of `model` when verdict=STRONG and score >= `premium_min_score`. */
-  premium_model?: string;
-  /** Minimum score (0–1) required to use the premium model. Default: 0.70. */
-  premium_min_score?: number;
-  /** Enable streaming for the premium model. Non-streaming for all others. */
-  premium_stream?: boolean;
-  /** Token ceiling for the LLM response. patch_tailoring caps at 1600 internally. */
+  /** Token ceiling for the LLM response (full_regen path). */
   max_tokens: number;
+  /**
+   * Token ceiling used specifically in patch_tailoring mode. Lets you tune the
+   * budget per model without touching code — reasoning-heavy models (Pro) need
+   * more headroom before emitting JSON than lighter models (Flash). Falls back
+   * to `max_tokens` when absent.
+   */
+  patch_max_tokens?: number;
   /** Sampling temperature passed to model completion call. Lower is more deterministic. */
   temperature: number;
   /** Milliseconds to wait before the LLM call, to avoid rate-limit bursts. */
@@ -108,6 +109,11 @@ export interface ResumeGenConfig {
    * COVER_LETTER bucket always qualifies regardless of score.
    */
   review_queue_threshold: number;
+  /**
+   * Emit `resume_patch_ops_explosion` warning when a single job's op count exceeds this.
+   * Catches over-editing (typically from the fallback model). Default: 12.
+   */
+  patch_ops_warn_threshold?: number;
   /** Extra attempts per model on style-lint or truncation failure (total = retries + 1). */
   retries: number;
   /** Flag `resume_too_short` if final word count is below this. Default: 1900. */

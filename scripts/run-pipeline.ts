@@ -192,9 +192,6 @@ async function main(): Promise<void> {
   const resumeGeneratorConfig: ResumeGenConfig = {
     model: (config.llm.resume_generator?.model ?? config.llm.cover_letter.model) as string,
     fallback_model: config.llm.resume_generator?.fallback_model as string | undefined,
-    premium_model: config.llm.resume_generator?.premium_model as string | undefined,
-    premium_min_score: config.llm.resume_generator?.premium_min_score as number | undefined,
-    premium_stream: config.llm.resume_generator?.premium_stream as boolean | undefined,
     max_tokens:  (config.llm.resume_generator?.max_tokens ?? 8000) as number,
     temperature: (config.llm.resume_generator?.temperature ?? 0.3) as number,
     throttle_ms: (config.llm.resume_generator?.throttle_ms ?? 1000) as number,

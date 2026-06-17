@@ -198,27 +198,74 @@ This document describes the Postgres schema created by `migrations/*.sql`.
 
 ---
 
-## Table: `cover_letters`
+## Table: `tailored_resumes`
 
-**Purpose:** Metadata for generated cover letters.
+**Purpose:** Metadata for generated tailored resume artifacts (TeX + PDF). One row per generation attempt per job.
 
-**Created by:** `migrations/001_initial.sql`
+**Created/altered by:**
+- `migrations/005_tailored_resumes.sql` (base table)
+- `migrations/012_regeneration_reason.sql` (adds `regeneration_reason`)
 
-| Column | Type | Nullable | Meaning |
-|---|---|---:|---|
-| `job_id` | `TEXT` | no | FK to jobs |
-| `run_id` | `TEXT` | no | FK to jobs |
-| `content` | `TEXT` | yes | Often NULL (pipeline writes letters to disk; UI server reads from file path) |
-| `file_path` | `TEXT` | yes | Absolute file path to `.md` letter on disk |
-| `word_count` | `INT` | yes | Word count |
-| `model` | `TEXT` | yes | Model used |
+| Column | Type | Nullable | Default | Meaning |
+|---|---|---:|---|---|
+| `job_id` | `TEXT` | no | — | FK to jobs |
+| `run_id` | `TEXT` | no | — | FK to jobs |
+| `tex_path` | `TEXT` | yes | — | Repo-relative path to generated `.tex` file |
+| `pdf_path` | `TEXT` | yes | — | Repo-relative path to compiled `.pdf` file |
+| `meta_path` | `TEXT` | yes | — | Repo-relative path to `meta.json` |
+| `word_count` | `INT` | yes | — | Resume word count |
+| `model` | `TEXT` | yes | — | LLM model used |
+| `prompt_sha` | `TEXT` | yes | — | SHA of prompt used |
+| `canonical_sha` | `TEXT` | yes | — | SHA of canonical `resume_master.tex` at generation time |
+| `input_tokens` | `INT` | yes | — | Input token count |
+| `output_tokens` | `INT` | yes | — | Output token count |
+| `compile_status` | `TEXT` | yes | — | `ok \| failed \| skipped` |
+| `generated_by` | `TEXT` | yes | — | `pipeline \| manual \| cached` |
+| `flags` | `JSONB` | no | `'[]'` | Array of flag strings |
 | `generated_at` | `TIMESTAMPTZ` | no | `NOW()` | Generation timestamp |
+| `regeneration_reason` | `TEXT` | yes | `NULL` | Why this row replaced a prior attempt (`null` = first generation). Values: `previous_resume_gen_failed`, `previous_cover_gen_failed`, `previous_both_failed`, `manual_force`, `explicit:<reason>` |
 
 **Primary key:** `(job_id, run_id)`
 
-**Written by:** pipeline persistence `saveJob()` when cover letter was written.
+**Written by:** `src/storage/persist.ts` → `insertTailoredResumeArtifact()`
 
-**Read by:** UI server reads `file_path` and resolves content from disk.
+---
+
+## Table: `cover_letters`
+
+**Purpose:** Metadata for generated cover letters (TeX + PDF + text content).
+
+**Created/altered by:**
+- `migrations/001_initial.sql` (base columns)
+- `migrations/006_cover_letter_artifacts.sql` (tex/pdf/meta paths, prompt_sha, canonical_sha, tokens, compile_status, generated_by, flags)
+- `migrations/012_regeneration_reason.sql` (adds `regeneration_reason`)
+
+| Column | Type | Nullable | Default | Meaning |
+|---|---|---:|---|---|
+| `job_id` | `TEXT` | no | — | FK to jobs |
+| `run_id` | `TEXT` | no | — | FK to jobs |
+| `content` | `TEXT` | yes | — | Often NULL; pipeline writes letters to disk |
+| `file_path` | `TEXT` | yes | — | Path to `.md` file (legacy) |
+| `tex_path` | `TEXT` | yes | — | Repo-relative path to generated `.tex` file |
+| `pdf_path` | `TEXT` | yes | — | Repo-relative path to compiled `.pdf` |
+| `meta_path` | `TEXT` | yes | — | Repo-relative path to `meta.json` |
+| `word_count` | `INT` | yes | — | Word count |
+| `model` | `TEXT` | yes | — | LLM model used |
+| `prompt_sha` | `TEXT` | yes | — | SHA of prompt version |
+| `canonical_sha` | `TEXT` | yes | — | SHA of canonical resume TeX at generation time |
+| `input_tokens` | `INT` | yes | — | Input token count |
+| `output_tokens` | `INT` | yes | — | Output token count |
+| `compile_status` | `TEXT` | yes | — | `ok \| failed \| skipped` |
+| `generated_by` | `TEXT` | yes | — | `pipeline \| manual` |
+| `flags` | `JSONB` | no | `'[]'` | Array of flag strings |
+| `generated_at` | `TIMESTAMPTZ` | no | `NOW()` | Generation timestamp |
+| `regeneration_reason` | `TEXT` | yes | `NULL` | Why this row replaced a prior attempt. Same values as `tailored_resumes.regeneration_reason` |
+
+**Primary key:** `(job_id, run_id)`
+
+**Written by:** `src/storage/persist.ts` → `insertCoverLetterArtifact()`
+
+**Read by:** UI server reads `file_path` / `tex_path` and resolves content from disk.
 
 ---
 

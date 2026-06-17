@@ -611,6 +611,11 @@ This is the low-level reference for **every file** in the system. For each file:
 - `finishRun(runId: string, stats: RunStats): Promise<void>`
 - `saveJob(job: JobRecord): Promise<void>`
 - `isSeenInDB(source: string, jobId: string): Promise<boolean>`
+- `insertTailoredResumeArtifact(row: TailoredResumeInsert): Promise<void>` — inserts a `tailored_resumes` row; `row.regeneration_reason` is included.
+- `insertCoverLetterArtifact(row: CoverLetterArtifactInsert): Promise<void>` — inserts a `cover_letters` row; `row.regeneration_reason` is included.
+- `getLatestTailoredResumeForJob(jobId: string): Promise<...>` — reads the most recent `tailored_resumes` row for cache-hit checking.
+- `jobHasCompleteArtifacts(jobId: string): Promise<boolean>` — returns true only when both latest resume and cover rows have usable paths and no failure flags.
+- `detectRegenerationReason(jobId: string): Promise<string | null>` — queries both tables for the latest flags and returns: `"previous_both_failed"`, `"previous_resume_gen_failed"`, `"previous_cover_gen_failed"`, `"manual_force"`, or `null` (DB disabled or no prior rows).
 - Disabled-state controls: `markStorageDisabled(reason?)`, `isStorageAvailable()`
 - Error helper: `formatErr(e)`
 - Orchestrator helpers: `updateHeartbeat(runId)`, `markRunExitCode(runId, exitCode, isGhost?)`, `getUnfinishedRuns(staleMinutes?)`, `getRunStats(runId)`
@@ -853,6 +858,138 @@ Exit codes: 0 success, 1 adapter error, 2 cookie file missing.
 
 ---
 
+## migrations/005_tailored_resumes.sql
+
+**Purpose:** Creates `tailored_resumes` table for resume artifact metadata (tex_path, pdf_path, meta_path, word_count, model, prompt_sha, canonical_sha, tokens, compile_status, generated_by, flags, generated_at).
+
+---
+
+## migrations/006_cover_letter_artifacts.sql
+
+**Purpose:** Extends `cover_letters` table with artifact columns added after v1 (tex_path, pdf_path, meta_path, prompt_sha, canonical_sha, input_tokens, output_tokens, compile_status, generated_by, flags).
+
+---
+
+## migrations/007_fabrication_ledger.sql
+
+**Purpose:** Creates `fabrication_ledger` table for per-bullet attribution tracking (job_id, run_id, role, bullet_text, source_bullet_hash, truth_distance_score, risk_level, requires_human_review).
+
+---
+
+## migrations/008_resume_attribution.sql
+
+**Purpose:** Resume attribution columns on `tailored_resumes` (attribution flags and overrun counter).
+
+---
+
+## migrations/009_cover_letter_prompt_sha.sql
+
+**Purpose:** Adds `prompt_sha` and related fields to `cover_letters` for prompt version tracking.
+
+---
+
+## migrations/010_labels_notes.sql
+
+**Purpose:** Adds `notes` field to `labels` table for freeform operator annotations.
+
+---
+
+## migrations/011_ledger_truth_distance_numeric.sql
+
+**Purpose:** Changes `fabrication_ledger.truth_distance_score` from `INTEGER` to `NUMERIC` so fractional scores (0.05–0.2) from Phase-8 risk map entries can be stored without truncation.
+
+---
+
+## migrations/012_regeneration_reason.sql
+
+**Purpose:** Adds `regeneration_reason TEXT DEFAULT NULL` to both `tailored_resumes` and `cover_letters`. Tracks why a given artifact row was generated when it replaces a prior attempt. Possible values: `null` (first generation), `previous_resume_gen_failed`, `previous_cover_gen_failed`, `previous_both_failed`, `manual_force`, `explicit:<reason>`.
+
+**Idempotent:** Uses `ADD COLUMN IF NOT EXISTS`; safe to re-run.
+
+---
+
+## src/evals/types.ts
+
+**Purpose:** TypeScript type definitions for the deterministic eval system.
+
+**Exports:**
+
+- `Quality` — `"improved" | "neutral" | "degraded"`
+- `OverallQuality` — `"ok" | "warning" | "fail"`
+- `EmphasisOpEval` — per-op eval for EMPHASIS rewrites: `{ role, item, original, rewritten, scores: { specificity_preserved, tech_forward_gain, info_loss, net_quality }, dropped_phrases }`
+- `DirectiveOpEval` — per-op eval for fabricate/reframe directives: `{ role, jd_requirement, handling, scores: { requirement_addressed, metric_overclaim, banned_phrase } }`
+- `ResumeEval` — `{ emphasis_ops, directive_ops, flags, overall_quality }`
+- `CoverLetterEval` — `{ word_count, banned_phrase, banned_phrases_found, overall_quality }`
+- `EvalResult` — `{ run_at, version: "1.0", patch_prompt_sha, cover_prompt_sha, resume, cover_letter }`
+- `BatchJobRow` — per-job summary for batch reports
+- `BatchSummary` — aggregated batch eval summary
+
+---
+
+## src/evals/runner.ts
+
+**Purpose:** Deterministic post-generation quality evaluator. Requires no LLM. Runs as a post-generation pass inside `manual-generate.ts` and as a batch re-evaluator in `backfill-evals.ts`.
+
+**Exports / public interface:**
+
+- `EvalInput` interface — `{ canonicalTex, judgeJson, patchOps?, resumeFlags?, patchPromptSha?, coverLetterText?, coverFlags?, coverWordCount?, coverPromptSha? }`
+- `runEvals(input: EvalInput): EvalResult`
+  - **What it does:** Classifies patch ops into emphasis ops (role in `emphasize_roles` AND NOT in directive `target_role`s) and directive ops. Evaluates each emphasis rewrite using `evalEmphasisOp()` + `extractKeyTerms()`. Evaluates directive ops using `evalDirectiveOp()`. Rolls up overall quality for resume and cover letter.
+  - **Side effects:** none (pure).
+
+**Key internal functions:**
+
+- `extractKeyTerms(tex: string): string[]` — extracts named tech terms (capitalized multi-word runs, first word filtered against ACTION_VERBS), context noun phrases (after "for/across/of/within" with qualifying noun type), and metrics with explicit units or `\d{2,}+` magnitudes.
+- `evalEmphasisOp(original, rewritten, role, item, emphSkills)` — compares key terms before/after; scores `specificity_preserved`, `tech_forward_gain` (% of EMPHASIS_SKILLS newly bolded), `info_loss` (any key term dropped), `net_quality`.
+- `rollUpResumeQuality()` — fail on `resume_gen_failed` or any `info_loss`; warning on lint flags or `resume_attribution_overrun`; ok otherwise.
+- `rollUpCoverQuality()` — fail on `cover_letter_gen_failed` or any banned phrase; warning if word count < 350.
+
+---
+
+## src/evals/batch-report.ts
+
+**Purpose:** Aggregates per-job eval results from a batch directory into a summary file, and appends a trend row to the global eval history log.
+
+**Exports / public interface:**
+
+- `writeBatchReport(batchDir: string, repoRoot: string): string`
+  - **What it does:** Finds all `meta.json` files in `batchDir`, reads the `evals` key from each, builds `BatchSummary`, writes `{batchDir}/evals-summary.json`, calls `appendTrendRow()`.
+  - **Returns:** absolute path to `evals-summary.json`.
+- `appendTrendRow(summary: BatchSummary, repoRoot: string): void`
+  - **What it does:** Appends one JSONL line to `output/evals-history.jsonl`. Each row includes `batch_id`, `run_at`, `total`, `pass`, `warn`, `fail`, and `degraded_by_patch_prompt_sha` (a map from `PATCH_PROMPT_SHA` → count of degraded emphasis ops, enabling cross-SHA quality trend comparison).
+
+---
+
+## scripts/eval/batch-evals.ts
+
+**Purpose:** CLI wrapper for `writeBatchReport`. Runs against today's batch dir or a specified path.
+
+**Usage:**
+
+```bash
+npx tsx scripts/eval/batch-evals.ts [batch-dir]
+# Default: output/applications/{today}
+```
+
+**Key behavior:** Reads all `meta.json` files in the batch dir, aggregates eval results, writes `evals-summary.json`, appends trend row to `output/evals-history.jsonl`.
+
+---
+
+## scripts/eval/backfill-evals.ts
+
+**Purpose:** Retroactively recomputes and overwrites the `evals` key in all `meta.json` files for a given batch. Uses the latest eval runner logic, so past results can be restated after logic improvements.
+
+**Usage:**
+
+```bash
+npx tsx scripts/eval/backfill-evals.ts [batch-dir]
+# Default: output/applications/{today}
+```
+
+**Key behavior:** Loads `config/resume_master.tex` as the canonical TeX source. For each `meta.json` found recursively: reads `resume.patch_ops`, `judge.tailoring_hints`, `judge.gap_directives`, `cover_letter.*` fields; calls `runEvals()`; overwrites the `evals` key. Skips if any field is missing with a warning. Then runs `writeBatchReport()` to produce `evals-summary.json`.
+
+---
+
 ## src/resume-generator/patch/diff-lint.ts
 
 **Purpose:** Post-apply lint for patch tailoring mode. Checks the patched LaTeX for quality and constraint violations before the result is accepted.
@@ -911,6 +1048,28 @@ npx tsx scripts/eval/diff-reports.ts output/audits/eval-OLD.json output/audits/e
 
 - Produces a per-fixture per-check delta table.
 - Emits summary: zero-op rate, mean coverage, banned total, compile fails, dropped total.
+
+---
+
+## scripts/eval/compare-models.ts
+
+**Purpose:** Head-to-head model comparison for patch generation. Runs `generatePatchOps` twice per job (once per model using `modelOverride`), applies ops with `applyPatchOps`, evaluates with `runEvals`, and writes a JSON comparison report.
+
+**Exports / public interface:** None (script).
+
+**Usage:**
+
+```bash
+npx tsx scripts/eval/compare-models.ts [--limit N] [--jobs id1,id2,...]
+```
+
+Default limit: 30. Reads all applied-job `meta.json` files from `output/applications/`. Writes to `output/audits/compare-models-{timestamp}.json`.
+
+**Key behavior:**
+
+- Both models run against the same canonical TeX and judge context from persisted `meta.json`.
+- Compares op counts, quality (ok/warning/fail), `info_loss_ops`, `dropped_phrases`, `tech_forward_gain`, and token usage per model.
+- Prints a summary table: ok/warning/fail counts, total info_loss ops, avg tokens, error counts.
 
 ---
 

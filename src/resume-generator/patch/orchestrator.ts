@@ -46,6 +46,7 @@ export async function generatePatchedResumeTex(
   let prevMissed: string[] = [];
   let prevLintViolations: string[] = [];
   let totalDroppedUnknownRole = 0;
+  let modelOverride: string | undefined;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const missedPart = prevMissed.length > 0
@@ -57,10 +58,13 @@ export async function generatePatchedResumeTex(
     const retryHint = (missedPart || lintPart) ? `${missedPart}${lintPart}` : undefined;
     let generated;
     try {
-      generated = await generatePatchOps(input, config, roleBlocks, retryHint);
+      generated = await generatePatchOps(input, config, roleBlocks, retryHint, modelOverride);
     } catch (e) {
       if (attempt === 0) {
         retryCount += 1;
+        if (config.fallback_model) {
+          modelOverride = config.fallback_model;
+        }
         continue;
       }
       return {
@@ -104,6 +108,8 @@ export async function generatePatchedResumeTex(
       if (findBannedStylePhrases(tex).length > 0) warnings.push("banned_phrase_in_output");
       if (!latexStructureOk(tex)) warnings.push("tex_malformed");
       for (const flag of lintResult.flags) warnings.push(flag);
+      const opsWarn = config.patch_ops_warn_threshold ?? 12;
+      if (allOps.length > opsWarn) warnings.push("resume_patch_ops_explosion");
 
       return {
         status: "ok",

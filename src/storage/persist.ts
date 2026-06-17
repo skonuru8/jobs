@@ -541,6 +541,11 @@ export interface TailoredResumeInsert {
   generated_by:    string;
   /** Artifact warning or failure flags captured during generation. */
   flags:           string[];
+  /**
+   * Why this artifact was generated when it replaces a prior attempt.
+   * NULL = first generation. See migration 012 for value conventions.
+   */
+  regeneration_reason?: string | null;
 }
 
 /**
@@ -556,8 +561,8 @@ export async function insertTailoredResumeArtifact(row: TailoredResumeInsert): P
       `INSERT INTO tailored_resumes (
          job_id, run_id, tex_path, pdf_path, meta_path, word_count,
          model, prompt_sha, canonical_sha, input_tokens, output_tokens,
-         compile_status, generated_by, flags, generated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::text[], NOW())`,
+         compile_status, generated_by, flags, regeneration_reason, generated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::text[],$15,NOW())`,
       [
         row.job_id,
         row.run_id,
@@ -573,6 +578,7 @@ export async function insertTailoredResumeArtifact(row: TailoredResumeInsert): P
         row.compile_status,
         row.generated_by,
         row.flags,
+        row.regeneration_reason ?? null,
       ],
     );
   } catch (e) {
@@ -668,6 +674,11 @@ export interface CoverLetterArtifactInsert {
   generated_by:    string;
   /** Artifact warning or failure flags captured during generation. */
   flags:           string[];
+  /**
+   * Why this artifact was generated when it replaces a prior attempt.
+   * NULL = first generation. See migration 012 for value conventions.
+   */
+  regeneration_reason?: string | null;
 }
 
 /**
@@ -683,8 +694,8 @@ export async function insertCoverLetterArtifact(row: CoverLetterArtifactInsert):
       `INSERT INTO cover_letters (
          job_id, run_id, content, file_path, tex_path, pdf_path, meta_path,
          word_count, model, prompt_sha, canonical_sha, input_tokens, output_tokens,
-         compile_status, generated_by, flags, generated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::text[], NOW())`,
+         compile_status, generated_by, flags, regeneration_reason, generated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::text[],$17,NOW())`,
       [
         row.job_id,
         row.run_id,
@@ -702,6 +713,7 @@ export async function insertCoverLetterArtifact(row: CoverLetterArtifactInsert):
         row.compile_status,
         row.generated_by,
         row.flags,
+        row.regeneration_reason ?? null,
       ],
     );
   } catch (e) {
@@ -747,6 +759,53 @@ export async function getLatestArtifactsForJob(jobId: string): Promise<{
   } catch (e) {
     console.error("[storage] getLatestArtifactsForJob failed:", formatErr(e));
     return { resume: null, cover: null };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Regeneration reason detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Inspects the most recent artifact rows for a job and returns a standardised
+ * reason string explaining why a new generation is being triggered.
+ *
+ * Possible return values (see migration 012 for the full convention list):
+ *   "previous_resume_gen_failed"  — latest resume row carried resume_gen_failed flag
+ *   "previous_cover_gen_failed"   — latest cover row carried cover_letter_gen_failed flag
+ *   "previous_both_failed"        — both rows had generation-failure flags
+ *   "manual_force"                — force=true but no prior failure found in DB
+ *   null                          — DB disabled or no prior rows exist
+ *
+ * @param jobId - Stable job identifier to look up.
+ * @returns Reason string, or `null` when detection is inconclusive.
+ */
+export async function detectRegenerationReason(jobId: string): Promise<string | null> {
+  if (_disabled) return null;
+  try {
+    const [rRes, cRes] = await Promise.all([
+      getPool().query<{ flags: string[] }>(
+        `SELECT flags FROM tailored_resumes WHERE job_id = $1
+           ORDER BY generated_at DESC NULLS LAST LIMIT 1`,
+        [jobId],
+      ),
+      getPool().query<{ flags: string[] }>(
+        `SELECT flags FROM cover_letters WHERE job_id = $1
+           ORDER BY generated_at DESC NULLS LAST LIMIT 1`,
+        [jobId],
+      ),
+    ]);
+    const resumeFailed = (rRes.rows[0]?.flags ?? []).includes("resume_gen_failed");
+    const coverFailed  = (cRes.rows[0]?.flags ?? []).includes("cover_letter_gen_failed");
+    if (resumeFailed && coverFailed) return "previous_both_failed";
+    if (resumeFailed) return "previous_resume_gen_failed";
+    if (coverFailed)  return "previous_cover_gen_failed";
+    // Prior rows exist but no failure — user forced a redo for another reason
+    if (rRes.rows.length > 0 || cRes.rows.length > 0) return "manual_force";
+    return null;
+  } catch (e) {
+    console.error("[storage] detectRegenerationReason failed:", formatErr(e));
+    return null;
   }
 }
 

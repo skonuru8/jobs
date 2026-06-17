@@ -27,11 +27,13 @@ import {
   insertCoverLetterArtifact,
   insertTailoredResumeArtifact,
   insertLedgerEntries,
+  detectRegenerationReason,
 } from "@/storage/persist";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
 import { findCachedResumeOutcome } from "@/artifacts/resume-cache";
 import { auditTailoredArtifact, applyResumeAttributionOverrunFlag, isRiskMapLoaded, loadRiskMap } from "@/risk-map";
+import { runEvals } from "@/evals/runner";
 
 export interface ManualGenerateResult {
   /** Whether manual generation finished without fatal preflight or persistence errors. */
@@ -61,13 +63,19 @@ export interface ManualGenerateResult {
 export async function manualGenerateArtifacts(
   repoRoot: string,
   jobId: string,
-  options?: { force?: boolean },
+  options?: { force?: boolean; regeneration_reason?: string },
 ): Promise<ManualGenerateResult> {
   loadEnv({ path: path.join(repoRoot, ".env") });
   const generatedAt = new Date();
   const runFolderName = makeManualFolderName(generatedAt);
   const manualLog = createManualGenerationLog(repoRoot, jobId, runFolderName, generatedAt);
   manualLog(`start job_id=${jobId} force=${String(options?.force)}`);
+
+  // Detect why this generation is being triggered (first-run vs. regeneration).
+  // Caller may supply an explicit reason; otherwise auto-detect from previous DB rows.
+  const regenerationReason: string | null = options?.force
+    ? (options.regeneration_reason ?? await detectRegenerationReason(jobId))
+    : null;
 
   if (!isRiskMapLoaded()) {
     loadRiskMap(repoRoot);
@@ -136,9 +144,6 @@ export async function manualGenerateArtifacts(
   const resumeGeneratorConfig: ResumeGenConfig = {
     model: (config.llm.resume_generator?.model ?? config.llm.cover_letter.model) as string,
     fallback_model: config.llm.resume_generator?.fallback_model as string | undefined,
-    premium_model: config.llm.resume_generator?.premium_model as string | undefined,
-    premium_min_score: config.llm.resume_generator?.premium_min_score as number | undefined,
-    premium_stream: config.llm.resume_generator?.premium_stream as boolean | undefined,
     max_tokens:  (config.llm.resume_generator?.max_tokens ?? 8000) as number,
     temperature: (config.llm.resume_generator?.temperature ?? 0.3) as number,
     throttle_ms: (config.llm.resume_generator?.throttle_ms ?? 1000) as number,
@@ -230,7 +235,25 @@ export async function manualGenerateArtifacts(
     }
   }
 
-  writeCombinedMeta(jobFolderAbs, repoRoot, bundle, resumeOutcome, coverOutcome, ctx);
+  let evals = null;
+  try {
+    const patchOps = (resumeOutcome.meta.patch_ops as unknown[]) ?? [];
+    evals = runEvals({
+      canonicalTex:    bundle.canonical_resume_tex,
+      judgeJson:       bundle.judge_json as Parameters<typeof runEvals>[0]["judgeJson"],
+      patchOps:        patchOps as Parameters<typeof runEvals>[0]["patchOps"],
+      resumeFlags:     resumeOutcome.flags,
+      patchPromptSha:  (resumeOutcome.meta.patch_prompt_sha as string | null) ?? null,
+      coverLetterText: coverOutcome.tex_path ? null : null,
+      coverFlags:      coverOutcome.flags,
+      coverWordCount:  coverOutcome.word_count,
+      coverPromptSha:  (coverOutcome.meta?.prompt_sha as string | null) ?? null,
+    });
+  } catch (e) {
+    console.warn(`[manual-generate] evals failed: ${e}`);
+  }
+
+  writeCombinedMeta(jobFolderAbs, repoRoot, bundle, resumeOutcome, coverOutcome, ctx, evals, regenerationReason);
 
   const metaRel = path.relative(repoRoot, path.join(jobFolderAbs, "meta.json"));
 
@@ -254,9 +277,10 @@ export async function manualGenerateArtifacts(
       canonical_sha:   String(resumeOutcome.meta.canonical_sha ?? ""),
       input_tokens:    (resumeOutcome.meta.input_tokens as number | null) ?? null,
       output_tokens:   (resumeOutcome.meta.output_tokens as number | null) ?? null,
-      compile_status:  String(resumeOutcome.meta.compile_status ?? "failed"),
-      generated_by:    String(resumeOutcome.meta.generated_by ?? "manual"),
-      flags:           resumeOutcome.flags,
+      compile_status:       String(resumeOutcome.meta.compile_status ?? "failed"),
+      generated_by:         String(resumeOutcome.meta.generated_by ?? "manual"),
+      flags:                resumeOutcome.flags,
+      regeneration_reason:  regenerationReason,
     });
   }
 
@@ -275,9 +299,10 @@ export async function manualGenerateArtifacts(
       canonical_sha:   String(coverOutcome.meta.canonical_sha ?? ""),
       input_tokens:    (coverOutcome.meta.input_tokens as number | null) ?? null,
       output_tokens:   (coverOutcome.meta.output_tokens as number | null) ?? null,
-      compile_status:  String(coverOutcome.meta.compile_status ?? "failed"),
-      generated_by:    "manual",
-      flags:           coverOutcome.flags,
+      compile_status:       String(coverOutcome.meta.compile_status ?? "failed"),
+      generated_by:         "manual",
+      flags:                coverOutcome.flags,
+      regeneration_reason:  regenerationReason,
     });
   }
 

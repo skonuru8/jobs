@@ -54,6 +54,20 @@ Same shape as extractor, but judge uses JSON object mode in `src/judge/client.ts
 | `review_queue_threshold` | number | If a job is `REVIEW_QUEUE` but score ≥ this value, still generate a draft |
 | `thinking` | object | Optional model thinking config (passed through to OpenRouter) |
 
+#### `llm.resume_generator`
+
+| Key | Type | Meaning |
+|---|---|---|
+| `model` | string | Primary model for all patch and full_regen generation. Currently `deepseek/deepseek-v4-pro`. Change this field to switch models — no code changes required. |
+| `fallback_model` | string | Model used on exception (timeout / empty content) in attempt-1 retry. Currently Flash. |
+| `mode` | string | `"patch_tailoring"` (default) or `"full_regen"` |
+| `max_tokens` | number | Token cap for full_regen path |
+| `patch_max_tokens` | number | Token cap for patch_tailoring path. Tune per model without touching code — Pro needs ~12000; Flash was fine at 6000. |
+| `patch_ops_warn_threshold` | number | Emit `resume_patch_ops_explosion` flag when op count exceeds this. Default: 12. Flash fallback over-edits on ~18% of jobs. |
+| `temperature` | number | Temperature for generation |
+
+**Fallback behavior:** if attempt-0 of patch generation throws (e.g., OpenRouter timeout or empty content), attempt-1 uses `fallback_model` instead of the same model. Fallback is exception-only — normal quality failures do not trigger it. To change the primary or fallback model, update `config.json`; no code changes are needed.
+
 #### `scoring`
 
 | Key | Type | Meaning |
@@ -265,7 +279,47 @@ ORDER BY n DESC;
 
 7. Re-run on cached JSONLs (`JSONL=...`) to validate changes without rescrape cost.
 
-### 7.4 How to add a new job source
+### 7.4 Evaluating generation quality
+
+The deterministic eval system runs automatically after every `manualGenerateArtifacts()` call. Results appear under the `evals` key in each job's `meta.json`.
+
+**View quality for today's batch:**
+
+```bash
+npx tsx scripts/eval/batch-evals.ts
+# Default dir: output/applications/{today}
+# Writes:  {batchDir}/evals-summary.json
+# Appends: output/evals-history.jsonl
+```
+
+**Recompute evals after changing eval logic:**
+
+```bash
+npx tsx scripts/eval/backfill-evals.ts [batch-dir]
+# Re-reads config/resume_master.tex + each meta.json
+# Overwrites the evals key in place; then writes evals-summary.json
+```
+
+**Trend comparison across prompt SHAs:**
+
+```bash
+cat output/evals-history.jsonl | jq '.degraded_by_patch_prompt_sha'
+# {"4c735b5f7e3b": 18, "74263c8a0ca3": 0}  ← improvement after EMPHASIS fix
+```
+
+Each row in `evals-history.jsonl` is keyed by `PATCH_PROMPT_SHA`. After every EMPHASIS prompt change, the SHA changes and subsequent batches appear under the new key — making quality regressions instantly attributable.
+
+**Thresholds:**
+
+| Result | Meaning |
+|---|---|
+| `ok` | No info loss, no banned phrases, cover 350+ words |
+| `warning` | Attribution overrun, diff lint flags, or metric overclaim |
+| `fail` | `resume_gen_failed`, any dropped key term (info loss), or banned phrase in cover |
+
+---
+
+### 7.5 How to add a new job source
 
 High-level plan:
 
@@ -294,7 +348,7 @@ Concrete checklist:
 
 ---
 
-## 7.5 Known issues and accepted limitations
+## 7.6 Known issues and accepted limitations
 
 These are open items from THE-BIBLE-v7 §12 — accepted trade-offs, not bugs to fix right now.
 
@@ -325,6 +379,7 @@ These are open items from THE-BIBLE-v7 §12 — accepted trade-offs, not bugs to
 | M8 | Orchestrator: node-cron + Redis lock + heartbeat + ghost reaper + monitor (2026-04-25) |
 | M9 | Review UI at `localhost:3001` (2026-04-29): Apply Queue + Hard/Soft Rejections, labeling, note chips, application tracking |
 | v15 | Track A–E (2026-06-12): LinkedIn scraper fix (`is_remote` bool, `hours_old=5`, config-driven search terms, US location, `linkedin_fetch_description=True`); patch root repair (`extractRoleLabels`, `allowed_role_labels` gating, `diff-lint`, `ops_dropped_unknown_role`); eval harness (export-fixtures, replay-resume, diff-reports); verification sweep; config extraction (`scraping` block in config.json, `app_config.py`, cover-letter prompt fix, `validateProfile` target_titles guard). |
+| v16 | QA + eval + reliability (2026-06-16): EMPHASIS injection-only rule + WRONG/RIGHT example (new SHA `74263c8a0ca3`); `fallback_model` in config + `modelOverride` in patch orchestrator; cover-letter retry names exact banned phrases; deterministic eval module (`src/evals/types.ts`, `runner.ts`, `batch-report.ts`) auto-runs after every generation + appends `evals-history.jsonl`; `scripts/eval/batch-evals.ts` + `backfill-evals.ts` CLI; `regeneration_reason` column in `tailored_resumes` + `cover_letters` via migration 012; `detectRegenerationReason()` in persist.ts; `meta.json` gains `evals` + `regeneration_reason` keys. |
 
 **Active — Scoring calibration (M10 prerequisites):**
 

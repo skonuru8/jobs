@@ -71,8 +71,6 @@ Set EVAL_LIVE=1 to proceed.
   const rawConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
   const baseConfig: ResumeGenConfig = {
     model:                  rawConfig.llm.resume_generator.model,
-    premium_model:          rawConfig.llm.resume_generator.premium_model,
-    premium_min_score:      rawConfig.llm.resume_generator.premium_min_score ?? 0.70,
     max_tokens:             rawConfig.llm.resume_generator.max_tokens ?? 12000,
     temperature:            rawConfig.llm.resume_generator.temperature ?? 0.3,
     throttle_ms:            rawConfig.llm.resume_generator.throttle_ms ?? 1000,

@@ -47,12 +47,6 @@ export async function generateResumeTex(
   const generated_at = new Date().toISOString();
   const userMsg = buildUserMessage(input, shortRetryHint);
 
-  const usePremium = Boolean(
-    config.premium_model &&
-    input.judge_json.verdict === "STRONG" &&
-    input.score.total >= (config.premium_min_score ?? 0.70),
-  );
-
   const call = (model: string, stream: boolean) => complete({
     model,
     messages: [
@@ -65,16 +59,10 @@ export async function generateResumeTex(
     timeout_ms: stream ? 300_000 : undefined,
   });
 
-  const primaryAttempts = usePremium
-    ? [
-        { model: config.premium_model!, stream: config.premium_stream ?? true },
-        { model: config.model, stream: false },
-        ...(config.fallback_model ? [{ model: config.fallback_model, stream: false }] : []),
-      ]
-    : [
-        { model: config.model, stream: false },
-        ...(config.fallback_model ? [{ model: config.fallback_model, stream: false }] : []),
-      ];
+  const primaryAttempts = [
+    { model: config.model, stream: false },
+    ...(config.fallback_model ? [{ model: config.fallback_model, stream: false }] : []),
+  ];
   const attempts = dedupeAttempts(primaryAttempts);
   const maxPerModel = (config.retries ?? 1) + 1;
   let lastErr = "unknown";
@@ -82,30 +70,18 @@ export async function generateResumeTex(
 
   for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
     const attempt = attempts[attemptIndex];
-    const attemptsForModel = usePremium && attempt.model === config.premium_model
-      ? attempt.stream ? 2 : 1
-      : maxPerModel;
+    const attemptsForModel = maxPerModel;
     for (let i = 0; i < attemptsForModel; i++) {
-      const premiumTag = usePremium && attempt.model === config.premium_model
-        ? ` (premium: score=${input.score.total.toFixed(3)} ${input.judge_json.verdict})`
-        : "";
       const streamTag = attempt.stream ? " stream" : "";
       const retryTag = attemptsForModel > 1 ? ` attempt ${i + 1}/${attemptsForModel}` : "";
-      console.log(`[resume] model: ${attempt.model}${premiumTag}${streamTag}${retryTag}`);
+      console.log(`[resume] model: ${attempt.model}${streamTag}${retryTag}`);
       try {
         const r = await call(attempt.model, attempt.stream);
         let tex = extractLatexDocument(stripFences(r.content).trim());
         tex = tex.replace(/^\uFEFF/, "");
         if (!tex.startsWith("\\documentclass")) {
           lastErr = `missing documentclass; first chars: ${stripFences(r.content).trim().slice(0, 160)}`;
-          logPremiumFailure(
-            usePremium,
-            attempt.model,
-            config.premium_model,
-            lastErr,
-            i < attemptsForModel - 1,
-            attempts[attemptIndex + 1]?.model,
-          );
+          console.warn(`[resume] ${attempt.model} failed: ${lastErr.slice(0, 240)}`);
           continue;
         }
         if (!/\end\{document\}\s*$/s.test(tex)) {
@@ -113,14 +89,7 @@ export async function generateResumeTex(
           if (tex.startsWith("\\documentclass")) {
             lastTruncated = { tex, model: r.model, tokens: { input: r.input_tokens ?? 0, output: r.output_tokens ?? 0 } };
           }
-          logPremiumFailure(
-            usePremium,
-            attempt.model,
-            config.premium_model,
-            lastErr,
-            i < attemptsForModel - 1,
-            attempts[attemptIndex + 1]?.model,
-          );
+          console.warn(`[resume] ${attempt.model} failed: ${lastErr.slice(0, 240)}`);
           continue;
         }
         const banned = findBannedStylePhrases(tex);
@@ -140,14 +109,7 @@ export async function generateResumeTex(
               warnings:     ["banned_phrase_in_output"],
             };
           }
-          logPremiumFailure(
-            usePremium,
-            attempt.model,
-            config.premium_model,
-            lastErr,
-            i < attemptsForModel - 1,
-            attempts[attemptIndex + 1]?.model,
-          );
+          console.warn(`[resume] ${attempt.model} failed: ${lastErr.slice(0, 240)}`);
           continue;
         }
         const wc = countWordsTex(tex);
@@ -167,14 +129,7 @@ export async function generateResumeTex(
           console.warn(`[resume] stream abort on first attempt of ${attempt.model}; retrying once after 5s`);
           await new Promise(res => setTimeout(res, 5000));
         } else {
-          logPremiumFailure(
-            usePremium,
-            attempt.model,
-            config.premium_model,
-            lastErr,
-            i < attemptsForModel - 1,
-            attempts[attemptIndex + 1]?.model,
-          );
+          console.warn(`[resume] ${attempt.model} failed: ${lastErr.slice(0, 240)}`);
           if (i < attemptsForModel - 1) {
             await new Promise(res => setTimeout(res, 2000));
           }
@@ -212,38 +167,6 @@ export async function generateResumeTex(
     generated_at,
     error:        lastErr,
   };
-}
-
-/**
- * Emits premium-path fallback logs only when active attempt belongs to premium model.
- *
- * @param usePremium - Whether current run qualified for premium-first generation.
- * @param model - Model used for failed attempt.
- * @param premiumModel - Configured premium model identifier, if any.
- * @param reason - Short terminal or retryable failure summary.
- * @param willRetryPremium - Whether same premium model will be retried before falling back.
- * @param fallbackModel - Next non-premium model that will receive control, if any.
- * @returns Nothing.
- */
-function logPremiumFailure(
-  usePremium: boolean,
-  model: string,
-  premiumModel: string | undefined,
-  reason: string,
-  willRetryPremium: boolean,
-  fallbackModel: string | undefined,
-): void {
-  if (!(usePremium && model === premiumModel)) return;
-
-  if (willRetryPremium) {
-    console.warn(`[resume] premium model failed; retrying premium: ${reason.slice(0, 240)}`);
-    return;
-  }
-  if (fallbackModel) {
-    console.warn(`[resume] premium model failed; falling back to ${fallbackModel}: ${reason.slice(0, 240)}`);
-    return;
-  }
-  console.warn(`[resume] premium model failed; no fallback remaining: ${reason.slice(0, 240)}`);
 }
 
 /**

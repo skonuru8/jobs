@@ -48,7 +48,15 @@ Rules:
 - If a directive cannot fit a role naturally, omit it.
 - frame_as is briefing guidance only — extract the factual content, do NOT copy its phrasing verbatim into bullets.
 - Write bullets as confident factual statements about what the candidate did. No hedging.
-- EMPHASIS pass: when EMPHASIS_ROLES is present, rewrite 1–2 existing bullets per listed role to foreground the skills in EMPHASIS_SKILLS. Select bullets that already touch those skills or closely adjacent work — reshape language to put the EMPHASIS_SKILLS terms front and center. Do NOT add new bullets, do NOT invent metrics — only reshape existing bullet text. Emit these as "rewrite" ops alongside any directive ops.
+- EMPHASIS pass: when EMPHASIS_ROLES is present, rewrite 1–2 existing bullets per listed role to surface the EMPHASIS_SKILLS terms. This is an INJECTION edit, NOT a rewrite. You MUST preserve every factual claim, named object, scope qualifier, and contextual phrase from the original bullet VERBATIM. The only permitted changes are: (a) wrapping or inserting EMPHASIS_SKILLS terms in \\textbf{...}, (b) adding a short tech-stack clause naming those skills, (c) minimal connective words needed to keep the sentence grammatical. You may NOT delete, generalize, abstract, or replace any existing noun phrase. Do NOT replace a concrete object (e.g. "forms used for manual ticket creation") with a generic category (e.g. "component-based frontend architecture"). Do NOT drop architectural or scope context (e.g. "across a monolithic architecture"). Do NOT drop named systems, counts, or metrics. If you cannot surface the skill without removing existing facts, leave that bullet unchanged and pick another. After writing each rewrite, verify the new bullet still contains EVERY specific phrase from the original. Do NOT add new bullets, do NOT invent metrics. Emit these as "rewrite" ops alongside any directive ops.
+
+EMPHASIS WRONG vs RIGHT (injection-only, same PHIA bullet):
+Original: "\\\\item Modernized \\\\textbf{Angular} forms used for manual ticket creation, decoupling tightly coupled components across a monolithic architecture and resolving \\\\textbf{30+} backlog issues, reducing UI defect reports by \\\\textbf{10\\\\%} over two release cycles."
+EMPHASIS_SKILLS: ["Angular", "JavaScript"]
+WRONG (drops "forms used for manual ticket creation" and "across a monolithic architecture" — unacceptable context removal):
+  "\\\\item Modernized component-based frontend architecture using \\\\textbf{Angular} and \\\\textbf{JavaScript}, decoupling tightly coupled components, resolving \\\\textbf{30+} backlog issues, and reducing UI defect reports by \\\\textbf{10\\\\%} over two release cycles."
+RIGHT (every original phrase kept; only "and \\\\textbf{JavaScript}" injected alongside existing Angular):
+  "\\\\item Modernized \\\\textbf{Angular} and \\\\textbf{JavaScript} forms used for manual ticket creation, decoupling tightly coupled components across a monolithic architecture and resolving \\\\textbf{30+} backlog issues, reducing UI defect reports by \\\\textbf{10\\\\%} over two release cycles."
 
 BANNED phrases — NEVER use any of these in any bullet text:
 ${BANNED_STYLE_PHRASE_STRINGS.map(p => `  "${p}"`).join("\n")}
@@ -112,6 +120,7 @@ export async function generatePatchOps(
   config: ResumeGenConfig,
   roleBlocks: RoleBlock[],
   retryHint?: string,
+  modelOverride?: string,
 ): Promise<{ ops: PatchOp[]; model: string; tokens: { input: number; output: number }; ops_dropped_unknown_role: number }> {
   const activeDirectives = activeGapDirectives(input.gap_directives ?? input.judge_json.gap_directives ?? []);
   const emphRoles = emphasisRoles(input);
@@ -119,31 +128,18 @@ export async function generatePatchOps(
     return { ops: [], model: "deterministic-noop", tokens: { input: 0, output: 0 }, ops_dropped_unknown_role: 0 };
   }
 
-  const usePremium = config.premium_model
-    && input.judge_json.verdict === "STRONG"
-    && input.score.total >= (config.premium_min_score ?? 0.70);
-  const model = usePremium ? config.premium_model! : config.model;
+  const model = modelOverride ?? config.model;
 
   const patchMessages = [
     { role: "system" as const, content: PATCH_MODE_PROMPT },
     { role: "user" as const, content: buildPatchUserMessage(input, roleBlocks, activeDirectives, retryHint, emphRoles) },
   ];
-  // Cap at 6000: complex jobs (3 directives + emphasis) consume ~2500-3200 tokens
-  // in DeepSeek reasoning before emitting JSON — 3200 caused finish_reason=length
-  // on those jobs, producing empty content. 6000 gives enough headroom for both.
   const patchOpts = {
-    max_tokens: Math.min(config.max_tokens, 6000),
+    max_tokens: config.patch_max_tokens ?? config.max_tokens,
     temperature: Math.min(config.temperature, 0.2),
   };
 
-  let r;
-  try {
-    r = await complete({ model, messages: patchMessages, ...patchOpts });
-  } catch (e) {
-    if (!usePremium) throw e;
-    // Premium failure: fall back to config.model once
-    r = await complete({ model: config.model, messages: patchMessages, ...patchOpts });
-  }
+  const r = await complete({ model, messages: patchMessages, ...patchOpts });
 
   const parsed = parsePatchOps(r.content);
   const ops = filterValidOps(parsed, roleBlocks);

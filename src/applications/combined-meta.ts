@@ -15,6 +15,7 @@ import * as path from "path";
 import type { ArtifactBundleOk } from "@/shared/artifact-bundle";
 import type { CoverArtifactOutcome } from "@/cover-letter/saver";
 import type { ResumeArtifactOutcome } from "@/resume-generator/index";
+import type { EvalResult } from "@/evals/types";
 
 export interface ArtifactGenCtx {
   /** Run id associated with artifact generation; may point to orchestrated or manual flow. */
@@ -47,6 +48,8 @@ export function writeCombinedMeta(
   resumeOutcome: ResumeArtifactOutcome | null,
   coverOutcome: CoverArtifactOutcome | null,
   ctx: ArtifactGenCtx,
+  evals?: EvalResult | null,
+  regenerationReason?: string | null,
 ): string {
   const job = bundle.job;
   const metaPath = path.join(jobFolderAbs, "meta.json");
@@ -89,6 +92,8 @@ export function writeCombinedMeta(
 
     resume: resumeBlock(resumeOutcome, rel),
     cover_letter: coverBlock(coverOutcome, rel),
+    ...(evals ? { evals } : {}),
+    ...(regenerationReason != null ? { regeneration_reason: regenerationReason } : {}),
   };
 
   fs.mkdirSync(jobFolderAbs, { recursive: true });

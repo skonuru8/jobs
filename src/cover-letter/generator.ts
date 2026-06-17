@@ -4,7 +4,7 @@
 
 import { complete } from "./client";
 import { stripDashes } from "@/shared/dash-lint";
-import { hasBannedStylePhrase } from "@/shared/style-lint";
+import { findBannedStylePhrases, hasBannedStylePhrase } from "@/shared/style-lint";
 import {
   COVER_LETTER_SYSTEM,
   COVER_PROMPT_SHA,
@@ -78,13 +78,17 @@ export async function generateCoverLetter(
       const cleaned = stripDashes(stripMarkdown(result.content));
       const wordCount = countWords(cleaned);
       const truncated = looksTruncated(cleaned);
-      const bannedStyle = hasBannedStylePhrase(cleaned);
+      const bannedHits = findBannedStylePhrases(cleaned);
+      const bannedStyle = bannedHits.length > 0;
 
-      // FIX-09: short CLs always retry on attempt 0; quality issues retry on any non-final attempt
+      // short CLs always retry on attempt 0; quality issues retry on any non-final attempt
       const shouldRetryShort = wordCount < 350 && attempt === 0;
       const shouldRetryQuality = (truncated || bannedStyle) && attempt < maxAttempts - 1;
       if (cleaned && (shouldRetryShort || shouldRetryQuality)) {
-        const retryAddendum = `\n\nPREVIOUS OUTPUT WAS ${wordCount} WORDS${truncated ? " AND LOOKED TRUNCATED" : ""}${bannedStyle ? " AND USED BANNED BRIDGING STYLE" : ""}. Minimum 400 required. Generate a complete longer body. Address the judge's gap reframe angles in more depth. Add a fourth paragraph if needed. Do not return under 400 words. End with a complete sentence. Do not use bridging phrases such as analogous to, demonstrating transferable, similar to, or directly applicable to.`;
+        const bannedClause = bannedStyle
+          ? ` Your previous output contained these BANNED phrases — remove each one and state the fact directly instead: ${bannedHits.map(p => `"${p}"`).join(", ")}.`
+          : "";
+        const retryAddendum = `\n\nPREVIOUS OUTPUT WAS ${wordCount} WORDS${truncated ? " AND LOOKED TRUNCATED" : ""}${bannedStyle ? " AND USED BANNED BRIDGING STYLE" : ""}. Minimum 400 required. Generate a complete longer body. Address the judge's gap reframe angles in more depth. Add a fourth paragraph if needed. Do not return under 400 words. End with a complete sentence.${bannedClause}`;
         currentUserPrompt = userPrompt + retryAddendum;
         continue;
       }
