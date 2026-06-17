@@ -110,6 +110,7 @@ export interface RunRow {
   scraped_count: number | null;
   passed_count: number | null;
   extraction_count: number | null;
+  covered_count: number | null;
 }
 
 export interface AppliedDayRow extends ApplyQueueRow {
@@ -201,4 +202,134 @@ export async function postGenerateArtifacts(
     throw new Error((j as { detail?: string; error?: string }).detail ?? (j as { error?: string }).error ?? `generate failed: ${res.status}`);
   }
   return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline Control (additive): orchestrator toggle + live run streaming.
+// ---------------------------------------------------------------------------
+
+export type PipelineSource = 'dice' | 'jobright_api' | 'linkedin';
+export type PostedWithin = 'ONE' | 'THREE' | 'SEVEN' | '';
+
+export interface OrchestratorStatus {
+  running: boolean;
+  pid?: number;
+  startedAt?: string | null;
+}
+
+export interface PipelineRunBody {
+  source: PipelineSource;
+  max: number;
+  extract: boolean;
+  score: boolean;
+  judge: boolean;
+  cover: boolean;
+  skipDedup: boolean;
+  skipPersist: boolean;
+  verify: boolean;
+  query?: string;
+  postedWithin?: PostedWithin;
+  hoursOld?: number;
+  targetNew?: number;
+  jsonl?: string;
+}
+
+export interface StreamHandlers {
+  onLine: (line: string) => void;
+  onDone?: (exitCode: number | null) => void;
+  onError?: (err: Error) => void;
+  signal?: AbortSignal;
+}
+
+export async function getOrchestratorStatus(): Promise<OrchestratorStatus> {
+  const res = await fetch('/api/orchestrator/status');
+  if (!res.ok) throw new Error(`orchestrator status failed: ${res.status}`);
+  return res.json();
+}
+
+export async function postOrchestratorToggle(): Promise<OrchestratorStatus> {
+  const res = await fetch('/api/orchestrator/toggle', { method: 'POST' });
+  if (!res.ok) throw new Error(`orchestrator toggle failed: ${res.status}`);
+  return res.json();
+}
+
+// Parses a text/event-stream body framed as `data: <json-string>` blocks with a
+// terminal `event: done` frame. Uses fetch + ReadableStream (not EventSource,
+// which cannot POST a JSON body). Abort via handlers.signal.
+async function readSseStream(body: ReadableStream<Uint8Array>, h: StreamHandlers): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let sep: number;
+      while ((sep = buf.indexOf('\n\n')) !== -1) {
+        const frame = buf.slice(0, sep);
+        buf = buf.slice(sep + 2);
+        let event = 'message';
+        const dataLines: string[] = [];
+        for (const raw of frame.split('\n')) {
+          if (raw.startsWith('event:')) event = raw.slice(6).trim();
+          else if (raw.startsWith('data:')) dataLines.push(raw.slice(5).replace(/^ /, ''));
+        }
+        const data = dataLines.join('\n');
+        if (event === 'done') {
+          let code: number | null = null;
+          try { code = (JSON.parse(data) as { exitCode: number | null }).exitCode ?? null; } catch { /* ignore */ }
+          h.onDone?.(code);
+        } else if (data) {
+          let line = data;
+          try { line = JSON.parse(data) as string; } catch { /* already plain */ }
+          h.onLine(line);
+        }
+      }
+    }
+  } catch (err) {
+    if ((err as Error).name !== 'AbortError') h.onError?.(err as Error);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+export async function runPipeline(body: PipelineRunBody, h: StreamHandlers): Promise<void> {
+  const res = await fetch('/api/pipeline/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: h.signal,
+  });
+  if (res.status === 409) throw new Error('A run is already in progress.');
+  if (!res.ok || !res.body) throw new Error(`pipeline run failed: ${res.status}`);
+  await readSseStream(res.body, h);
+}
+
+// Streams a saved run log file (text/plain) line by line into the same pane.
+export async function streamRunLog(runId: string, h: StreamHandlers): Promise<void> {
+  const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/log`, { signal: h.signal });
+  if (res.status === 404) throw new Error('No log file found for this run.');
+  if (!res.ok || !res.body) throw new Error(`run log failed: ${res.status}`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf('\n')) !== -1) {
+        h.onLine(buf.slice(0, nl));
+        buf = buf.slice(nl + 1);
+      }
+    }
+    if (buf) h.onLine(buf);
+    h.onDone?.(null);
+  } catch (err) {
+    if ((err as Error).name !== 'AbortError') h.onError?.(err as Error);
+  } finally {
+    reader.releaseLock();
+  }
 }

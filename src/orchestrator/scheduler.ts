@@ -208,21 +208,6 @@ export function registerSchedules(): ScheduledTask[] {
     });
   });
 
-  // ── Jobright HTML scraper (DEPRECATED — kept for fallback) ───────────────
-  // The HTML scraper is preserved as a fallback in case the API session
-  // expires or rate-limits hard. To re-enable: comment the API schedules
-  // above and uncomment this block.
-  //
-  // schedule("0 10 * * *", "jobright-html-daily", async () => {
-  //   await spawnRun({
-  //     source:       "jobright",
-  //     postedWithin: "ONE",
-  //     max:          50,
-  //     runId:        newRunId(),
-  //     lockTtlSecs:  14_400,
-  //   });
-  // });
-
   // ── LinkedIn (Mon–Sat, matching Dice cadence) ────────────────────────────
   // LinkedIn does not support POSTED_WITHIN — JobSpy doesn't expose it
   schedule("0 9,13,17,21 * * 1-6", "linkedin-daily", async () => {

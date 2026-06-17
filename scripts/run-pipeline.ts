@@ -91,6 +91,10 @@ loadEnv({ path: path.join(REPO_ROOT, ".env") });
 
 const SOURCE         = process.env.SOURCE  ?? "dice";
 const MAX_JOBS       = parseInt(process.env.MAX ?? "20", 10);
+// "Target N new" mode (Option A). When > 0, MAX is the scrape POOL and only the
+// first TARGET_NEW post-dedup survivors are fully processed + marked seen; the
+// rest of the pool is left untouched so the next run walks further down the list.
+const TARGET_NEW     = parseInt(process.env.TARGET_NEW ?? "0", 10);
 const HEADED         = parseBoolEnv(process.env.HEADED);
 const JSONL_OVERRIDE = process.env.JSONL   ?? "";
 const DO_EXTRACT     = parseBoolEnv(process.env.EXTRACT);   // opt-in — costs LLM calls
@@ -115,6 +119,11 @@ const VERIFY         = parseBoolEnv(process.env.VERIFY);        // run Redis↔P
 //                                     unset = no filter (all listings)
 // Use POSTED_WITHIN=ONE for cron runs to only pull genuinely new jobs.
 const POSTED_WITHIN  = process.env.POSTED_WITHIN ?? "";   // "" = no filter
+
+// LinkedIn-only recency filter (JobSpy hours_old), passed through to the scraper.
+//   HOURS_OLD=<int>   only include LinkedIn jobs posted within this many hours
+//                     unset = use config scraping.linkedin.hours_old default
+const HOURS_OLD      = process.env.HOURS_OLD ?? "";       // "" = use config default
 
 // Real-data extraction fixtures live alongside the existing extractor fixtures.
 // This keeps tests + captured samples in one place and avoids a separate
@@ -285,7 +294,7 @@ async function main(): Promise<void> {
   // --- Scrape or use existing JSONL ---
   const jsonlPath = JSONL_OVERRIDE
   ? JSONL_OVERRIDE
-  : runScraper(SOURCE, MAX_JOBS, HEADED, QUERY, POSTED_WITHIN);
+  : runScraper(SOURCE, MAX_JOBS, HEADED, QUERY, POSTED_WITHIN, HOURS_OLD);
 
   if (!fs.existsSync(jsonlPath)) die(`JSONL not found: ${jsonlPath}`);
   log(`Reading: ${jsonlPath}`);
@@ -393,6 +402,7 @@ async function main(): Promise<void> {
  * @param headed - Whether Playwright-backed sources should show browser UI.
  * @param query - Dice search query text. Ignored for non-Dice sources.
  * @param postedWithin - Optional Dice recency window passed through verbatim.
+ * @param hoursOld - Optional LinkedIn recency window in hours (JobSpy hours_old).
  * @returns Absolute path to newest source JSONL file under `scraper/output`.
  * @throws Exits process via `die()` when scraper fails or no JSONL is produced.
  */
@@ -402,6 +412,7 @@ function runScraper(
   headed:        boolean,
   query:         string,
   postedWithin:  string,
+  hoursOld:      string,
 ): string {
   const args = [
     "-m", "scraper",
@@ -409,13 +420,18 @@ function runScraper(
     "--max",    String(maxJobs),
     ...(headed ? ["--headed"] : []),
   ];
- 
+
   // Dice-only flags. Other sources ignore them (cli.py only passes them to dice).
   if (source === "dice") {
     args.push("--query", query);
     if (postedWithin) {
       args.push("--posted-within", postedWithin);
     }
+  }
+
+  // LinkedIn-only recency filter (JobSpy hours_old). Omitted = config default.
+  if (source === "linkedin" && hoursOld) {
+    args.push("--hours-old", hoursOld);
   }
  
   log(`Spawning: python ${args.join(" ")}`);
@@ -644,6 +660,24 @@ async function processJobs(
     }
     passQueue.length = 0;
     passQueue.push(...remaining);
+  }
+
+  // ---------------------------------------------------------------------------
+  // "Target N new" cap (Option A)
+  //
+  // passQueue now holds the post-dedup survivors in listing order. When
+  // TARGET_NEW is set, keep only the first N and drop the rest of the pool.
+  // The dropped survivors are deliberately NOT processed and NOT marked seen
+  // (markSeen runs per-job inside Phase 2), so the next run advances to them.
+  // ---------------------------------------------------------------------------
+  if (TARGET_NEW > 0) {
+    const found = passQueue.length;
+    if (found > TARGET_NEW) {
+      passQueue.length = TARGET_NEW;
+      log(`[target] ${TARGET_NEW} new job(s) selected from pool; ${found - TARGET_NEW} more left for the next run`);
+    } else {
+      log(`[target] only ${found} new job(s) found in pool of ${MAX_JOBS} (target ${TARGET_NEW}); increase pool or widen recency window`);
+    }
   }
 
   // ---------------------------------------------------------------------------

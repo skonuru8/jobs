@@ -20,7 +20,6 @@ v4.1 changes:
 
 import re
 import sys
-from pathlib import Path
 from typing import Iterator, Optional
 from urllib.parse import urlencode
 
@@ -62,7 +61,6 @@ def scrape(
     run_id: str,
     query: str = "full stack developer",
     headless: bool = True,
-    cookies_path: Path | None = None,  # unused, kept for API compat
     posted_within: Optional[str] = None,
 ) -> Iterator[dict]:
     """
@@ -76,7 +74,6 @@ def scrape(
         run_id:        from output.make_run_id()
         query:         search query string (default: "full stack developer")
         headless:      False = show browser window (useful for debugging)
-        cookies_path:  ignored — search page needs no auth
         posted_within: Dice's postedDate filter — one of:
                          "ONE"   = jobs posted in last 24h  (~80 jobs typical)
                          "THREE" = jobs posted in last 3d   (~200 jobs typical)

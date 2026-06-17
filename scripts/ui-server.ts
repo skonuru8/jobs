@@ -12,6 +12,8 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { spawn, type ChildProcess } from 'child_process';
+import { StringDecoder } from 'string_decoder';
 import { fileURLToPath } from 'url';
 import { config as loadEnv } from 'dotenv';
 import { getPool } from '../src/storage/db.js';
@@ -97,6 +99,87 @@ function resolveJobDescriptionPath(job: {
     job.job_id,
   );
   return findJobDescriptionPathBySlug(slug);
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline Control state + helpers (additive, no existing behavior touched).
+//
+// The cron orchestrator is `src/orchestrator/index.ts` (spawned via tsx). We
+// track the child handle in-memory and mirror {pid, startedAt} to a pidfile so
+// `status` survives a ui-server restart while the orchestrator keeps running.
+// ---------------------------------------------------------------------------
+
+const ORCH_PIDFILE = path.join(REPO_ROOT, 'output', '.orchestrator.pid');
+let orchestratorChild: ChildProcess | null = null;
+let orchestratorStartedAt: string | null = null;
+let pipelineRunning = false;
+
+// Strips ANSI CSI sequences (SGR color codes like \x1b[32m plus cursor/erase
+// codes), so no raw escape sequence reaches the browser terminal pane.
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
+function stripAnsi(s: string): string {
+  return s.replace(ANSI_RE, '');
+}
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readOrchestratorPidfile(): { pid: number; startedAt: string | null } | null {
+  try {
+    const j = JSON.parse(fs.readFileSync(ORCH_PIDFILE, 'utf8')) as { pid: number; startedAt: string | null };
+    if (j && typeof j.pid === 'number' && pidAlive(j.pid)) return j;
+  } catch { /* no/invalid pidfile */ }
+  return null;
+}
+
+function writeOrchestratorPidfile(pid: number, startedAt: string): void {
+  try {
+    fs.mkdirSync(path.dirname(ORCH_PIDFILE), { recursive: true });
+    fs.writeFileSync(ORCH_PIDFILE, JSON.stringify({ pid, startedAt }), 'utf8');
+  } catch { /* best-effort */ }
+}
+
+function clearOrchestratorPidfile(): void {
+  try { fs.unlinkSync(ORCH_PIDFILE); } catch { /* already gone */ }
+}
+
+function orchestratorState(): { running: boolean; pid?: number; startedAt?: string | null } {
+  if (orchestratorChild && orchestratorChild.exitCode === null && orchestratorChild.pid && pidAlive(orchestratorChild.pid)) {
+    return { running: true, pid: orchestratorChild.pid, startedAt: orchestratorStartedAt };
+  }
+  const fromFile = readOrchestratorPidfile();
+  if (fromFile) return { running: true, pid: fromFile.pid, startedAt: fromFile.startedAt };
+  return { running: false };
+}
+
+// Locates a run's log file under output/logs/runs/<day>/ by matching the run_id
+// (or its sanitized 8-char prefix, which is what installRunLog embeds).
+function findRunLog(runId: string): string | null {
+  const baseDir = path.join(REPO_ROOT, 'output', 'logs', 'runs');
+  if (!fs.existsSync(baseDir)) return null;
+  const needle = runId.replace(/[^a-zA-Z0-9_-]/g, '');
+  const short = needle.slice(0, 8);
+  let newest: string | null = null;
+  let newestMtime = -1;
+  for (const day of fs.readdirSync(baseDir, { withFileTypes: true })) {
+    if (!day.isDirectory()) continue;
+    const dayDir = path.join(baseDir, day.name);
+    for (const f of fs.readdirSync(dayDir)) {
+      if (!f.endsWith('.log')) continue;
+      if (!(needle && f.includes(needle)) && !(short && f.includes(short))) continue;
+      const abs = path.join(dayDir, f);
+      const mtime = fs.statSync(abs).mtimeMs;
+      if (mtime > newestMtime) { newestMtime = mtime; newest = abs; }
+    }
+  }
+  return newest;
 }
 
 /**
@@ -453,7 +536,8 @@ async function main() {
           finished_at,
           jobs_total AS scraped_count,
           jobs_passed AS passed_count,
-          extractions_succeeded AS extraction_count
+          extractions_succeeded AS extraction_count,
+          jobs_covered AS covered_count
         FROM runs
         ORDER BY started_at DESC
         LIMIT 200
@@ -679,6 +763,181 @@ async function main() {
       console.error('[ui-server] /api/jobs/:job_id/resume-tex error:', err);
       res.status(500).json({ error: 'server_error', detail: (err as Error).message });
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/orchestrator/status
+  // -------------------------------------------------------------------------
+  // `GET /api/orchestrator/status` returns whether the cron orchestrator is alive.
+  app.get('/api/orchestrator/status', (_req, res) => {
+    res.json(orchestratorState());
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/orchestrator/toggle
+  // -------------------------------------------------------------------------
+  // `POST /api/orchestrator/toggle` reads state first, then starts (if stopped)
+  // or SIGTERM (if running) the orchestrator child. Returns the new state.
+  app.post('/api/orchestrator/toggle', (_req, res) => {
+    const state = orchestratorState();
+
+    if (state.running) {
+      try {
+        if (orchestratorChild && orchestratorChild.pid) orchestratorChild.kill('SIGTERM');
+        else if (state.pid) process.kill(state.pid, 'SIGTERM');
+      } catch { /* already gone */ }
+      orchestratorChild = null;
+      orchestratorStartedAt = null;
+      clearOrchestratorPidfile();
+      res.json({ running: false });
+      return;
+    }
+
+    const startedAt = new Date().toISOString();
+    const child = spawn('npx', ['tsx', 'src/orchestrator/index.ts'], {
+      cwd: REPO_ROOT,
+      env: process.env,
+      stdio: 'ignore',
+      detached: false,
+    });
+    orchestratorChild = child;
+    orchestratorStartedAt = startedAt;
+    if (child.pid) writeOrchestratorPidfile(child.pid, startedAt);
+
+    child.on('exit', () => {
+      if (orchestratorChild === child) {
+        orchestratorChild = null;
+        orchestratorStartedAt = null;
+        clearOrchestratorPidfile();
+      }
+    });
+    child.on('error', (err) => {
+      console.error('[ui-server] orchestrator spawn error:', err);
+      if (orchestratorChild === child) {
+        orchestratorChild = null;
+        orchestratorStartedAt = null;
+        clearOrchestratorPidfile();
+      }
+    });
+
+    res.json({ running: true, pid: child.pid, startedAt });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/pipeline/run  (text/event-stream)
+  // -------------------------------------------------------------------------
+  // `POST /api/pipeline/run` spawns run-pipeline.ts with mapped env vars and
+  // stream stdout+stderr as SSE; 409 if a run is already in-flight.
+  app.post('/api/pipeline/run', (req, res) => {
+    if (pipelineRunning) {
+      res.status(409).json({ error: 'run_in_flight', detail: 'Another run is already in progress.' });
+      return;
+    }
+
+    const b = (req.body ?? {}) as {
+      source?: string; max?: number;
+      extract?: boolean; score?: boolean; judge?: boolean; cover?: boolean;
+      skipDedup?: boolean; skipPersist?: boolean; verify?: boolean;
+      query?: string; postedWithin?: string; hoursOld?: number; targetNew?: number; jsonl?: string;
+    };
+
+    const bool = (v: boolean | undefined) => (v ? '1' : '0');
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    env.SOURCE = String(b.source ?? 'dice');
+    env.MAX = String(Number.isFinite(b.max) ? b.max : 20);
+    env.EXTRACT = bool(b.extract);
+    env.SCORE = bool(b.score);
+    env.JUDGE = bool(b.judge);
+    env.COVER = bool(b.cover);
+    env.SKIP_DEDUP = bool(b.skipDedup);
+    env.SKIP_PERSIST = bool(b.skipPersist);
+    env.VERIFY = bool(b.verify);
+    if (b.query) env.QUERY = b.query;
+    if (b.postedWithin) env.POSTED_WITHIN = b.postedWithin;
+    if (b.hoursOld != null && Number.isFinite(b.hoursOld)) env.HOURS_OLD = String(b.hoursOld);
+    if (b.targetNew != null && Number.isFinite(b.targetNew) && b.targetNew > 0) env.TARGET_NEW = String(b.targetNew);
+    if (b.jsonl) env.JSONL = b.jsonl;
+
+    pipelineRunning = true;
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders?.();
+
+    const child = spawn('npx', ['tsx', 'scripts/run-pipeline.ts'], { cwd: REPO_ROOT, env });
+
+    const send = (line: string) => {
+      res.write(`data: ${JSON.stringify(stripAnsi(line))}\n\n`);
+    };
+    // StringDecoder holds incomplete multibyte UTF-8 sequences across chunk
+    // boundaries, so emoji/box-drawing chars are never split into replacement
+    // characters (the cause of the stray U+FFFD glyphs in raw output).
+    const outBuf = { s: '', dec: new StringDecoder('utf8') };
+    const errBuf = { s: '', dec: new StringDecoder('utf8') };
+    const pump = (buf: { s: string; dec: StringDecoder }, chunk: Buffer) => {
+      buf.s += buf.dec.write(chunk);
+      let nl: number;
+      while ((nl = buf.s.indexOf('\n')) !== -1) {
+        send(buf.s.slice(0, nl));
+        buf.s = buf.s.slice(nl + 1);
+      }
+    };
+    child.stdout?.on('data', (c: Buffer) => pump(outBuf, c));
+    child.stderr?.on('data', (c: Buffer) => pump(errBuf, c));
+
+    let finished = false;
+    const finish = (exitCode: number | null) => {
+      if (finished) return;
+      finished = true;
+      outBuf.s += outBuf.dec.end();
+      errBuf.s += errBuf.dec.end();
+      if (outBuf.s) send(outBuf.s);
+      if (errBuf.s) send(errBuf.s);
+      pipelineRunning = false;
+      try {
+        res.write(`event: done\ndata: ${JSON.stringify({ exitCode })}\n\n`);
+        res.end();
+      } catch { /* client already gone */ }
+    };
+
+    child.on('exit', (code) => finish(code));
+    child.on('error', (err) => {
+      send(`[pipeline] spawn error: ${err.message}`);
+      finish(1);
+    });
+
+    // Client disconnect: listen on the RESPONSE stream, not the request. The
+    // request emits 'close' as soon as its JSON body is fully read, which would
+    // kill the child immediately. res 'close' fires only on real disconnect.
+    res.on('close', () => {
+      if (!finished) {
+        try { child.kill('SIGTERM'); } catch { /* ignore */ }
+        finished = true;
+        pipelineRunning = false;
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/runs/:run_id/log
+  // -------------------------------------------------------------------------
+  // `GET /api/runs/:run_id/log` streams a saved run log file as plain text.
+  app.get('/api/runs/:run_id/log', (req, res) => {
+    const logPath = findRunLog(req.params.run_id);
+    if (!logPath || !fs.existsSync(logPath)) {
+      res.status(404).json({ error: 'log_not_found' });
+      return;
+    }
+    res.type('text/plain');
+    const stream = fs.createReadStream(logPath, 'utf8');
+    stream.on('error', () => {
+      if (!res.headersSent) res.status(500);
+      res.end();
+    });
+    stream.pipe(res);
   });
 
   // SPA fallback for production
