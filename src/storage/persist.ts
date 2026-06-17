@@ -865,6 +865,64 @@ export async function insertLedgerEntries(rows: LedgerEntryInput[]): Promise<voi
  * @param jobId - Source-local job identifier.
  * @returns Promise resolving to `true` when job was previously persisted.
  */
+/**
+ * Upserts a fresh judge verdict for an existing (job_id, run_id) row.
+ *
+ * Used by manual-generate when force=true triggers a re-judge before artifact
+ * generation so the new prompt logic takes effect without a full pipeline re-run.
+ *
+ * @param jobId - Stable job identifier.
+ * @param runId - Existing run identifier the job was originally processed under.
+ * @param judgeResult - Fresh judge result from re-running the judge stage.
+ * @param bucket - New routing bucket derived from the fresh verdict.
+ */
+export async function upsertJudgeVerdict(
+  jobId: string,
+  runId: string,
+  judgeResult: import("../judge/types.js").JudgeResult,
+  bucket: string,
+): Promise<void> {
+  if (_disabled) return;
+  try {
+    const f = judgeResult.fields;
+    await getPool().query(
+      `INSERT INTO judge_verdicts
+         (job_id, run_id, verdict, bucket, reasoning, concerns, model, judged_at,
+          confidence, key_matches, gaps, why_apply, tailoring_hints, system_prompt_sha)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7, NOW(),
+          $8, $9::jsonb, $10::jsonb, $11, $12::jsonb, $13)
+       ON CONFLICT (job_id, run_id) DO UPDATE
+         SET verdict           = EXCLUDED.verdict,
+             bucket            = EXCLUDED.bucket,
+             reasoning         = EXCLUDED.reasoning,
+             concerns          = EXCLUDED.concerns,
+             model             = COALESCE(EXCLUDED.model, judge_verdicts.model),
+             confidence        = EXCLUDED.confidence,
+             key_matches       = EXCLUDED.key_matches,
+             gaps              = EXCLUDED.gaps,
+             why_apply         = EXCLUDED.why_apply,
+             tailoring_hints   = EXCLUDED.tailoring_hints,
+             system_prompt_sha = EXCLUDED.system_prompt_sha`,
+      [
+        jobId, runId,
+        judgeResult.verdict,
+        bucket,
+        f?.reasoning ?? null,
+        JSON.stringify(f?.concerns ?? []),
+        judgeResult.model,
+        f?.confidence ?? null,
+        JSON.stringify(f?.key_matches ?? []),
+        JSON.stringify(f?.gaps ?? []),
+        f?.why_apply ?? null,
+        JSON.stringify(f?.tailoring_hints ?? {}),
+        judgeResult.system_prompt_sha ?? null,
+      ],
+    );
+  } catch (e) {
+    console.error("[storage] upsertJudgeVerdict failed:", formatErr(e));
+  }
+}
+
 export async function isSeenInDB(source: string, jobId: string): Promise<boolean> {
   if (_disabled) return false;
   try {

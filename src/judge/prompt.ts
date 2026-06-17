@@ -244,9 +244,14 @@ emit a gap_directives entry with:
     to claim. Never describe how the experience maps or transfers — only what it is.
 
 Handling guide:
-  - fabricate: candidate has no real adjacent experience for this JD requirement.
-    Pick a target_role where the requirement can be written into a new bullet
-    that reads naturally given the canonical bullets at that role.
+  - fabricate: A new dedicated bullet is needed at target_role to address this JD requirement.
+    Use fabricate when: (a) no existing canonical bullet at target_role covers this area, OR
+    (b) the gap is moderate or major and a standalone bullet would address it more prominently
+    than rewording an existing one. The presence of adjacent experience does NOT prevent fabricate —
+    it just means the new bullet should be grounded in what the candidate actually did at that role.
+    Pick target_role whose domain, scale, and stack make a new bullet on this topic read naturally
+    alongside the canonical bullets already there. Write a strong 2-3 sentence frame_as.
+    If no plausible home exists across ALL roles → use acknowledge.
 
     Fit test: do the canonical bullets at target_role provide enough contextual
     fit for this requirement to read naturally alongside them?
@@ -263,8 +268,10 @@ Handling guide:
     most recent. A sole-engineer Node.js healthcare startup is a poor target
     for fabrications about Java enterprise migrations. Pick the role whose
     domain, scale, and stack make the fabrication plausible.
-  - reframe: candidate has adjacent honest experience at target_role that can
-    be rewritten to surface the requirement honestly.
+  - reframe: An existing canonical bullet at target_role already partially covers this requirement
+    and can be reworded to surface it more prominently. Use reframe only when: the gap is minor,
+    OR the existing bullet is the natural and sufficient home for this skill — modifying it will
+    make the skill prominent without needing a dedicated new bullet.
   - acknowledge: cover letter should mention the gap honestly using frame_as
     as the adjacent-experience hook. Resume does not change.
   - ignore: not worth addressing.
@@ -291,8 +298,10 @@ INTERPRETATION:
 - relationship "direct_equivalent" → emit tailoring_hints.tech_swaps:
     { from: <candidate_source_skill>, to: <target_skill> }
   This is a known-defensible swap. NOT a gap, NOT a true-gap.
-- relationship "adjacent" → reframe only. Emit a gap with reframe_angle drawn from
-  risk_entry.safe_language[] verbatim. NEVER produce a tech_swap for adjacent entries.
+- relationship "adjacent" → fabricate OR reframe (never tech_swap). Choose based on gap severity and whether a new bullet is needed:
+  - If the gap is moderate or major AND a dedicated new bullet at target_role would address it more prominently than modifying an existing one → use fabricate.
+  - If an existing canonical bullet at target_role already partially covers this area and a rewrite is sufficient → use reframe.
+  Draw reframe_angle from risk_entry.safe_language[] verbatim. NEVER produce a tech_swap for adjacent entries.
 - relationship "unsupported_inference" → emit gap with severity "major". reframe_angle
   must use safe_language[]. Note this in concerns[].
 - relationship "fabricated" → emit gap with severity "major". reframe_angle must use

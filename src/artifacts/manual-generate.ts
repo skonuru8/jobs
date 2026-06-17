@@ -19,6 +19,11 @@ import { loadCanonicalResumeMaster } from "@/cover-letter/resume";
 import { buildExperienceBlockFromCanonicalTex } from "@/cover-letter/resume-brief";
 import { generateAndSaveResume } from "@/resume-generator/index";
 import type { ResumeGenConfig } from "@/resume-generator/types";
+import { extractRoleLabels } from "@/resume-generator/patch/parser";
+import { judge } from "@/judge/judge";
+import type { JudgeConfig } from "@/judge/judge";
+import { getBucket } from "@/judge/judge";
+import { extractRolesFromCanonicalTex, extractSkillsSectionFromCanonical } from "@/judge/roles-extractor";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
 import { makeJobSlug } from "@/shared/slug";
 import { makeDateFolderName, makeManualFolderName } from "@/applications/run-folder";
@@ -28,6 +33,7 @@ import {
   insertTailoredResumeArtifact,
   insertLedgerEntries,
   detectRegenerationReason,
+  upsertJudgeVerdict,
 } from "@/storage/persist";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
@@ -115,10 +121,69 @@ export async function manualGenerateArtifacts(
 
   const experienceBlock = buildExperienceBlockFromCanonicalTex(canonicalResumeTex);
 
+  // When force=true, re-run the judge with the current prompt before generating
+  // artifacts so changes to the judge prompt (e.g. fabricate vs reframe logic)
+  // take effect immediately without requiring a full pipeline re-run.
+  let activeJudgeResult = snapshot.judgeResult;
+  if (options?.force === true) {
+    manualLog("rejudge start");
+    try {
+      const judgeConfig: JudgeConfig = {
+        model:       (config.llm.judge?.model ?? config.llm.cover_letter.model) as string,
+        max_tokens:  (config.llm.judge?.max_tokens ?? 3000) as number,
+        temperature: (config.llm.judge?.temperature ?? 0.2) as number,
+        throttle_ms: (config.llm.judge?.throttle_ms ?? 0) as number,
+        ...(config.llm.judge?.reasoning ? { reasoning: config.llm.judge.reasoning as import("@/judge/client").ReasoningConfig } : {}),
+      };
+      const rolesList    = extractRolesFromCanonicalTex(canonicalResumeTex);
+      const canonicalSkills = extractSkillsSectionFromCanonical(path.join(repoRoot, "config", "resume_master.tex"));
+      const allowedLabels   = extractRoleLabels(canonicalResumeTex);
+      const freshJudge = await judge(
+        {
+          job:   {
+            title:              snapshot.job.title,
+            company:            snapshot.job.company.name,
+            employment_type:    snapshot.job.employment_type ?? null,
+            seniority:          snapshot.job.seniority ?? null,
+            domain:             snapshot.job.domain ?? null,
+            required_skills:    snapshot.job.required_skills,
+            years_experience:   snapshot.job.years_experience,
+            education_required: snapshot.job.education_required,
+            visa_sponsorship:   snapshot.job.visa_sponsorship,
+            visa_quote:         snapshot.job.visa_quote ?? null,
+            responsibilities:   snapshot.job.responsibilities,
+            flags:              snapshot.job.meta.flags,
+          },
+          score: {
+            total:      snapshot.scoreResult.score,
+            components: snapshot.scoreResult.components,
+          },
+          run_id:              snapshot.run_id,
+          job_id:              jobId,
+          profile,
+          roles_list:          rolesList   || undefined,
+          canonical_skills:    canonicalSkills || undefined,
+          allowed_role_labels: allowedLabels.length > 0 ? allowedLabels : undefined,
+        },
+        judgeConfig,
+      );
+      if (freshJudge.status === "ok" && freshJudge.verdict) {
+        const newBucket = getBucket(freshJudge, snapshot.scoreResult.score);
+        await upsertJudgeVerdict(jobId, snapshot.run_id, freshJudge, newBucket);
+        activeJudgeResult = freshJudge;
+        manualLog(`rejudge ok verdict=${freshJudge.verdict} bucket=${newBucket}`);
+      } else {
+        manualLog(`rejudge failed — using cached verdict. error=${freshJudge.error ?? "unknown"}`);
+      }
+    } catch (e) {
+      manualLog(`rejudge threw — using cached verdict. error=${String(e).slice(0, 200)}`);
+    }
+  }
+
   const bundle = buildArtifactBundle({
     sanitized: snapshot.job,
     scoreResult: snapshot.scoreResult,
-    judgeResult: snapshot.judgeResult,
+    judgeResult: activeJudgeResult,
     profile,
     canonical_resume_tex: canonicalResumeTex,
     experience_block: experienceBlock,
