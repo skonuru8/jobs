@@ -69,7 +69,7 @@ export interface ManualGenerateResult {
 export async function manualGenerateArtifacts(
   repoRoot: string,
   jobId: string,
-  options?: { force?: boolean; regeneration_reason?: string },
+  options?: { force?: boolean; regeneration_reason?: string; artifactType?: 'resume' | 'cover' | 'both' },
 ): Promise<ManualGenerateResult> {
   loadEnv({ path: path.join(repoRoot, ".env") });
   const generatedAt = new Date();
@@ -82,6 +82,9 @@ export async function manualGenerateArtifacts(
   const regenerationReason: string | null = options?.force
     ? (options.regeneration_reason ?? await detectRegenerationReason(jobId))
     : null;
+
+  const wantResume = (options?.artifactType ?? 'both') !== 'cover';
+  const wantCover  = (options?.artifactType ?? 'both') !== 'resume';
 
   if (!isRiskMapLoaded()) {
     loadRiskMap(repoRoot);
@@ -210,10 +213,12 @@ export async function manualGenerateArtifacts(
     model: (config.llm.resume_generator?.model ?? config.llm.cover_letter.model) as string,
     fallback_model: config.llm.resume_generator?.fallback_model as string | undefined,
     max_tokens:  (config.llm.resume_generator?.max_tokens ?? 8000) as number,
+    patch_max_tokens: config.llm.resume_generator?.patch_max_tokens as number | undefined,
     temperature: (config.llm.resume_generator?.temperature ?? 0.3) as number,
     throttle_ms: (config.llm.resume_generator?.throttle_ms ?? 1000) as number,
     compile_pdf: (config.llm.resume_generator?.compile_pdf ?? true) as boolean,
     review_queue_threshold: (config.llm.resume_generator?.review_queue_threshold ?? 0.70) as number,
+    patch_ops_warn_threshold: config.llm.resume_generator?.patch_ops_warn_threshold as number | undefined,
     retries:     (config.llm.resume_generator?.retries ?? 1) as number,
     word_count_min: config.llm.resume_generator?.word_count_min as number | undefined,
     word_count_max: config.llm.resume_generator?.word_count_max as number | undefined,
@@ -240,6 +245,8 @@ export async function manualGenerateArtifacts(
   };
 
   writeJobDescription(bundle, jobFolderAbs);
+  fs.mkdirSync(jobFolderAbs, { recursive: true });
+  fs.writeFileSync(path.join(jobFolderAbs, "canonical.tex"), bundle.canonical_resume_tex, "utf8");
 
   const cachedResumeOutcome = options?.force === true
     ? null
@@ -248,9 +255,15 @@ export async function manualGenerateArtifacts(
     manualLog(`resume cache_hit tex=${cachedResumeOutcome.tex_path}`);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const _skip: any = { tex_path: null, pdf_path: null, flags: [] as string[], word_count: 0, meta: {} as Record<string, unknown> };
   const [resumeOutcome, coverOutcome] = await Promise.all([
-    cachedResumeOutcome ?? generateAndSaveResume(bundle, resumeGeneratorConfig, repoRoot, jobFolderAbs, ctx),
-    generateAndSaveCoverLetter(bundle, coverLetterConfig, repoRoot, jobFolderAbs, ctx),
+    wantResume
+      ? (cachedResumeOutcome ?? generateAndSaveResume(bundle, resumeGeneratorConfig, repoRoot, jobFolderAbs, ctx))
+      : Promise.resolve(_skip),
+    wantCover
+      ? generateAndSaveCoverLetter(bundle, coverLetterConfig, repoRoot, jobFolderAbs, ctx)
+      : Promise.resolve(_skip),
   ]);
   manualLog(
     `resume tex=${resumeOutcome.tex_path ? "yes" : "no"} flags=${resumeOutcome.flags.join(",") || "(none)"} ` +

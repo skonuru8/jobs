@@ -190,12 +190,12 @@ export async function postLabel(body: LabelPayload): Promise<{ ok: true }> {
 
 export async function postGenerateArtifacts(
   jobId: string,
-  options?: { force?: boolean },
+  options?: { force?: boolean; type?: 'resume' | 'cover' | 'both' },
 ): Promise<{ resume: unknown; cover_letter: unknown }> {
   const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ force: options?.force }),
+    body: JSON.stringify({ force: options?.force, type: options?.type ?? 'both' }),
   });
   if (!res.ok) {
     const j = await res.json().catch(() => ({}));
@@ -303,6 +303,13 @@ export async function runPipeline(body: PipelineRunBody, h: StreamHandlers): Pro
   });
   if (res.status === 409) throw new Error('A run is already in progress.');
   if (!res.ok || !res.body) throw new Error(`pipeline run failed: ${res.status}`);
+  await readSseStream(res.body, h);
+}
+
+// Streams the orchestrator log file as an indefinite SSE tail. Ends on abort.
+export async function streamOrchestratorLog(h: StreamHandlers): Promise<void> {
+  const res = await fetch('/api/orchestrator/log', { signal: h.signal });
+  if (!res.ok || !res.body) throw new Error(`orchestrator log failed: ${res.status}`);
   await readSseStream(res.body, h);
 }
 

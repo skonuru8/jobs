@@ -156,7 +156,12 @@ function evalEmphasisOp(
 
   const techForwardGain = computeTechForwardGain(original, rewritten, emphSkills);
   const infoLoss = droppedTerms.length > 0;
-  const netQuality = infoLoss ? "degraded" : techForwardGain > 0 ? "improved" : "neutral";
+  const droppedBoldTerms = extractBoldTerms(original).filter(
+    t => !extractBoldTerms(rewritten).some(r => normalizeForSearch(r) === normalizeForSearch(t)),
+  );
+  const netQuality = (infoLoss || droppedBoldTerms.length > 0)
+    ? "degraded"
+    : techForwardGain > 0 ? "improved" : "neutral";
 
   return {
     role,
@@ -164,8 +169,20 @@ function evalEmphasisOp(
     original,
     rewritten,
     scores: { specificity_preserved: specificityPreserved, tech_forward_gain: techForwardGain, info_loss: infoLoss, net_quality: netQuality },
-    dropped_phrases: droppedTerms,
+    dropped_phrases: [...droppedTerms, ...droppedBoldTerms.filter(t => !droppedTerms.includes(t))],
   };
+}
+
+/**
+ * Extracts the named tech/entity terms wrapped in `\textbf{}` in a bullet.
+ *
+ * Used to detect emphasis rewrites that de-bold tech terms the original
+ * highlighted, which degrades the resume even when no content phrase is lost.
+ */
+function extractBoldTerms(tex: string): string[] {
+  return [...tex.matchAll(/\\textbf\{([^}]+)\}/g)]
+    .map(m => m[1].trim())
+    .filter(t => t.length > 0);
 }
 
 /**
@@ -276,7 +293,13 @@ function evalDirectiveOp(
 ): DirectiveOpEval {
   const bulletNorm = normalizeForSearch(bulletText);
   const req = jdRequirement.trim().toLowerCase();
-  const requirementAddressed = req.length === 0 || bulletNorm.includes(req.split(/\s+/)[0]);
+  // For "reframe", the design intent is to surface ADJACENT experience WITHOUT naming the
+  // JD requirement — so checking for the requirement keyword is always false by design and
+  // meaningless. Reframe directives are considered addressed as long as a bullet was written.
+  // For "fabricate", a new bullet must mention or strongly imply the requirement.
+  const requirementAddressed = handling === "reframe"
+    ? bulletText.trim().length > 0
+    : req.length === 0 || bulletNorm.includes(req.split(/\s+/)[0]);
 
   const metricInBullet = extractMetrics(bulletText);
   const metricInSource = extractMetrics(sourceRoleText);
@@ -311,6 +334,7 @@ function rollUpResumeQuality(
   if (emphasisEvals.some(e => e.scores.info_loss)) return "fail";
   if (directiveEvals.some(d => d.scores.banned_phrase)) return "fail";
   if (flags.some(f => f.startsWith("patch_diff_lint_failed") || f === "banned_phrase_in_output")) return "warning";
+  if (emphasisEvals.some(e => e.scores.net_quality === "degraded")) return "warning";
   if (directiveEvals.some(d => d.scores.metric_overclaim)) return "warning";
   if (flags.includes("resume_attribution_overrun")) return "warning";
   return "ok";

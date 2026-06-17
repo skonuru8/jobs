@@ -15,6 +15,7 @@
  * Each pattern targets phrasing that can sound inflated, evasive, or ATS-gamed.
  */
 const BANNED_STYLE_PATTERNS = [
+  // Transfer / analogy language
   /demonstrating transferable/i,
   /demonstrates transferable/i,
   /analogous to/i,
@@ -24,22 +25,41 @@ const BANNED_STYLE_PATTERNS = [
   /whose syntax (?:and|or) features/i,
   /\bwhose syntax\b/i,
   /syntactically equivalent to/i,
+  /comparable to/i,
+  /while not having direct/i,
+  /transferable skills/i,
+  /translate[s]? directly to/i,
+  /immediately useful in/i,
+
+  // Knowledge / exposure hedging
   /foundational knowledge of/i,
   /working knowledge of/i,
   /transitional knowledge of/i,
   /deepening understanding/i,
-  /directly applicable to/i,
-  /translate[s]? directly to/i,
-  /immediately useful in/i,
-  /comparable to/i,
-  /while not having direct/i,
   /with limited .* exposure/i,
-  /transferable skills/i,
-  /\baligning with your need for\b/i,
-  /\bas required by the role\b/i,
   /\bhands-on exposure\b/i,
   /\bexposure to\b/i,
   /\bgained hands-on exposure\b/i,
+  /\bgaining hands-on experience\b/i,
+  /\bgain(?:ing|ed)? familiarity with\b/i,
+  /\bgaining familiarity\b/i,
+
+  // JD-targeting tails
+  /directly applicable to/i,
+  /\bapplicable to\b/i,
+  /\baligning with your need for\b/i,
+  /\bas required by the role\b/i,
+  /\baligns with the requirements\b/i,
+  /\bto meet (?:the|your) requirements\b/i,
+
+  // AI-generated quality-signal phrases (no substance)
+  /\bdemonstrating (?:strong|holistic|comprehensive|solid|deep|real-world|direct|full|broad)\b/i,
+  /\bdemonstrates (?:strong|holistic|comprehensive|solid|deep|real-world|direct|full|broad)\b/i,
+  /\bdirectly demonstrates\b/i,
+  /\bmaps directly\b/i,
+  /\bmirrors the\b/i,
+  /\brapidly adapt\b/i,
+  /\bposition(?:s|ed)? (?:me|the candidate) (?:to|for)\b/i,
 ];
 
 /**
@@ -47,32 +67,30 @@ const BANNED_STYLE_PATTERNS = [
  * used to embed the banned list into LLM system prompts.
  */
 export const BANNED_STYLE_PHRASE_STRINGS: readonly string[] = [
-  "demonstrating transferable",
-  "demonstrates transferable",
-  "analogous to",
-  "akin to",
-  "parallel to",
-  "similar to",
-  "whose syntax and/or features",
-  "whose syntax",
-  "syntactically equivalent to",
-  "foundational knowledge of",
-  "working knowledge of",
-  "transitional knowledge of",
-  "deepening understanding",
-  "directly applicable to",
-  "translate directly to",
-  "translates directly to",
+  // Transfer / analogy language
+  "demonstrating transferable", "demonstrates transferable",
+  "analogous to", "akin to", "parallel to", "similar to",
+  "whose syntax and/or features", "whose syntax",
+  "syntactically equivalent to", "comparable to",
+  "while not having direct", "transferable skills",
+  "translate directly to", "translates directly to",
   "immediately useful in",
-  "comparable to",
-  "while not having direct",
+  // Knowledge / exposure hedging
+  "foundational knowledge of", "working knowledge of",
+  "transitional knowledge of", "deepening understanding",
   "with limited exposure",
-  "transferable skills",
-  "aligning with your need for",
-  "as required by the role",
-  "hands-on exposure",
-  "exposure to",
-  "gained hands-on exposure",
+  "hands-on exposure", "exposure to", "gained hands-on exposure",
+  "gaining hands-on experience", "gaining familiarity with",
+  // JD-targeting tails
+  "directly applicable to", "applicable to",
+  "aligning with your need for", "as required by the role",
+  "aligns with the requirements", "to meet the requirements",
+  // AI-generated quality claims with no substance
+  "demonstrating strong", "demonstrating holistic", "demonstrating comprehensive",
+  "demonstrating solid", "demonstrating deep", "demonstrating real-world",
+  "demonstrating direct", "demonstrating full", "demonstrating broad",
+  "directly demonstrates", "maps directly", "mirrors the",
+  "rapidly adapt",
 ];
 
 /**

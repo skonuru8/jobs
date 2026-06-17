@@ -63,6 +63,39 @@ EMPLOYER ATTRIBUTION — NON-NEGOTIABLE
 6. Do not switch employers inside the same paragraph. One employer per
    paragraph; start a new paragraph or use neutral framing.
 
+SKILL-TO-PROJECT ATTRIBUTION — NON-NEGOTIABLE
+- You may only assert that the candidate USED a technology at a specific named
+  employer or project if that technology appears explicitly in that employer's
+  or project's bullets in the CANDIDATE EXPERIENCE or CANDIDATE PROJECTS block.
+  A technology that appears only in the SKILLS section of the resume does NOT
+  qualify — skills-section membership means the candidate knows it, not that
+  they used it on any particular project.
+- This rule applies to ALL technology types: messaging systems, databases,
+  frameworks, cloud services, and tools. Do NOT upgrade experience with
+  one specific tool into a claim about a different tool simply because the
+  second tool appears in the SKILLS section (e.g., do not upgrade "AWS SQS
+  experience" into "Apache Kafka integration" just because Kafka is in Skills).
+- For gap bridging: use hedged framing that names what the candidate DID,
+  then bridges to the JD requirement. Example: "my experience building
+  pub/sub pipelines with AWS SQS positions me to work with event-driven
+  architectures including Apache Kafka." NEVER write "I integrated [gap tool]"
+  unless a project bullet explicitly names that tool.
+- FABRICATED CLAIMS listed in the user message are the ONLY exception —
+  those were explicitly constructed with supporting evidence and may be
+  mirrored at their declared target_role.
+
+PARAGRAPH 2 ANECDOTE SELECTION
+- Paragraph 2 must choose the ONE past experience (employer OR personal
+  project from CANDIDATE PROJECTS) most directly relevant to the JD's core
+  technical requirements — do NOT default to the same story every time.
+- If the CANDIDATE PROJECTS block contains a project that directly addresses
+  a JD requirement or skill gap (e.g. a RAG pipeline for an AI role, a
+  vector-DB project for a data engineering role), use it in paragraph 2 or 3
+  as "In a personal project..." — this is often stronger than a work anecdote
+  that only partially matches.
+- Pick the anecdote with the highest overlap to the JD's required_skills and
+  responsibilities, not the one with the best-sounding metrics.
+
 BANNED LANGUAGE — FAMILY PATTERNS, NOT A CLOSED LIST
 If a phrase hedges between the candidate's real stack and a JD-target stack,
 or signals AI-written prose, it is banned regardless of exact wording. Match
@@ -174,6 +207,8 @@ export function buildCoverLetterPrompt(input: CoverLetterInput): string {
     ? `=== CANDIDATE EXPERIENCE (verbatim from resume) ===
 Reference material. Do not reorder bullets, do not reorder employers, do not
 move bullets or metrics between employers. Quote selectively when narrating.
+A technology is only attributable to a named employer if it appears in THAT
+employer's bullets below — not merely because it appears in the SKILLS section.
 
 ${input.experience_block.trim()}
 

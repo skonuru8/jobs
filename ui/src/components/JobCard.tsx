@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { CSSProperties } from 'react';
 import { postLabel, postGenerateArtifacts, getStats } from '../api';
 import type { ApplyQueueRow, HardRejectionRow, SoftRejectionRow, Stats, RiskSummary } from '../api';
@@ -76,8 +76,10 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
   const [chips, setChips] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [gen, setGen] = useState(false);
+  const [resumeProgress, setResumeProgress] = useState<number | null>(null);
+  const [coverProgress, setCoverProgress] = useState<number | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
+  const genTimers = useRef<{ resume?: ReturnType<typeof setInterval>; cover?: ReturnType<typeof setInterval> }>({});
   const [diffOpen, setDiffOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -146,17 +148,35 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
     if (await doPost('no', 'skipped', text)) onDataChange?.();
   }
 
-  async function handleGenerate() {
+  const runGenerate = useCallback(async (type: 'resume' | 'cover') => {
     if (mode !== 'apply') return;
-    setGen(true); setGenError(null);
+    const setProgress = type === 'resume' ? setResumeProgress : setCoverProgress;
+    const force = type === 'resume' ? Boolean(applyRow?.resume_pdf_url) : Boolean(applyRow?.cover_pdf_url);
+    setProgress(1); setGenError(null);
+    genTimers.current[type] = setInterval(() => {
+      setProgress(p => p == null ? p : Math.min(90, p + 1));
+    }, 1000);
     try {
-      const has = Boolean(applyRow?.cover_pdf_url || applyRow?.resume_pdf_url);
-      await postGenerateArtifacts(row.job_id, { force: has });
+      await postGenerateArtifacts(row.job_id, { type, force });
+      clearInterval(genTimers.current[type]);
+      genTimers.current[type] = undefined;
+      setProgress(100);
+      setTimeout(() => setProgress(null), 700);
       onDataChange?.();
       onStatsUpdate(await getStats());
-    } catch (e) { setGenError((e as Error).message); }
-    finally { setGen(false); }
-  }
+    } catch (e) {
+      clearInterval(genTimers.current[type]);
+      genTimers.current[type] = undefined;
+      setProgress(null);
+      setGenError((e as Error).message);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, row.job_id, applyRow?.resume_pdf_url, applyRow?.cover_pdf_url, onDataChange, onStatsUpdate]);
+
+  useEffect(() => {
+    const timers = genTimers.current;
+    return () => { clearInterval(timers.resume); clearInterval(timers.cover); };
+  }, []);
 
   const reasoning = field(row, 'reasoning') ?? field(row, 'judge_reasoning');
   const concerns: string[] = applyRow
@@ -175,7 +195,7 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
             <span className="j-title">{row.title}</span>
             {isApplied && <span className="status-pill applied"><Check style={{ width: 11, height: 11 }} />Applied</span>}
             {isLater && <span className="status-pill later">Later</span>}
-            {isSkipped && !isApplied && <span className="status-pill notapplied">Skipped</span>}
+            {isSkipped && !isApplied && <span className="status-pill notapplied">Not applied</span>}
           </div>
           <div className="j-meta">
             <span className="j-company">{row.company}</span>
@@ -188,7 +208,7 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
                 <span className="j-dot" />
                 <button className={`smb${appStatus === 'applied' ? ' smb-applied' : ''}`} disabled={saving} onClick={e => { e.stopPropagation(); handleHeadStatus('applied'); }}>Applied</button>
                 <button className={`smb${appStatus === 'apply_later' ? ' smb-later' : ''}`} disabled={saving} onClick={e => { e.stopPropagation(); handleHeadStatus('apply_later'); }}>Later</button>
-                <button className={`smb${appStatus === 'skipped' ? ' smb-skip' : ''}`} disabled={saving} onClick={e => { e.stopPropagation(); handleHeadStatus('skipped'); }}>Skip</button>
+                <button className={`smb${appStatus === 'skipped' ? ' smb-skip' : ''}`} disabled={saving} onClick={e => { e.stopPropagation(); handleHeadStatus('skipped'); }}>Not applied</button>
               </>
             )}
           </div>
@@ -286,16 +306,31 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
                 )}
               </div>
               <div className="artifacts">
-                <button className={`gen-btn${gen ? ' busy' : ''}`} onClick={handleGenerate} disabled={gen}>
-                  {gen ? 'Generating…' : (applyRow?.resume_pdf_url || applyRow?.cover_pdf_url) ? 'Regenerate' : 'Generate tailored docs'}
-                </button>
+                <div className="gen-pair">
+                  <button
+                    className={`gen-btn${resumeProgress != null ? ' busy' : ''}`}
+                    onClick={() => void runGenerate('resume')}
+                    disabled={resumeProgress != null}
+                    style={{ position: 'relative', overflow: 'hidden' }}>
+                    {resumeProgress != null ? `Résumé ${resumeProgress}%` : applyRow?.resume_pdf_url ? 'Regen résumé' : 'Generate résumé'}
+                    {resumeProgress != null && <span className="gen-fill" style={{ width: `${resumeProgress}%` }} />}
+                  </button>
+                  <button
+                    className={`gen-btn${coverProgress != null ? ' busy' : ''}`}
+                    onClick={() => void runGenerate('cover')}
+                    disabled={coverProgress != null}
+                    style={{ position: 'relative', overflow: 'hidden' }}>
+                    {coverProgress != null ? `Cover ${coverProgress}%` : applyRow?.cover_pdf_url ? 'Regen cover' : 'Generate cover'}
+                    {coverProgress != null && <span className="gen-fill" style={{ width: `${coverProgress}%` }} />}
+                  </button>
+                </div>
                 {applyRow?.resume_pdf_url && <a className="alink" href={applyRow.resume_pdf_url} target="_blank" rel="noopener noreferrer"><Doc />Résumé PDF</a>}
                 {applyRow?.cover_pdf_url && <a className="alink" href={applyRow.cover_pdf_url} target="_blank" rel="noopener noreferrer"><Doc />Cover letter PDF</a>}
                 {applyRow?.resume_pdf_url && <RiskBadge label="Résumé" status={applyRow.resume_export_status} summary={applyRow.resume_risk_summary} />}
                 {applyRow?.cover_pdf_url && <RiskBadge label="Cover" status={applyRow.cover_export_status} summary={applyRow.cover_risk_summary} />}
               </div>
-              {gen && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 9 }}>Tailoring resume and cover letter, usually 1-2 min. Keep this tab open.</div>}
-              {genError && <div className="card-error" style={{ color: 'var(--neg)', fontSize: 12, marginTop: 8 }}>{genError} <button onClick={handleGenerate} style={{ background: 'none', border: 'none', color: 'var(--info)', textDecoration: 'underline', cursor: 'pointer' }}>Try again</button></div>}
+              {(resumeProgress != null || coverProgress != null) && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 9 }}>Tailoring, usually 1-2 min. Keep this tab open.</div>}
+              {genError && <div className="card-error" style={{ color: 'var(--neg)', fontSize: 12, marginTop: 8 }}>{genError} <button onClick={() => void runGenerate('resume')} style={{ background: 'none', border: 'none', color: 'var(--info)', textDecoration: 'underline', cursor: 'pointer', marginRight: 6 }}>Retry résumé</button><button onClick={() => void runGenerate('cover')} style={{ background: 'none', border: 'none', color: 'var(--info)', textDecoration: 'underline', cursor: 'pointer' }}>Retry cover</button></div>}
             </div>
           )}
 
@@ -315,7 +350,7 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
                 <div className="choice">
                   <button className={appStatus === 'applied' ? 'on-applied' : ''} disabled={saving} onClick={() => handleStatus('applied')}>Applied</button>
                   <button className={appStatus === 'apply_later' ? 'on-later' : ''} disabled={saving} onClick={() => handleStatus('apply_later')}>Apply later</button>
-                  <button className={appStatus === 'skipped' ? 'on-skip' : ''} disabled={saving} onClick={() => handleStatus('skipped')}>Skip</button>
+                  <button className={appStatus === 'skipped' ? 'on-skip' : ''} disabled={saving} onClick={() => handleStatus('skipped')}>Not applied</button>
                 </div>
               </div>
             )}

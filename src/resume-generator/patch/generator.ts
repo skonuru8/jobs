@@ -37,60 +37,117 @@ Output schema:
   {"type":"insert_first","role":"...","item":"\\\\item ..."}
 ]}
 
-Rules:
+RULES:
+
+OP COUNT HARD LIMITS — check these BEFORE writing any ops:
+- TOTAL ops: never more than 8. Count as you go and stop when you hit 8.
+- PER-ROLE rewrite cap: at most 2 rewrite ops per role. Once a role has 2 rewrites, skip ALL further rewrites for it — even if more emphasis_skills remain.
+- PRIORITY ORDER: (1) directive ops (fabricate/reframe) first, (2) emphasis ops fill remaining slots. If you've used 6 slots on directives and the cap is 8, only 2 emphasis slots remain.
+- At most ONE op per (role, item) slot. If two directives target the same bullet, keep only the most important one.
+- Every insert_after and insert_first op MUST have a non-empty new bullet string. Never emit an op with an empty item.
+
+Core:
 - Return only valid JSON. No markdown.
 - Apply fabricate and reframe directives AND EMPHASIS_ROLES rewrites.
 - Never delete bullets.
 - Never edit SUMMARY or SKILLS.
-- Never invent metrics not present in the role block or directive.
 - Keep every op scoped to the directive target_role or an EMPHASIS_ROLES role.
 - Use role names exactly as provided in ROLE_BLOCKS.
-- If a directive cannot fit a role naturally, omit it.
 - frame_as is briefing guidance only — extract the factual content, do NOT copy its phrasing verbatim into bullets.
 - Write bullets as confident factual statements about what the candidate did. No hedging.
-- EMPHASIS pass: when EMPHASIS_ROLES is present, rewrite 1–2 existing bullets per listed role to surface the EMPHASIS_SKILLS terms. This is an INJECTION edit, NOT a rewrite. You MUST preserve every factual claim, named object, scope qualifier, and contextual phrase from the original bullet VERBATIM. The only permitted changes are: (a) wrapping or inserting EMPHASIS_SKILLS terms in \\textbf{...}, (b) adding a short tech-stack clause naming those skills, (c) minimal connective words needed to keep the sentence grammatical. You may NOT delete, generalize, abstract, or replace any existing noun phrase. Do NOT replace a concrete object (e.g. "forms used for manual ticket creation") with a generic category (e.g. "component-based frontend architecture"). Do NOT drop architectural or scope context (e.g. "across a monolithic architecture"). Do NOT drop named systems, counts, or metrics. If you cannot surface the skill without removing existing facts, leave that bullet unchanged and pick another. After writing each rewrite, verify the new bullet still contains EVERY specific phrase from the original. Do NOT add new bullets, do NOT invent metrics. Emit these as "rewrite" ops alongside any directive ops.
 
-EMPHASIS WRONG vs RIGHT (injection-only, same PHIA bullet):
-Original: "\\\\item Modernized \\\\textbf{Angular} forms used for manual ticket creation, decoupling tightly coupled components across a monolithic architecture and resolving \\\\textbf{30+} backlog issues, reducing UI defect reports by \\\\textbf{10\\\\%} over two release cycles."
-EMPHASIS_SKILLS: ["Angular", "JavaScript"]
-WRONG (drops "forms used for manual ticket creation" and "across a monolithic architecture" — unacceptable context removal):
-  "\\\\item Modernized component-based frontend architecture using \\\\textbf{Angular} and \\\\textbf{JavaScript}, decoupling tightly coupled components, resolving \\\\textbf{30+} backlog issues, and reducing UI defect reports by \\\\textbf{10\\\\%} over two release cycles."
-RIGHT (every original phrase kept; only "and \\\\textbf{JavaScript}" injected alongside existing Angular):
-  "\\\\item Modernized \\\\textbf{Angular} and \\\\textbf{JavaScript} forms used for manual ticket creation, decoupling tightly coupled components across a monolithic architecture and resolving \\\\textbf{30+} backlog issues, reducing UI defect reports by \\\\textbf{10\\\\%} over two release cycles."
+Fabrication guard — NO INVENTION:
+- Never invent metrics (numbers, percentages, counts) not present in the role block or directive.
+- Never invent tools, libraries, or technologies not explicitly named in the role block or the directive's frame_as. Do not add a technology because it sounds plausible — only include it if the source material names it.
+
+Fact preservation — NO SUBSTITUTION:
+- You may ONLY add content alongside what exists. You may NEVER replace a named technology, system, client, domain, or noun phrase with a different one.
+  Wrong: original says "PostgreSQL" → rewrite says "MySQL". Wrong: original says "batch ETL pipeline" → rewrite says "streaming pipeline".
+- This applies to ALL op types (fabricate, reframe, emphasis). Adding is allowed; swapping is not.
+
+REFRAME directive — concrete bridging, not keyword stuffing:
+- A reframe MUST add a specific, verifiable mechanism, activity, or result that demonstrates the adjacent competence. Ask: what did the candidate actually BUILD or DO?
+- Appending a bare skill name or a trailing clause like "demonstrating X patterns" / "applicable to Y" / "aligning with Z requirements" / "patterns that align with Kafka" is keyword stuffing — it is NOT a reframe and will be rejected.
+- If no concrete adjacent activity exists in the role block, omit the op rather than stuffing a keyword.
+- Cap at one new clause per rewrite. Do not merge multiple gaps into one run-on sentence.
+
+Context-aware keyword injection:
+- Do not bold or inject a backend language (e.g. Java, Python) into a bullet whose context already establishes it, or into a frontend-only bullet (UI dashboards, Angular forms, styling). Adding "Java" to a Java/Spring-Boot project bullet is zero signal.
+- Do not attribute a technology to a role/project unless it is in that role's bullets or frame_as. A skill listed in the SKILLS section is not evidence of project-level use.
+
+EMPHASIS pass — injection only, strict eligibility required:
+
+ELIGIBILITY CHECK — run this for EACH bullet before writing an emphasis op:
+  Step 1: Does the emphasis_skill word already appear anywhere in the bullet text (bolded or unbolded)?
+          If YES → this bullet is INELIGIBLE. Skip it. Do NOT bold a word that is already present.
+  Step 2: Is this a frontend-only bullet (UI, forms, dashboard, styling, Angular templates) and the emphasis_skill a backend language (Java, Python, Go)?
+          If YES → INELIGIBLE. Do not cross-pollinate frontend bullets with backend language names.
+  Step 3: Would the rewrite add ONLY the skill name with no accompanying new mechanism, technique, system, or scope?
+          Example: "Built Spring Boot microservices" → "Built Java Spring Boot microservices" is INELIGIBLE.
+          Example: "Built Spring Boot microservices" → "Built Spring Boot microservices using Java Stream API for parallel transformation of 50M records" is ELIGIBLE.
+          If only the name would be added → INELIGIBLE.
+  Step 4: If the role has already hit its 2-rewrite cap → all bullets in that role are INELIGIBLE.
+
+If all bullets in a role fail eligibility, emit ZERO emphasis ops for that role — do NOT force an ineligible op just to have something.
+
+When a bullet IS eligible:
+- Preserve EVERY factual claim, named object, scope qualifier, and contextual phrase from the original VERBATIM.
+- Only permitted changes: (a) wrapping or inserting EMPHASIS_SKILLS terms in \\textbf{...}, (b) adding a short tech-stack clause that names the skill with a specific mechanism, (c) minimal connective words to stay grammatical.
+- Do NOT generalize or abstract. Do NOT replace a concrete noun with a generic category. Do NOT drop named systems, counts, or metrics.
+- Verify: every specific phrase from the original still appears in the rewrite.
+- Do NOT add new bullets. Do NOT invent metrics.
 
 BANNED phrases — NEVER use any of these in any bullet text:
 ${BANNED_STYLE_PHRASE_STRINGS.map(p => `  "${p}"`).join("\n")}
 
-If a bullet you would write contains one of these phrases, rewrite it to state the fact directly without the bridge phrase.
+Banned generative-stuffing patterns (match by intent, not exact string):
+- Any trailing clause of the form "…demonstrating {skill} patterns" / "…applicable to {requirement}" / "…aligning with {jd_term}" / "…patterns that align with {tool}" when the rest of the bullet is unchanged.
+- Rewrite to state the actual fact directly instead.
+
 Wrong:  "\\\\item Built event-driven pipelines directly applicable to AI agent architectures."
-Right:  "\\\\item Built event-driven pipelines processing 100k+ events/sec using AWS Kinesis and Lambda."
+Right:  "\\\\item Built event-driven pipelines processing \\\\textbf{100k+} events/sec using \\\\textbf{AWS Kinesis} and \\\\textbf{Lambda}, with schema validation and dead-letter routing."
 
 EXAMPLES:
 
-Example 1 — fabricate: add Kubernetes observability bullet to Project: Nokia
+Example 1 — fabricate: add a new container observability bullet
 DIRECTIVE:
-{"jd_requirement":"container orchestration observability","handling":"fabricate","target_role":"Project: Nokia","frame_as":"Nokia CPQ ran 10+ Spring Boot microservices on Azure with Docker and Kubernetes via Azure Pipelines. Candidate contributed to containerization and deployment orchestration. Surface container monitoring and health-check ownership."}
+{"jd_requirement":"Kubernetes health monitoring","handling":"fabricate","target_role":"Payments Service","frame_as":"The candidate ran 8 Spring Boot microservices on AWS ECS. They automated deployments and coordinated health-check and rollback procedures with the DevOps team. Surface container lifecycle ownership and health-check responsibility."}
 ROLE_BLOCKS (excerpt):
-{"role":"Project: Nokia","items":[{"item":8,"text":"\\\\item Contributed to containerization and deployment orchestration with \\\\textbf{Docker, Kubernetes, and Azure Pipelines} alongside the DevOps team across a large-scale Azure environment."}]}
+{"role":"Payments Service","items":[{"item":5,"text":"\\\\item Automated deployment pipelines using \\\\textbf{Docker} and \\\\textbf{AWS ECS}, coordinating rollback procedures with the DevOps team across a multi-service production environment."}]}
 CORRECT OP:
-{"ops":[{"type":"rewrite","role":"Project: Nokia","item":8,"new_item":"\\\\item Owned containerization and deployment orchestration for \\\\textbf{10+ Spring Boot microservices} using \\\\textbf{Docker, Kubernetes, and Azure Pipelines}, monitoring health checks and scaling behavior across the Nokia CPQ Azure environment."}]}
+{"ops":[{"type":"rewrite","role":"Payments Service","item":5,"new_item":"\\\\item Owned deployment automation for \\\\textbf{8 Spring Boot microservices} using \\\\textbf{Docker} and \\\\textbf{AWS ECS}, defining container health checks, rolling-update strategies, and incident rollback procedures to maintain availability during production releases."}]}
 
-Example 2 — reframe: surface SQL query optimization at Project: PHIA
+Example 2 — reframe: surface query-tuning experience for a database performance gap
 DIRECTIVE:
-{"jd_requirement":"database query performance tuning","handling":"reframe","target_role":"Project: PHIA","frame_as":"PHIA PATS ran on SQL Server. Candidate wrote optimized queries that improved report generation by 15%. Surface the optimization work and the measurable outcome."}
+{"jd_requirement":"SQL query optimization","handling":"reframe","target_role":"Analytics Platform","frame_as":"The candidate wrote complex PostgreSQL queries for reporting dashboards that cut report generation time by 20%. Surface the tuning methodology and the measurable outcome."}
 ROLE_BLOCKS (excerpt):
-{"role":"Project: PHIA","items":[{"item":6,"text":"\\\\item Wrote optimized \\\\textbf{SQL Server} queries for client-facing task-listing reports, improving generation times by \\\\textbf{15\\\\%} and enabling real-time queue visibility for PHIA Group clients."}]}
+{"role":"Analytics Platform","items":[{"item":4,"text":"\\\\item Wrote complex \\\\textbf{PostgreSQL} queries for client-facing analytics reports, reducing generation time by \\\\textbf{20\\\\%} and enabling real-time pipeline metric visibility."}]}
 CORRECT OP:
-{"ops":[{"type":"rewrite","role":"Project: PHIA","item":6,"new_item":"\\\\item Tuned \\\\textbf{SQL Server} queries for client-facing task-listing and reporting workflows, achieving \\\\textbf{15\\\\%} faster generation times and enabling real-time queue visibility for PHIA Group stakeholders."}]}
+{"ops":[{"type":"rewrite","role":"Analytics Platform","item":4,"new_item":"\\\\item Tuned \\\\textbf{PostgreSQL} queries for client-facing analytics dashboards using index strategy, query-plan analysis, and result-set caching, achieving a \\\\textbf{20\\\\%} reduction in report generation time and enabling real-time pipeline metric visibility."}]}
 
-Example 3 — emphasis: rewrite AquilaEdge LLC bullet to foreground React + TypeScript for an AI startup JD
+REFRAME WRONG vs RIGHT — keyword stuffing vs concrete bridging:
+JD requirement: "Apache Kafka / event streaming"
+WRONG (appended keyword clause — adds nothing concrete, banned pattern):
+  "\\\\item Processed payment events using \\\\textbf{AWS SQS}, implementing messaging patterns that align with Kafka-style event-driven architectures."
+RIGHT (names the actual mechanism with scale and delivery guarantees — demonstrates the adjacent competence):
+  "\\\\item Designed a payment event pipeline using \\\\textbf{AWS SQS} with \\\\textbf{SNS} fan-out, dead-letter queues, and at-least-once delivery guarantees, routing events across \\\\textbf{5 downstream services} with schema validation at ingestion."
+
+Example 3 — emphasis: inject missing skill terms into an existing bullet
 DIRECTIVES: []
-EMPHASIS_ROLES: ["AquilaEdge LLC"]
-EMPHASIS_SKILLS: ["React", "TypeScript", "REST APIs", "Node.js"]
+EMPHASIS_ROLES: ["Operations Team"]
+EMPHASIS_SKILLS: ["React", "TypeScript", "REST APIs"]
 ROLE_BLOCKS (excerpt):
-{"role":"AquilaEdge LLC","items":[{"item":1,"text":"\\\\item Architected and delivered a customer-facing web portal for scheduling and job tracking, replacing a manual spreadsheet workflow used by 50+ field service teams."}]}
+{"role":"Operations Team","items":[{"item":1,"text":"\\\\item Built a customer-facing scheduling portal for job tracking and dispatch management, replacing a manual spreadsheet workflow used by 200+ field coordinators."}]}
 CORRECT OP:
-{"ops":[{"type":"rewrite","role":"AquilaEdge LLC","item":1,"new_item":"\\\\item Architected and delivered a customer-facing \\\\textbf{React + TypeScript} portal for scheduling and job tracking, exposing \\\\textbf{REST APIs} consumed by 50+ field service teams and replacing a manual spreadsheet workflow."}]}
+{"ops":[{"type":"rewrite","role":"Operations Team","item":1,"new_item":"\\\\item Built a customer-facing \\\\textbf{React + TypeScript} scheduling portal for job tracking and dispatch management, backed by \\\\textbf{REST APIs}, used by 200+ field coordinators and replacing a manual spreadsheet workflow."}]}
+
+EMPHASIS WRONG vs RIGHT — injection only, no context removal:
+Original: "\\\\item Refactored legacy billing forms for manual invoice creation, decoupling tightly coupled modules across a monolithic codebase and resolving \\\\textbf{40+} defects, cutting error reports by \\\\textbf{12\\\\%} over two release cycles."
+EMPHASIS_SKILLS: ["Vue.js", "JavaScript"]
+WRONG (drops "forms for manual invoice creation" and "monolithic codebase" — unacceptable context removal):
+  "\\\\item Refactored component-based frontend architecture using \\\\textbf{Vue.js} and \\\\textbf{JavaScript}, decoupling tightly coupled modules and resolving \\\\textbf{40+} defects, cutting error reports by \\\\textbf{12\\\\%} over two release cycles."
+RIGHT (every original phrase kept; "and \\\\textbf{JavaScript}" injected alongside the existing stack):
+  "\\\\item Refactored legacy \\\\textbf{Vue.js} and \\\\textbf{JavaScript} billing forms for manual invoice creation, decoupling tightly coupled modules across a monolithic codebase and resolving \\\\textbf{40+} defects, cutting error reports by \\\\textbf{12\\\\%} over two release cycles."
 `.trim();
 
 /** Stable short hash for patch prompt versioning in artifacts and diagnostics. */
@@ -181,7 +238,7 @@ export function activeGapDirectives(directives: GapDirective[]): GapDirective[] 
  * @returns Array of exact role strings to emphasize; empty when not set.
  */
 export function emphasisRoles(input: ResumeGenInput): string[] {
-  return input.judge_json.tailoring_hints?.emphasize_roles ?? [];
+  return (input.judge_json.tailoring_hints?.emphasize_roles ?? []).slice(0, 2);
 }
 
 /**
@@ -233,7 +290,7 @@ function buildPatchUserMessage(
     JSON.stringify(renderTechSwaps(techSwaps), null, 2),
   ];
   if (emphRoles.length > 0) {
-    const emphSkills = input.judge_json.tailoring_hints?.emphasize_skills ?? [];
+    const emphSkills = (input.judge_json.tailoring_hints?.emphasize_skills ?? []).slice(0, 5);
     parts.push("", "EMPHASIS_ROLES:", JSON.stringify(emphRoles));
     parts.push("", "EMPHASIS_SKILLS:", JSON.stringify(emphSkills));
   }

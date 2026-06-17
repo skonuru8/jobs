@@ -6,6 +6,10 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:3001',
+      // Served by the backend as static files (resume/cover PDFs, logs).
+      // Without this, the dev server returns index.html and the SPA opens
+      // in the new tab instead of the document.
+      '/output': 'http://localhost:3001',
     },
   },
 });

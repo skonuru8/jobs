@@ -6,6 +6,7 @@ import {
   postOrchestratorToggle,
   runPipeline,
   streamRunLog,
+  streamOrchestratorLog,
   getRunHistory,
 } from '../api';
 import type {
@@ -97,6 +98,7 @@ export function PipelineControl({ refreshKey }: Props) {
 
   const termRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const orchLogAbortRef = useRef<AbortController | null>(null);
   const lineId = useRef(0);
 
   const replay = jsonl.trim().length > 0;
@@ -115,25 +117,6 @@ export function PipelineControl({ refreshKey }: Props) {
     } catch { /* leave previous list */ }
   }, []);
 
-  // Mount + tab re-entry: load orchestrator status and recent runs. No polling.
-  useEffect(() => {
-    let alive = true;
-    getOrchestratorStatus().then(s => { if (alive) setOrch(s); }).catch(() => { if (alive) setOrch({ running: false }); });
-    void refetchRuns();
-    return () => { alive = false; };
-  }, [refreshKey, refetchRuns]);
-
-  // Close any open stream when the region unmounts (tab switch). No leak, zero
-  // network traffic while this tab is inactive.
-  useEffect(() => () => { abortRef.current?.abort(); }, []);
-
-  // Auto-scroll to bottom on new output unless the user scrolled up.
-  useEffect(() => {
-    if (!scrollLock) return;
-    const el = termRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [lines, scrollLock]);
-
   const appendLine = useCallback((text: string) => {
     const ts = fmtClock(new Date());
     const id = ++lineId.current;
@@ -142,6 +125,40 @@ export function PipelineControl({ refreshKey }: Props) {
       return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next;
     });
   }, []);
+
+  const startOrchTail = useCallback(() => {
+    orchLogAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    orchLogAbortRef.current = ctrl;
+    streamOrchestratorLog({
+      signal: ctrl.signal,
+      onLine: appendLine,
+      onError: () => { /* stream ended or aborted — no noise */ },
+    }).catch(() => { /* aborted */ });
+  }, [appendLine]);
+
+  // Mount + tab re-entry: load orchestrator status and recent runs. No polling.
+  useEffect(() => {
+    let alive = true;
+    getOrchestratorStatus().then(s => {
+      if (!alive) return;
+      setOrch(s);
+      if (s.running) startOrchTail();
+    }).catch(() => { if (alive) setOrch({ running: false }); });
+    void refetchRuns();
+    return () => { alive = false; };
+  }, [refreshKey, refetchRuns, startOrchTail]);
+
+  // Close any open stream when the region unmounts (tab switch). No leak, zero
+  // network traffic while this tab is inactive.
+  useEffect(() => () => { abortRef.current?.abort(); orchLogAbortRef.current?.abort(); }, []);
+
+  // Auto-scroll to bottom on new output unless the user scrolled up.
+  useEffect(() => {
+    if (!scrollLock) return;
+    const el = termRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [lines, scrollLock]);
 
   const onTermScroll = useCallback(() => {
     const el = termRef.current;
@@ -226,6 +243,14 @@ export function PipelineControl({ refreshKey }: Props) {
     try {
       const next = await postOrchestratorToggle();
       setOrch(next);
+      if (next.running) {
+        appendLine('[orchestrator] started — tailing log');
+        startOrchTail();
+      } else {
+        orchLogAbortRef.current?.abort();
+        orchLogAbortRef.current = null;
+        appendLine('[orchestrator] stopped');
+      }
     } catch {
       // Re-read true state on failure rather than guess.
       try { setOrch(await getOrchestratorStatus()); } catch { /* leave as is */ }

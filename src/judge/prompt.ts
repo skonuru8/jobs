@@ -80,7 +80,7 @@ export function buildSystemPrompt(
     : "";
   const roleLabelsBlock = allowedRoleLabels && allowedRoleLabels.length > 0
     ? `ALLOWED target_role VALUES — copy ONE verbatim, character-for-character:\n${JSON.stringify(allowedRoleLabels)}\n(list is built at runtime from the canonical resume parser)\nAny other string, any combination, any paraphrase is invalid and will be discarded downstream.\nProject bullets live under their "Project: X" label, NOT under the employer label.`
-    : `target_role must EXACTLY match one of these block headers from the candidate's experience:\n"Hitachi Vantara" (employer-level; use only for cross-project or promotion claims),\n"Project: Nokia" (Nokia CPQ bullets), "Project: PHIA" (PHIA Group / PATS bullets),\n"Project: Nissan" (Nissan telemetry bullets), "AquilaEdge LLC", "Persistent Systems".\nNever invent a role name. Never emit composite forms like "Hitachi Vantara / Nokia" or\nbare project names like "Nokia" or "PHIA Group". Those strings do not exist as resume\nblocks and will be silently dropped. If targeting Nokia-specific bullets, target_role =\n"Project: Nokia". If targeting PHIA bullets, target_role = "Project: PHIA".\nIf targeting Nissan bullets, target_role = "Project: Nissan".`;
+    : `target_role must EXACTLY match one of the role block headers in CANDIDATE WORK HISTORY above.\nNever invent, abbreviate, or paraphrase a role name — use the exact string as it appears as a section header.\nNever emit composite forms such as "Employer / Project" or bare project names without their prefix.\nProject bullets live under their "Project: X" label, NOT under the employer label.`;
 
   return `You are a job application screener for a senior software engineer.
 
@@ -185,28 +185,47 @@ GUIDANCE FOR THE NEW FIELDS:
 - why_apply: NOT generic. Name a domain, project, team, or stated company value from the JD that intersects the candidate's history.
 - gap_directives: REQUIRED. Emit this array even when empty.
 - Never emit a gap_directive whose jd_requirement is empty, "none", "none extracted", or not a real term taken from the JD. If the JD requirement list is empty, emit an empty array.
-- tailoring_hints.emphasize_roles: REQUIRED and NON-EMPTY for STRONG and MAYBE verdicts. Pull 1–3 exact role strings from CANDIDATE WORK HISTORY whose canonical bullets already show the most overlap with the JD's core stack. These are the roles the patch generator will target for rewrites — pick the ones whose bullets can most credibly surface the JD's key requirements. Empty array is only acceptable for WEAK.
-- tailoring_hints.emphasize_skills: REQUIRED and NON-EMPTY for STRONG and MAYBE verdicts. Pull 3–6 skills from the candidate's profile (not invented) that the JD most prominently features. These drive which terms get foregrounded in bullet rewrites. Empty array is only acceptable for WEAK.
+- tailoring_hints.emphasize_roles: REQUIRED and NON-EMPTY for STRONG and MAYBE verdicts. Select AT MOST 2 exact role strings from CANDIDATE WORK HISTORY. These are the only roles the patch generator will rewrite — choose with precision.
+
+  DOMAIN-AWARE SELECTION — match by JD domain, NOT by role recency or density:
+  • Data engineering / streaming / ETL / analytics → role with data pipeline / stream processing / transformation bullets
+  • Healthcare / compliance / identity management / HIPAA → role with auth / compliance / regulated-domain bullets
+  • AI / ML / LLM / RAG / embeddings / vector search → role/project with ML or AI bullets; if none exist, emit ONE role max or an empty array — do NOT pad with the enterprise backend role just to have something
+  • Automotive / IoT / embedded / vehicle / telemetry → role with telemetry / real-time fleet / sensor-data bullets
+  • Cloud / infrastructure / DevOps / platform engineering → role with container orchestration / CI-CD / cloud provisioning bullets
+  • Enterprise Java / Spring / backend microservices → the role with the highest Spring Boot / REST API / JPA bullet density
+  • Full-stack / frontend / startup / product → the startup or solo-engineer role or the most frontend-dense role
+
+  If a JD requires skills that genuinely appear in NONE of the candidate's role bullets, emit fewer roles or an empty array — do NOT default to the most prominent role. An emphasis role with no relevant bullets produces zero-value keyword stuffing.
+
+  Empty array is only acceptable for WEAK verdicts. For STRONG/MAYBE where a relevant role exists, always emit it.
+
+- tailoring_hints.emphasize_skills: REQUIRED and NON-EMPTY for STRONG and MAYBE verdicts. Emit EXACTLY 3 to 5 skills — no more, no fewer (unless fewer than 3 genuinely apply). Rules:
+  (a) Choose only skills that appear prominently in the JD's required_skills list.
+  (b) Choose only skills that are NOT already a dominant, visible term in MOST bullets of the emphasized roles — if a skill is already present in every bullet, the generator cannot make it more prominent; do not include it.
+  (c) Do not include skills the candidate does not have at the emphasized roles (they cannot be surfaced by rewrites — route to gap_directives instead).
+  Emitting 10+ skills causes the generator to inject keywords into every bullet, producing cosmetic noise. 3-5 focused skills produce meaningful differentiation.
+
 - tailoring_hints.downplay_skills: pull from the candidate profile skills, NOT invent new ones.
 - tailoring_hints.tech_swaps: emit ONLY when a JD required_skill has risk_entry.relationship === "direct_equivalent" AND risk_entry.swap_allowed === true. from = risk_entry.candidate_source_skill, to = risk_entry.target_skill, confidence = risk_entry.confidence. Also emit target_role to scope the swap to one exact employer header when appropriate; set target_role: null when it genuinely applies everywhere. Empty array when no swaps apply.
 - Empty arrays/strings are fine when nothing applies. Do not invent.
 
-STRONG/MAYBE EXAMPLE — tailoring_hints with required fields populated:
-Job: AI startup (YC-backed) seeking founding engineer with React, TypeScript, Node.js, REST API design
-Candidate has AquilaEdge LLC (startup, customer-facing portal, REST APIs), Hitachi/Nokia (enterprise Spring Boot microservices)
-CORRECT tailoring_hints:
+STRONG/MAYBE EXAMPLE — correct vs wrong tailoring_hints:
+Job: YC-backed AI startup, founding engineer — React, TypeScript, Node.js, REST API design, LLM integration
+Candidate has: (a) startup solo-engineer role — customer portal, REST APIs, GCP deployment; (b) enterprise employer — Spring Boot microservices, 50-person team, Azure cloud
+CORRECT tailoring_hints (startup/frontend domain → pick startup role, 4 focused skills):
 {
-  "emphasize_roles": ["AquilaEdge LLC"],
-  "emphasize_skills": ["React", "TypeScript", "Node.js", "REST APIs", "Spring Boot"],
-  "downplay_skills": ["Camunda BPMN", "Guidewire"],
+  "emphasize_roles": ["Startup Role"],
+  "emphasize_skills": ["React", "TypeScript", "Node.js", "REST APIs"],
+  "downplay_skills": ["Camunda BPMN"],
   "domain_reframe_angle": "",
   "tech_swaps": [],
   "gap_directives": []
 }
-WRONG (empty emphasize_roles for STRONG verdict — DO NOT DO THIS):
+WRONG — avoid these patterns:
 {
-  "emphasize_roles": [],
-  "emphasize_skills": [],
+  "emphasize_roles": ["Enterprise Role", "Startup Role", "Third Role"],  ← max 2, never 3
+  "emphasize_skills": ["Java", "Spring Boot", "REST APIs", "Hibernate", "JPA", "Docker", "K8s", "CI/CD", "Angular", "TypeScript"],  ← max 5, not 10
   ...
 }
 

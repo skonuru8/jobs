@@ -95,6 +95,7 @@ def scrape(
     params: dict[str, str] = {"q": query}
     if posted_within:
         params["filters.postedDate"] = posted_within
+    params["sort"] = "date"  # newest-first; Dice defaults to relevance sort
     search_url = f"{DICE_SEARCH_URL}?{urlencode(params)}"
 
     scraped_at = now_iso()

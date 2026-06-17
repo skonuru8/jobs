@@ -493,6 +493,8 @@ body{
 .gen-btn{ font-family:var(--font-ui); font-weight:600; font-size:12.5px; cursor:pointer; border-radius:var(--r-pill); padding:8px 16px; border:none; background:var(--accent); color:var(--accent-ink); transition:.16s var(--ease); }
 .gen-btn:hover{ filter:brightness(1.04); box-shadow:0 6px 16px -8px color-mix(in srgb,var(--accent) 70%,transparent); }
 .gen-btn.busy{ opacity:.7; cursor:wait; }
+.gen-fill{ position:absolute; left:0; top:0; height:100%; background:rgba(255,255,255,.18); pointer-events:none; border-radius:var(--r-pill); transition:width .9s linear; }
+.gen-pair{ display:flex; gap:8px; flex-wrap:wrap; }
 
 /* ─── CARD DIRECTION VARIANTS ───────────────────────────────────── */
 /* default = minimal (number score, medium). nothing extra needed */

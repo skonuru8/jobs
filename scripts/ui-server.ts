@@ -110,6 +110,7 @@ function resolveJobDescriptionPath(job: {
 // ---------------------------------------------------------------------------
 
 const ORCH_PIDFILE = path.join(REPO_ROOT, 'output', '.orchestrator.pid');
+const ORCH_LOG    = path.join(REPO_ROOT, 'output', 'logs', 'orchestrator.log');
 let orchestratorChild: ChildProcess | null = null;
 let orchestratorStartedAt: string | null = null;
 let pipelineRunning = false;
@@ -492,8 +493,12 @@ async function main() {
         return;
       }
       const jobId = req.params.job_id;
-      const force = (req.body as { force?: boolean } | undefined)?.force;
-      const out = await manualGenerateArtifacts(REPO_ROOT, jobId, { force });
+      const body = (req.body ?? {}) as { force?: boolean; type?: 'resume' | 'cover' | 'both' };
+      const force = body.force;
+      const artifactType = (['resume', 'cover', 'both'] as const).includes(body.type as 'resume' | 'cover' | 'both')
+        ? body.type as 'resume' | 'cover' | 'both'
+        : 'both';
+      const out = await manualGenerateArtifacts(REPO_ROOT, jobId, { force, artifactType });
       if (!out.ok) {
         if (out.conflict) {
           res.status(409).json({
@@ -745,7 +750,12 @@ async function main() {
       }
       const tailored = fs.readFileSync(texAbs, 'utf-8');
 
+      // Prefer the canonical frozen at generation time (written alongside the tailored TeX).
+      // Fall back to the live config file only when the frozen copy is absent (older runs).
+      const jobDir = path.dirname(texAbs);
+      const frozenCanonical = path.join(jobDir, 'canonical.tex');
       const canonicalPaths = [
+        frozenCanonical,
         path.join(REPO_ROOT, 'config', 'resume_master.tex'),
         path.join(REPO_ROOT, 'config', 'resume.tex'),
         path.join(REPO_ROOT, 'config', 'resume-master.tex'),
@@ -821,6 +831,55 @@ async function main() {
     });
 
     res.json({ running: true, pid: child.pid, startedAt });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/orchestrator/log  (text/event-stream)
+  // -------------------------------------------------------------------------
+  // Tails output/logs/orchestrator.log as an indefinite SSE stream. Sends all
+  // existing content on connect, then polls every second for new bytes.
+  // Stream ends when the client disconnects (abortController on the frontend).
+  app.get('/api/orchestrator/log', (_req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders?.();
+
+    const sendLine = (line: string) => {
+      res.write(`data: ${JSON.stringify(stripAnsi(line))}\n\n`);
+    };
+
+    let offset = 0;
+    // Replay existing log content on connect
+    if (fs.existsSync(ORCH_LOG)) {
+      const content = fs.readFileSync(ORCH_LOG, 'utf8');
+      offset = Buffer.byteLength(content, 'utf8');
+      for (const line of content.split('\n')) {
+        if (line.trim()) sendLine(line);
+      }
+    }
+
+    // Poll for appended bytes every second
+    const interval = setInterval(() => {
+      try {
+        if (!fs.existsSync(ORCH_LOG)) return;
+        const stat = fs.statSync(ORCH_LOG);
+        if (stat.size <= offset) return;
+        const fd = fs.openSync(ORCH_LOG, 'r');
+        const buf = Buffer.alloc(stat.size - offset);
+        fs.readSync(fd, buf, 0, buf.length, offset);
+        fs.closeSync(fd);
+        offset = stat.size;
+        for (const line of buf.toString('utf8').split('\n')) {
+          if (line.trim()) sendLine(line);
+        }
+      } catch { /* file may rotate or be temporarily unavailable */ }
+    }, 1000);
+
+    res.on('close', () => clearInterval(interval));
   });
 
   // -------------------------------------------------------------------------

@@ -202,10 +202,12 @@ async function main(): Promise<void> {
     model: (config.llm.resume_generator?.model ?? config.llm.cover_letter.model) as string,
     fallback_model: config.llm.resume_generator?.fallback_model as string | undefined,
     max_tokens:  (config.llm.resume_generator?.max_tokens ?? 8000) as number,
+    patch_max_tokens: config.llm.resume_generator?.patch_max_tokens as number | undefined,
     temperature: (config.llm.resume_generator?.temperature ?? 0.3) as number,
     throttle_ms: (config.llm.resume_generator?.throttle_ms ?? 1000) as number,
     compile_pdf: (config.llm.resume_generator?.compile_pdf ?? true) as boolean,
     review_queue_threshold: (config.llm.resume_generator?.review_queue_threshold ?? 0.70) as number,
+    patch_ops_warn_threshold: config.llm.resume_generator?.patch_ops_warn_threshold as number | undefined,
     retries:     (config.llm.resume_generator?.retries ?? 1) as number,
     word_count_min: config.llm.resume_generator?.word_count_min as number | undefined,
     word_count_max: config.llm.resume_generator?.word_count_max as number | undefined,
@@ -1014,6 +1016,8 @@ async function processJobs(
         log(`[${n}]  Generating resume + cover letter → ${jobSlug}...`);
 
         writeJobDescription(bundle, jobFolderAbs);
+        fs.mkdirSync(jobFolderAbs, { recursive: true });
+        fs.writeFileSync(path.join(jobFolderAbs, "canonical.tex"), bundle.canonical_resume_tex, "utf8");
 
         let cachedResumeOutcome = doResumeArtifact
           ? await findCachedResumeOutcome(repoRoot, bundle, resumeGeneratorConfigArg)

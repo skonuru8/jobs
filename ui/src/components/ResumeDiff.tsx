@@ -137,14 +137,18 @@ export function ResumeDiff({ jobId }: { jobId: string }) {
   if (error)   return <div className="dp-error">{error}</div>;
   if (!changes) return null;
 
-  if (changes.length === 0) {
+  const visibleChanges = changes.filter(
+    c => c.type !== 'replaced' || cleanLatex(c.oldText!) !== cleanLatex(c.newText!),
+  );
+
+  if (visibleChanges.length === 0) {
     return <div className="sdiff-empty">No bullet changes from canonical resume</div>;
   }
 
-  const nReplaced = changes.filter(c => c.type === 'replaced').length;
-  const nAdded    = changes.filter(c => c.type === 'added').length;
-  const nRemoved  = changes.filter(c => c.type === 'removed').length;
-  const sections  = [...new Set(changes.map(c => c.section))];
+  const nReplaced = visibleChanges.filter(c => c.type === 'replaced').length;
+  const nAdded    = visibleChanges.filter(c => c.type === 'added').length;
+  const nRemoved  = visibleChanges.filter(c => c.type === 'removed').length;
+  const sections  = [...new Set(visibleChanges.map(c => c.section))];
 
   return (
     <>
@@ -158,7 +162,7 @@ export function ResumeDiff({ jobId }: { jobId: string }) {
         {sections.map(section => (
           <div key={section} className="sdiff-section">
             <div className="sdiff-section-head">{section}</div>
-            {changes.filter(c => c.section === section).map((c, i) => (
+            {visibleChanges.filter(c => c.section === section).map((c, i) => (
               <div key={i} className="sdiff-row">
                 <Badge type={c.type} />
                 {c.type === 'replaced' && (
