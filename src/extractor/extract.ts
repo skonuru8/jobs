@@ -128,7 +128,7 @@ async function _attempt(
 // Validation retries happen at the extract() level; this is strictly network resilience.
 async function _callWithRetry(userPrompt: string, config: ExtractorConfig): Promise<{ content: string; input_tokens?: number; output_tokens?: number }> {
   const messages = [
-    { role: "system" as const, content: SYSTEM_PROMPT },
+    { role: "system" as const, content: [{ type: "text" as const, text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" as const } }] },
     { role: "user" as const,   content: userPrompt },
   ];
   const call = () => complete({

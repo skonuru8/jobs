@@ -346,7 +346,9 @@ This is the low-level reference for **every file** in the system. For each file:
 **Exports / public interface:**
 
 - `complete(opts: CompletionOptions): Promise<CompletionResult>`
-- types: `ChatMessage`, `ReasoningConfig`, `CompletionOptions`, `CompletionResult`
+- types: `ContentBlock`, `ChatMessage`, `ReasoningConfig`, `CompletionOptions`, `CompletionResult`
+
+**`ContentBlock`:** `{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }`. `ChatMessage.content` now accepts `string | ContentBlock[]`, enabling Anthropic-style prompt caching of the (static) system prompt. `extract.ts` sends the extractor system prompt as a cached content block.
 
 **Side effects:** network calls to OpenRouter; requires `OPENROUTER_API_KEY`.
 
@@ -374,6 +376,8 @@ This is the low-level reference for **every file** in the system. For each file:
 
 **Exports / public interface:** `ExtractedFieldsSchema`, `validateExtraction(raw)`, `ValidatedFields`.
 
+**JSON truncation recovery:** when `JSON.parse` throws and `isTruncationError(e)` is true (`@/shared/json-repair`), `validateExtraction` retries the parse on `repairTruncatedJson(cleaned)` before returning a validation failure. Handles long-JD truncation now that `max_tokens` is 6000.
+
 ---
 
 ## src/extractor/types.ts
@@ -393,6 +397,22 @@ This is the low-level reference for **every file** in the system. For each file:
 - `extract(descriptionRaw: string, config: ExtractorConfig): Promise<ExtractionResult>`
 - `verifyCitations(fields: ValidatedFields, descriptionRaw: string): { fields: ExtractedFields; citationFailures: number }`
 - type: `ExtractorConfig`
+
+---
+
+## src/shared/json-repair.ts
+
+**Purpose:** Lightweight JSON truncation recovery for LLM responses cut off at the token cap. Used by both `src/extractor/validate.ts` and `src/judge/validate.ts`.
+
+**Exports / public interface:**
+
+- `isTruncationError(err: unknown): boolean`
+  - **What it does:** Returns true only for `SyntaxError`s whose message matches known truncation patterns across Node v18+ (`"unterminated string"`, `"unexpected end"`, `"end of json"`, `"expected double-quoted property name"`, `"expected ',' or ']'"`, `"expected ':' after property name"`, `"unexpected token"`, etc.). Avoids attempting repair on genuinely malformed (non-truncated) JSON.
+- `repairTruncatedJson(raw: string): string`
+  - **What it does:** Single-pass scan tracking string/escape state and a bracket stack. Then: closes an unterminated string (stripping a dangling odd backslash and a partial `\uXXXX` escape first); iteratively strips trailing whitespace, partial literals (`tru`, `fals`, `nul`), partial numbers, dangling `"key":` fragments, and trailing `,`/`:`; finally appends the closing brackets/braces from the stack in reverse.
+  - **Side effects:** none (pure).
+
+**Tests:** `test/shared/json-repair.test.ts` (26 cases).
 
 ---
 
@@ -474,6 +494,8 @@ This is the low-level reference for **every file** in the system. For each file:
 
 **v15 changes:** `validateJudge` takes optional `allowedLabels`; after Zod parse, gates `gap_directives` and `tailoring_hints.tech_swaps` by exact normalized role label. Unknown roles are downgraded (handling→`"acknowledge"`, `target_role`→`null`) with concern flags `directive_role_unresolved:<label>` / `swap_role_unresolved:<label>`.
 
+**JSON truncation recovery:** on a truncation `SyntaxError` (`isTruncationError`), retries parsing through `repairTruncatedJson(cleaned)` (`@/shared/json-repair`) before failing. Judge `max_tokens` is 7500.
+
 ---
 
 ## src/judge/client.ts
@@ -491,6 +513,8 @@ This is the low-level reference for **every file** in the system. For each file:
 **Exports / public interface:** `judge(input, config)`, `getBucket(judgeResult, totalScore)`.
 
 **v15 changes:** `defaultProfileForJudge()` removed. `allowed_role_labels` from `JudgeInput` is passed to `buildSystemPrompt` and `validateJudge`.
+
+**Prompt caching:** the judge system prompt is sent as a content block with `cache_control: { type: "ephemeral" }`.
 
 ---
 
@@ -941,7 +965,8 @@ Exit codes: 0 success, 1 adapter error, 2 cookie file missing.
 
 - `extractKeyTerms(tex: string): string[]` — extracts named tech terms (capitalized multi-word runs, first word filtered against ACTION_VERBS), context noun phrases (after "for/across/of/within" with qualifying noun type), and metrics with explicit units or `\d{2,}+` magnitudes.
 - `evalEmphasisOp(original, rewritten, role, item, emphSkills)` — compares key terms before/after; scores `specificity_preserved`, `tech_forward_gain` (% of EMPHASIS_SKILLS newly bolded), `info_loss` (any key term dropped), `net_quality`.
-- `rollUpResumeQuality()` — fail on `resume_gen_failed` or any `info_loss`; warning on lint flags or `resume_attribution_overrun`; ok otherwise.
+- `rollUpResumeQuality()` — fail on `resume_gen_failed` or any `info_loss`; warning on lint flags, `resume_attribution_overrun`, `resume_patch_no_ops`, or `resume_missing_jd_keywords`; ok otherwise.
+- **`missing_jd_keywords` check** — `runEvals` scans the final resume tex for the JD's required skills and pushes `resume_missing_jd_keywords` (recorded in `ResumeEval.missing_jd_keywords[]`) when ≥3 required skills are absent.
 - `rollUpCoverQuality()` — fail on `cover_letter_gen_failed` or any banned phrase; warning if word count < 350.
 
 ---
@@ -987,6 +1012,20 @@ npx tsx scripts/eval/backfill-evals.ts [batch-dir]
 ```
 
 **Key behavior:** Loads `config/resume_master.tex` as the canonical TeX source. For each `meta.json` found recursively: reads `resume.patch_ops`, `judge.tailoring_hints`, `judge.gap_directives`, `cover_letter.*` fields; calls `runEvals()`; overwrites the `evals` key. Skips if any field is missing with a warning. Then runs `writeBatchReport()` to produce `evals-summary.json`.
+
+---
+
+## src/resume-generator/patch/generator.ts
+
+**Purpose:** Builds the patch-mode system prompt and calls the LLM to produce patch ops. Supports two patch prompts: `PATCH_MODE_PROMPT` (`patch_tailoring`) and `PATCH_TOTAL_MODE_PROMPT` (`patch_total`).
+
+**Exports / public interface:**
+
+- `PATCH_MODE_PROMPT` / `PATCH_PROMPT_SHA` — slim patch prompt + its SHA.
+- `PATCH_TOTAL_MODE_PROMPT` / `PATCH_TOTAL_PROMPT_SHA` — `patch_total` prompt + its SHA. Fabricate-first prompt: priority ladder (FABRICATE > REFRAME > EMPHASIS), the "great bullet" formula ([verb]+[what]+[mechanism]+[result]), three worked examples (fabricate A, fabricate B, reframe WRONG/RIGHT, emphasis), a self-verification checklist, and a banned-phrase section.
+- `generatePatchOps(input, config): Promise<...>` — selects the prompt by mode (`isPatchTotal`), sends the system prompt as a cached content block (`cache_control: { type: "ephemeral" }`), and parses ops.
+- `activeGapDirectives(directives)` — directives whose `handling` is not `"acknowledge"`.
+- `emphasisRoles(input, config)` — resolves which roles receive emphasis (capped by `patch_total_max_emphasize_roles`).
 
 ---
 

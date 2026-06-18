@@ -42,6 +42,8 @@ export interface CoverArtifactOutcome {
   tex_path:   string | null;
   /** Absolute path to compiled `.pdf` artifact, or null when compile skipped or failed. */
   pdf_path:   string | null;
+  /** Plain cover letter body text after generation and before LaTeX escaping. */
+  text:       string | null;
   /** Absolute path where cover-letter metadata should be persisted by caller. */
   meta_path:  string | null;
   /** Metadata payload describing prompt provenance, status, and artifact paths. */
@@ -113,6 +115,7 @@ export async function generateAndSaveCoverLetter(
     return {
       tex_path: null,
       pdf_path: null,
+      text: null,
       meta_path: null,
       meta: buildMeta({
         bundle, ctx, clResult, flags, compileStatus: "failed",
@@ -139,6 +142,7 @@ export async function generateAndSaveCoverLetter(
     return {
       tex_path: null,
       pdf_path: null,
+      text: null,
       meta_path: null,
       meta: buildMeta({
         bundle, ctx, clResult, flags, compileStatus: "failed",
@@ -236,6 +240,7 @@ export async function generateAndSaveCoverLetter(
   return {
     tex_path:   texAbs,
     pdf_path:   pdfAbs,
+    text:       clResult.text,
     meta_path:  path.join(jobFolderAbs, "meta.json"),
     meta,
     flags,

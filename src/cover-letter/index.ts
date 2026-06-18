@@ -6,7 +6,7 @@ export {
 } from "./saver";
 export {
   buildCoverLetterPrompt,
-  appendStructuredJsonSections,
+  appendJudgeSection,
   COVER_LETTER_SYSTEM,
   COVER_PROMPT_SHA,
   SYSTEM_PROMPT,

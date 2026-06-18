@@ -17,7 +17,7 @@ import type { ResumeGenConfig, ResumeGenInput, ResumeGenResult } from "../types"
 import { applyPatchOps } from "./apply";
 import { verifyPatchCoverage } from "./coverage";
 import { runDiffLint } from "./diff-lint";
-import { activeGapDirectives, generatePatchOps, PATCH_PROMPT_SHA } from "./generator";
+import { activeGapDirectives, generatePatchOps, PATCH_PROMPT_SHA, PATCH_TOTAL_PROMPT_SHA } from "./generator";
 import type { GapDirective } from "@/judge/types";
 import { extractRoleBlocks, findRoleBlock } from "./parser";
 import type { RoleBlock } from "./types";
@@ -38,6 +38,7 @@ export async function generatePatchedResumeTex(
   config: ResumeGenConfig,
 ): Promise<ResumeGenResult> {
   const generated_at = new Date().toISOString();
+  const patchSha = config.mode === "patch_total" ? PATCH_TOTAL_PROMPT_SHA : PATCH_PROMPT_SHA;
   const roleBlocks = extractRoleBlocks(input.canonical_resume_tex);
   const directives = activeGapDirectives(input.gap_directives ?? input.judge_json.gap_directives ?? []);
   // Extract emphSkills once for use in post-generation validation (validateBoldTermSources).
@@ -100,6 +101,7 @@ export async function generatePatchedResumeTex(
         ),
       ),
       directives,
+      config,
     );
     totalInput += generated.tokens.input;
     totalOutput += generated.tokens.output;
@@ -107,9 +109,13 @@ export async function generatePatchedResumeTex(
     totalDroppedUnknownRole += generated.ops_dropped_unknown_role;
 
     const tex = applyPatchOps(input.canonical_resume_tex, allOps);
-    const coverage = verifyPatchCoverage(tex, directives);
+    const coverage = verifyPatchCoverage(tex, directives, allOps);
     const allDirectives = input.gap_directives ?? input.judge_json.gap_directives ?? [];
     const lintResult = runDiffLint(tex, allOps, allDirectives, config.word_count_min, config.word_count_max);
+
+    const acknowledgedGaps = allDirectives
+      .filter(d => d.handling === "acknowledge")
+      .map(d => d.jd_requirement);
 
     if (coverage.missed.length === 0 || attempt === 1) {
       if (allOps.length === 0 && coverage.missed.length > 0) {
@@ -117,7 +123,7 @@ export async function generatePatchedResumeTex(
           status: "error",
           tex: null,
           model,
-          prompt_sha: PATCH_PROMPT_SHA,
+          prompt_sha: patchSha,
           word_count: 0,
           tokens: { input: totalInput, output: totalOutput },
           generated_at,
@@ -125,8 +131,11 @@ export async function generatePatchedResumeTex(
         };
       }
 
+      const hadActiveWork = directives.length > 0 || (input.judge_json.tailoring_hints?.emphasize_roles ?? []).length > 0;
+
       const warnings: string[] = [];
       if (coverage.missed.length > 0) warnings.push("resume_patch_coverage_failed");
+      if (allOps.length === 0 && hadActiveWork) warnings.push("resume_patch_no_ops");
       if (findBannedStylePhrases(tex).length > 0) warnings.push("banned_phrase_in_output");
       if (!latexStructureOk(tex)) warnings.push("tex_malformed");
       for (const flag of lintResult.flags) warnings.push(flag);
@@ -147,8 +156,9 @@ export async function generatePatchedResumeTex(
           coverage,
           retry_count: retryCount,
           failed_directives: coverage.missed,
-          prompt_sha: PATCH_PROMPT_SHA,
+          prompt_sha: patchSha,
           ops_dropped_unknown_role: totalDroppedUnknownRole,
+          acknowledged_gaps: acknowledgedGaps.length > 0 ? acknowledgedGaps : undefined,
         },
       } as ResumeGenResult;
     }
@@ -471,7 +481,16 @@ function stripBannedPhraseOps(ops: import("./types").PatchOp[]): import("./types
 function enforceOpCaps(
   ops: import("./types").PatchOp[],
   directives: GapDirective[],
+  config: ResumeGenConfig,
 ): import("./types").PatchOp[] {
+  const isPatchTotal = config.mode === "patch_total";
+  const MAX_TOTAL = isPatchTotal
+    ? (config.patch_total_max_ops ?? 16)
+    : 8;
+  const MAX_EMPH_PER_ROLE = isPatchTotal
+    ? (config.patch_total_max_emph_per_role ?? 3)
+    : 2;
+
   const directiveRoles = new Set(
     directives
       .filter(d => d.handling === "fabricate" || d.handling === "reframe")
@@ -483,7 +502,6 @@ function enforceOpCaps(
     directiveRoles.size > 0 &&
     [...directiveRoles].some(r => r.toLowerCase().trim() === op.role.toLowerCase().trim());
 
-  const MAX_TOTAL = 8;
   const allDirectiveOps = ops.filter(isDirectiveOp);
   const emphasisOps = ops.filter(op => !isDirectiveOp(op));
 
@@ -493,7 +511,6 @@ function enforceOpCaps(
     console.warn(`[patch] enforceOpCaps: ${allDirectiveOps.length} directive ops exceed total cap ${MAX_TOTAL} — dropping ${allDirectiveOps.length - MAX_TOTAL} later directive op(s)`);
   }
 
-  const MAX_EMPH_PER_ROLE = 2;
   const emphSlots = Math.max(0, MAX_TOTAL - directiveOps.length);
 
   const roleEmphCount = new Map<string, number>();

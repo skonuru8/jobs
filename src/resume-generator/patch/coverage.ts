@@ -14,7 +14,7 @@
 import type { GapDirective } from "@/judge/types";
 
 import { extractRoleBlocks, findRoleBlock } from "./parser";
-import type { PatchCoverage } from "./types";
+import type { PatchCoverage, PatchOp } from "./types";
 
 /** Short but meaningful tech abbreviations that must survive the length filter. */
 const TECH_SHORT_TERMS = new Set([
@@ -34,17 +34,23 @@ const STOPWORDS = new Set([
 ]);
 
 /**
- * Audits whether patch output appears to cover active fabricate/reframe directives.
+ * Audits whether applied patch ops actually cover active fabricate/reframe directives.
  *
- * Coverage passes when at least one extracted keyword from directive requirement
- * or framing hint appears inside target role block. Missing target roles or zero
- * keyword overlap are both treated as misses for retry purposes.
+ * Coverage is checked against the ops that were applied, not pre-existing canonical
+ * text. This prevents false positives where `frame_as` keywords already present in
+ * canonical bullets cause untouched resumes to appear covered.
  *
- * @param tex - Patched resume LaTeX to inspect.
+ * - fabricate: requires a keyword from `jd_requirement` to appear in at least one
+ *   op (new_item / item) that targeted the directive's role.
+ * - reframe: requires at least one op of any type to target the directive's role
+ *   (the JD term is intentionally absent from reframe bullets by design).
+ *
+ * @param tex - Patched resume LaTeX (used only to verify target role exists).
  * @param directives - Raw gap directives from judge output.
+ * @param ops - Patch ops that were actually applied.
  * @returns Coverage counts plus list of still-missed `jd_requirement` strings.
  */
-export function verifyPatchCoverage(tex: string, directives: GapDirective[]): PatchCoverage {
+export function verifyPatchCoverage(tex: string, directives: GapDirective[], ops: PatchOp[]): PatchCoverage {
   const active = directives.filter(d =>
     (d.handling === "fabricate" || d.handling === "reframe") && d.target_role,
   );
@@ -52,14 +58,34 @@ export function verifyPatchCoverage(tex: string, directives: GapDirective[]): Pa
   const missed: string[] = [];
 
   for (const d of active) {
-    const block = findRoleBlock(blocks, d.target_role ?? "");
+    const targetRole = d.target_role ?? "";
+    const block = findRoleBlock(blocks, targetRole);
     if (!block) {
       missed.push(d.jd_requirement);
       continue;
     }
-    const roleText = tex.slice(block.startOffset, block.endOffset).toLowerCase();
-    const terms = keywords(`${d.jd_requirement} ${d.frame_as ?? ""}`);
-    if (terms.length === 0 || !terms.some(t => roleText.includes(t))) {
+
+    const opsForRole = ops.filter(op => normalizeRole(op.role) === normalizeRole(targetRole));
+
+    if (opsForRole.length === 0) {
+      missed.push(d.jd_requirement);
+      continue;
+    }
+
+    if (d.handling === "reframe") {
+      // Reframe: any op on the role counts — JD term is intentionally absent.
+      continue;
+    }
+
+    // fabricate: at least one op must contain a keyword from jd_requirement only.
+    const reqTerms = keywords(d.jd_requirement);
+    const opTexts = opsForRole.map(op => {
+      if (op.type === "rewrite") return op.new_item?.toLowerCase() ?? "";
+      if (op.type === "insert_after" || op.type === "insert_first") return op.item?.toLowerCase() ?? "";
+      return "";
+    });
+    const covered = reqTerms.length > 0 && reqTerms.some(t => opTexts.some(txt => txt.includes(t)));
+    if (!covered) {
       missed.push(d.jd_requirement);
     }
   }
@@ -69,6 +95,10 @@ export function verifyPatchCoverage(tex: string, directives: GapDirective[]): Pa
     total: active.length,
     missed,
   };
+}
+
+function normalizeRole(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 /**

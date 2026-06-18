@@ -139,23 +139,21 @@ export const COVER_PROMPT_SHA = crypto
 /** @deprecated use COVER_LETTER_SYSTEM */
 export const SYSTEM_PROMPT = COVER_LETTER_SYSTEM;
 
-export function appendStructuredJsonSections(
+export function appendJudgeSection(
   narrativePrompt: string,
-  jd: Record<string, unknown>,
   judge: Record<string, unknown>,
-  profile: unknown,
 ): string {
+  const trimmedJudge = {
+    verdict:         judge["verdict"],
+    why_apply:       judge["why_apply"],
+    tailoring_hints: judge["tailoring_hints"],
+    gap_directives:  judge["gap_directives"],
+  };
   return [
     narrativePrompt,
     "",
-    "--- JD_JSON ---",
-    JSON.stringify(jd, null, 2),
-    "",
     "--- JUDGE_JSON ---",
-    JSON.stringify(judge, null, 2),
-    "",
-    "--- PROFILE_JSON ---",
-    JSON.stringify(profile, null, 2),
+    JSON.stringify(trimmedJudge, null, 2),
   ].join("\n");
 }
 

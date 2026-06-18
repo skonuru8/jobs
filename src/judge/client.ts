@@ -11,9 +11,15 @@
 
 import { JUDGE_JSON_SCHEMA } from "./schema";
 
+export interface ContentBlock {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral" };
+}
+
 export interface ChatMessage {
   role:    "system" | "user" | "assistant";
-  content: string;
+  content: string | ContentBlock[];
 }
 
 export interface ReasoningConfig {
@@ -66,6 +72,7 @@ export async function complete(opts: CompletionOptions): Promise<CompletionResul
     headers: {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type":  "application/json",
+      "anthropic-beta": "prompt-caching-2024-07-31",
       "HTTP-Referer":  "https://github.com/job-hunter",
       "X-Title":       "job-hunter-judge",
     },

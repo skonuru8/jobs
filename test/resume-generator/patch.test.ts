@@ -60,10 +60,13 @@ describe("resume patch mode helpers", () => {
       { type: "insert_first", role: "ExampleCo", item: "\\item Delivered Kafka event handling for billing workflows." },
     ]);
 
+    const ops: import("../../src/resume-generator/patch/types").PatchOp[] = [
+      { type: "insert_first", role: "ExampleCo", item: "\\item Delivered Kafka event handling for billing workflows." },
+    ];
     const coverage = verifyPatchCoverage(tex, [
       { handling: "fabricate", jd_requirement: "Kafka event handling", target_role: "ExampleCo", frame_as: "Kafka billing events" },
       { handling: "fabricate", jd_requirement: "Kubernetes deployment", target_role: "OtherCo", frame_as: "Kubernetes deployments" },
-    ]);
+    ], ops);
 
     expect(coverage.covered).toBe(1);
     expect(coverage.missed).toEqual(["Kubernetes deployment"]);
@@ -220,10 +223,13 @@ describe("resume patch mode helpers", () => {
       { type: "insert_first", role: "ExampleCo", item: "\\item Added Kafka event handling for billing workflows." },
     ]);
 
+    const ops2: import("../../src/resume-generator/patch/types").PatchOp[] = [
+      { type: "insert_first", role: "ExampleCo", item: "\\item Added Kafka event handling for billing workflows." },
+    ];
     const coverage = verifyPatchCoverage(tex, [
       { handling: "fabricate", jd_requirement: "Kafka", target_role: "ExampleCo", frame_as: "Kafka billing" },
       { handling: "fabricate", jd_requirement: "Kubernetes", target_role: "OtherCo", frame_as: "Kubernetes orchestration" },
-    ]);
+    ], ops2);
 
     expect(coverage.covered).toBe(1);
     expect(coverage.missed).toContain("Kubernetes");

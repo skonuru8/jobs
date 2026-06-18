@@ -92,7 +92,7 @@ export async function generateAndSaveResume(
 
   const combinedMetaRel = path.relative(repoRoot, path.join(jobFolderAbs, "meta.json"));
 
-  let gen = signature.resume_mode === "patch_tailoring"
+  let gen = (signature.resume_mode === "patch_tailoring" || signature.resume_mode === "patch_total")
     ? await generatePatchedResumeTex(input, config)
     : await generateResumeTex(input, config);
   if (gen.status !== "ok" || !gen.tex) {
@@ -105,6 +105,9 @@ export async function generateAndSaveResume(
   }
   if (gen.warnings?.includes("resume_patch_coverage_failed")) {
     flags.push("resume_patch_coverage_failed");
+  }
+  if (gen.warnings?.includes("resume_patch_no_ops")) {
+    flags.push("resume_patch_no_ops");
   }
 
   const strippedTex = stripDashes(gen.tex);
@@ -182,6 +185,7 @@ export async function generateAndSaveResume(
     patch_retry_count: gen.patch?.retry_count ?? 0,
     patch_failed_directives: gen.patch?.failed_directives ?? [],
     patch_ops_dropped_unknown_role: gen.patch?.ops_dropped_unknown_role ?? 0,
+    patch_acknowledged_gaps: gen.patch?.acknowledged_gaps ?? [],
     input_tokens:    gen.tokens.input,
     output_tokens:   gen.tokens.output,
     word_count:      wc,

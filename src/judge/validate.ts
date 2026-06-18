@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod";
+import { isTruncationError, repairTruncatedJson } from "@/shared/json-repair";
 
 const judgeGap = z.object({
   requirement:   z.string().min(1),
@@ -67,8 +68,16 @@ export function validateJudge(
   let parsed: unknown;
   try {
     parsed = JSON.parse(cleaned);
-  } catch (e) {
-    return { ok: false, error: `JSON parse failed: ${e}` };
+  } catch (e: any) {
+    if (isTruncationError(e)) {
+      try {
+        parsed = JSON.parse(repairTruncatedJson(cleaned));
+      } catch {
+        return { ok: false, error: `JSON parse failed: ${e}` };
+      }
+    } else {
+      return { ok: false, error: `JSON parse failed: ${e}` };
+    }
   }
 
   const result = JudgeFieldsSchema.safeParse(parsed);

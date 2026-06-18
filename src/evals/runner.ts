@@ -54,6 +54,10 @@ export interface EvalInput {
   coverWordCount?: number;
   /** Cover letter prompt SHA. */
   coverPromptSha?: string | null;
+  /** JD required skill names (importance=required) — checked against final resume tex. */
+  jdRequiredSkills?: string[];
+  /** Final patched resume tex (post-application) — used for JD keyword coverage check. */
+  finalTex?: string;
 }
 
 export function runEvals(input: EvalInput): EvalResult {
@@ -106,11 +110,37 @@ export function runEvals(input: EvalInput): EvalResult {
     }
   }
 
+  const resumeFlags = [...(input.resumeFlags ?? [])];
+
+  // Emit no_patch_applied when directives or emphasis roles existed but no ops were applied.
+  const hadActiveWork = gapDirectives.some(d => d.handling === "fabricate" || d.handling === "reframe")
+    || (input.judgeJson.tailoring_hints?.emphasize_roles?.length ?? 0) > 0;
+  if (hadActiveWork && ops.length === 0 && !resumeFlags.includes("resume_patch_no_ops")) {
+    resumeFlags.push("resume_patch_no_ops");
+  }
+
+  // JD keyword coverage check: which required skills are absent from final resume tex?
+  const missingJdKeywords: string[] = [];
+  const texToSearch = input.finalTex ?? input.canonicalTex;
+  if (input.jdRequiredSkills && input.jdRequiredSkills.length > 0) {
+    const texNorm = texToSearch.toLowerCase();
+    for (const skill of input.jdRequiredSkills) {
+      const skillNorm = skill.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      if (skillNorm.length > 2 && !texNorm.includes(skillNorm)) {
+        missingJdKeywords.push(skill);
+      }
+    }
+    if (missingJdKeywords.length >= 3) {
+      resumeFlags.push("resume_missing_jd_keywords");
+    }
+  }
+
   const resumeEval: ResumeEval = {
     emphasis_ops: emphasisEvals,
     directive_ops: directiveEvals,
-    flags: input.resumeFlags ?? [],
-    overall_quality: rollUpResumeQuality(emphasisEvals, directiveEvals, input.resumeFlags ?? []),
+    flags: resumeFlags,
+    overall_quality: rollUpResumeQuality(emphasisEvals, directiveEvals, resumeFlags),
+    missing_jd_keywords: missingJdKeywords.length > 0 ? missingJdKeywords : undefined,
   };
 
   let coverLetterEval: CoverLetterEval | null = null;
@@ -337,6 +367,7 @@ function rollUpResumeQuality(
   if (emphasisEvals.some(e => e.scores.net_quality === "degraded")) return "warning";
   if (directiveEvals.some(d => d.scores.metric_overclaim)) return "warning";
   if (flags.includes("resume_attribution_overrun")) return "warning";
+  if (flags.includes("resume_patch_no_ops") || flags.includes("resume_missing_jd_keywords")) return "warning";
   return "ok";
 }
 

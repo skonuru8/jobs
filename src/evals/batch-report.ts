@@ -30,12 +30,26 @@ export function writeBatchReport(batchDir: string, repoRoot: string): string {
   const metaFiles = findMetaFiles(batchDir);
   const rows: BatchJobRow[] = [];
   const degradedByPatchSha: Record<string, number> = {};
+  let missingEvals = 0;
 
   for (const metaFile of metaFiles) {
     try {
       const meta = JSON.parse(fs.readFileSync(metaFile, "utf8"));
       const evals: EvalResult | undefined = meta.evals;
-      if (!evals) continue;
+      if (!evals) {
+        missingEvals++;
+        rows.push({
+          job_id: meta.job_id ?? "unknown",
+          company: meta.job_meta?.company ?? "",
+          title: meta.job_meta?.title ?? "",
+          resume_quality: "skipped",
+          cover_quality: "skipped",
+          degraded_emphasis_ops: 0,
+          dropped_phrases: [],
+          flags: ["evals_missing"],
+        });
+        continue;
+      }
 
       const degradedEmphOps = (evals.resume?.emphasis_ops ?? []).filter(
         e => e.scores.net_quality === "degraded",
@@ -70,12 +84,13 @@ export function writeBatchReport(batchDir: string, repoRoot: string): string {
     (r.resume_quality === "warning" || r.cover_quality === "warning") &&
     r.resume_quality !== "fail" && r.cover_quality !== "fail",
   ).length;
-  const pass = total - fail - warn;
+  const pass = total - fail - warn - missingEvals;
 
   const summary: BatchSummary = {
     batch_id: batchId,
     run_at: new Date().toISOString(),
     total,
+    missing_evals: missingEvals,
     pass,
     warn,
     fail,

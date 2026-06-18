@@ -316,16 +316,24 @@ export async function manualGenerateArtifacts(
   let evals = null;
   try {
     const patchOps = (resumeOutcome.meta.patch_ops as unknown[]) ?? [];
+    let finalTex: string | undefined;
+    if (resumeOutcome.tex_path) {
+      try { finalTex = fs.readFileSync(resumeOutcome.tex_path, "utf-8"); } catch {}
+    }
     evals = runEvals({
-      canonicalTex:    bundle.canonical_resume_tex,
-      judgeJson:       bundle.judge_json as Parameters<typeof runEvals>[0]["judgeJson"],
-      patchOps:        patchOps as Parameters<typeof runEvals>[0]["patchOps"],
-      resumeFlags:     resumeOutcome.flags,
-      patchPromptSha:  (resumeOutcome.meta.patch_prompt_sha as string | null) ?? null,
-      coverLetterText: coverOutcome.tex_path ? null : null,
-      coverFlags:      coverOutcome.flags,
-      coverWordCount:  coverOutcome.word_count,
-      coverPromptSha:  (coverOutcome.meta?.prompt_sha as string | null) ?? null,
+      canonicalTex:      bundle.canonical_resume_tex,
+      finalTex,
+      judgeJson:         bundle.judge_json as Parameters<typeof runEvals>[0]["judgeJson"],
+      patchOps:          patchOps as Parameters<typeof runEvals>[0]["patchOps"],
+      resumeFlags:       resumeOutcome.flags,
+      patchPromptSha:    (resumeOutcome.meta.patch_prompt_sha as string | null) ?? null,
+      coverLetterText:   wantCover ? (coverOutcome.text ?? null) : undefined,
+      coverFlags:        coverOutcome.flags,
+      coverWordCount:    coverOutcome.word_count,
+      coverPromptSha:    (coverOutcome.meta?.prompt_sha as string | null) ?? null,
+      jdRequiredSkills:  (bundle.job.required_skills ?? [])
+        .filter((s: { importance: string; name: string }) => s.importance === "required")
+        .map((s: { importance: string; name: string }) => s.name),
     });
   } catch (e) {
     console.warn(`[manual-generate] evals failed: ${e}`);

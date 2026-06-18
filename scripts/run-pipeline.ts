@@ -48,6 +48,8 @@ import { extractRolesFromCanonicalResume, extractSkillsSectionFromCanonical } fr
 import { extractRoleLabels } from "@/resume-generator/patch/parser";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
+import { runEvals } from "@/evals/runner";
+import { writeBatchReport } from "@/evals/batch-report";
 import { findCachedResumeOutcome } from "@/artifacts/resume-cache";
 import { makeDateFolderName, makeRunFolderName, makeRunLabel } from "@/applications/run-folder";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
@@ -343,6 +345,17 @@ async function main(): Promise<void> {
       const lines = results.map(r => JSON.stringify(r)).join("\n");
       fs.writeFileSync(outPath, lines + "\n", "utf-8");
       log(`Results saved: ${outPath}`);
+    }
+
+    if (!SKIP_PERSIST) {
+      const runDir = path.join(REPO_ROOT, "output", "applications", runFolderName);
+      if (fs.existsSync(runDir)) {
+        try {
+          writeBatchReport(runDir, REPO_ROOT);
+        } catch (e) {
+          log(`[evals] batch report failed: ${e}`);
+        }
+      }
     }
 
     // --- Finish run record in Postgres ---
@@ -1093,6 +1106,32 @@ async function processJobs(
           }
         }
 
+        let evals: ReturnType<typeof runEvals> | null = null;
+        try {
+          const patchOps = (resumeOutcome?.meta.patch_ops as unknown[]) ?? [];
+          let finalTex: string | undefined;
+          if (resumeOutcome?.tex_path) {
+            try { finalTex = fs.readFileSync(resumeOutcome.tex_path, "utf-8"); } catch {}
+          }
+          evals = runEvals({
+            canonicalTex:      bundle.canonical_resume_tex,
+            finalTex,
+            judgeJson:         bundle.judge_json as Parameters<typeof runEvals>[0]["judgeJson"],
+            patchOps:          patchOps as Parameters<typeof runEvals>[0]["patchOps"],
+            resumeFlags:       resumeOutcome?.flags ?? [],
+            patchPromptSha:    (resumeOutcome?.meta.patch_prompt_sha as string | null) ?? null,
+            coverLetterText:   coverOutcome?.text ?? (coverOutcome ? null : undefined),
+            coverFlags:        coverOutcome?.flags ?? [],
+            coverWordCount:    coverOutcome?.word_count ?? 0,
+            coverPromptSha:    (coverOutcome?.meta?.prompt_sha as string | null) ?? null,
+            jdRequiredSkills:  (bundle.job.required_skills ?? [])
+              .filter((s: { importance: string; name: string }) => s.importance === "required")
+              .map((s: { importance: string; name: string }) => s.name),
+          });
+        } catch (e) {
+          console.warn(`[run-pipeline] evals failed: ${e}`);
+        }
+
         writeCombinedMeta(
           jobFolderAbs,
           repoRoot,
@@ -1100,6 +1139,7 @@ async function processJobs(
           resumeOutcome,
           coverOutcome,
           { runId: runIdForArtifacts, bucket: bucket ?? "UNKNOWN", generatedBy: "pipeline" },
+          evals,
         );
 
         metaRel = path.relative(repoRoot, path.join(jobFolderAbs, "meta.json"));

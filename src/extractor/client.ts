@@ -13,9 +13,15 @@
 
 import { EXTRACTION_JSON_SCHEMA } from "./schema";
 
+export interface ContentBlock {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral" };
+}
+
 export interface ChatMessage {
   role:    "system" | "user" | "assistant";
-  content: string;
+  content: string | ContentBlock[];
 }
 
 export interface ReasoningConfig {

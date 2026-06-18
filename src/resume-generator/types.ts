@@ -21,6 +21,8 @@ import type { PatchResult } from "./patch/types";
 export type ResumeMode =
   /** Deterministic patch path: LLM returns JSON ops against canonical LaTeX. Default mode. */
   | "patch_tailoring"
+  /** Extended patch path: sees all roles, higher op budget, achievement-oriented prompt. */
+  | "patch_total"
   /** Full-regeneration path: LLM returns an entire LaTeX document in one response. */
   | "full_regen";
 
@@ -114,6 +116,14 @@ export interface ResumeGenConfig {
    * Catches over-editing (typically from the fallback model). Default: 12.
    */
   patch_ops_warn_threshold?: number;
+  /** Total op cap for patch_total mode (default 16). */
+  patch_total_max_ops?: number;
+  /** Per-role rewrite cap for patch_total mode (default 3). */
+  patch_total_max_emph_per_role?: number;
+  /** Max emphasis roles visible to model in patch_total mode (default 5). */
+  patch_total_max_emphasize_roles?: number;
+  /** Token ceiling for patch_total mode LLM call (default 8000). */
+  patch_total_max_tokens?: number;
   /** Extra attempts per model on style-lint or truncation failure (total = retries + 1). */
   retries: number;
   /** Flag `resume_too_short` if final word count is below this. Default: 1900. */

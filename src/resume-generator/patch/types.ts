@@ -111,4 +111,6 @@ export interface PatchResult {
   prompt_sha: string;
   /** Ops emitted by planner that were dropped because their role was not in canonical blocks. */
   ops_dropped_unknown_role: number;
+  /** jd_requirement values for acknowledge-handled directives (no resume op, deferred to cover letter). */
+  acknowledged_gaps?: string[];
 }

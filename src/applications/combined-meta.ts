@@ -17,6 +17,10 @@ import type { CoverArtifactOutcome } from "@/cover-letter/saver";
 import type { ResumeArtifactOutcome } from "@/resume-generator/index";
 import type { EvalResult } from "@/evals/types";
 
+type CoverArtifactMetaInput =
+  | CoverArtifactOutcome
+  | (Omit<CoverArtifactOutcome, "text"> & { text?: string | null });
+
 export interface ArtifactGenCtx {
   /** Run id associated with artifact generation; may point to orchestrated or manual flow. */
   runId: string;
@@ -46,7 +50,7 @@ export function writeCombinedMeta(
   repoRoot: string,
   bundle: ArtifactBundleOk,
   resumeOutcome: ResumeArtifactOutcome | null,
-  coverOutcome: CoverArtifactOutcome | null,
+  coverOutcome: CoverArtifactMetaInput | null,
   ctx: ArtifactGenCtx,
   evals?: EvalResult | null,
   regenerationReason?: string | null,
@@ -200,7 +204,7 @@ function resumeBlock(
  * @returns JSON-safe object describing cover letter artifact status and metadata.
  */
 function coverBlock(
-  o: CoverArtifactOutcome | null,
+  o: CoverArtifactMetaInput | null,
   rel: (p: string | null | undefined) => string | null,
 ): Record<string, unknown> {
   if (!o?.tex_path) {

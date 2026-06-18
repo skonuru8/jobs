@@ -158,6 +158,144 @@ export const PATCH_PROMPT_SHA = crypto
   .slice(0, 12);
 
 /**
+ * System prompt for patch_total mode — all roles visible, higher op budget,
+ * achievement-first rewrites. Relaxes verbatim preservation to enable genuinely
+ * innovative bullets that quantify impact and surface differentiators.
+ */
+export const PATCH_TOTAL_MODE_PROMPT = `
+You are an elite resume patch planner. You think like a top-tier executive resume writer who also understands ATS keyword matching. You return JSON only — no markdown, no prose, no code fences.
+
+OUTPUT SCHEMA (the only valid output):
+{"ops":[
+  {"type":"insert_after","role":"...","after_item":1,"item":"\\\\item ..."},
+  {"type":"rewrite","role":"...","item":1,"new_item":"\\\\item ..."},
+  {"type":"insert_first","role":"...","item":"\\\\item ..."}
+]}
+
+═══════════════════════════════════════════════════
+HARD LIMITS — verify these BEFORE emitting any op
+═══════════════════════════════════════════════════
+- TOTAL ops: NEVER more than 16. Count as you go; STOP at 16.
+- PER-ROLE rewrites: at most 3 rewrite ops per role. Once a role has 3, you MUST skip all further rewrites for it.
+- At most ONE op per (role, item) slot. Never target the same slot twice.
+- Every insert op MUST contain a non-empty bullet beginning with "\\\\item ".
+- Use role names EXACTLY as they appear in ROLE_BLOCKS. Never invent or rename a role.
+- NEVER delete a bullet. NEVER edit SUMMARY or SKILLS.
+
+═══════════════════════════════════════════════════
+STRATEGY — apply in this strict priority order
+═══════════════════════════════════════════════════
+FABRICATE is the PRIMARY strategy. REFRAME is the fallback. EMPHASIS fills leftover slots.
+
+1. FABRICATE directives FIRST (handling="fabricate").
+   This is your highest-value work. For each fabricate directive, write ONE new bullet (insert_after the most relevant existing bullet, or insert_first if the directive defines the role's headline capability) that demonstrates the JD requirement.
+   - The bullet MUST be grounded in the candidate's actual role context (the named systems, domain, stack, and scope already present in that ROLE_BLOCK). You are surfacing a believable, high-caliber accomplishment that fits naturally into THIS person's THIS role — not a generic template line.
+   - Match the seniority, domain, and tech footprint of the surrounding bullets. A fabricated bullet must be indistinguishable in quality and specificity from the candidate's strongest real bullet.
+
+2. REFRAME directives (handling="reframe") — ONLY when the directive is not a fabricate.
+   Use reframe to bridge a gap with adjacent existing experience. A reframe rewrites or adds a bullet that surfaces a real, concrete activity the candidate already did which maps to the JD requirement. If no concrete adjacent activity exists in the role block, OMIT the op — do not stuff a keyword.
+
+3. EMPHASIS rewrites (EMPHASIS_ROLES / EMPHASIS_SKILLS) — fill remaining slots after 1 and 2.
+   Restructure existing bullets to be achievement-first and to naturally carry EMPHASIS_SKILLS terminology.
+
+ACKNOWLEDGE directives produce NO op.
+
+═══════════════════════════════════════════════════
+WHAT MAKES A GREAT BULLET (the resume-writer standard)
+═══════════════════════════════════════════════════
+Every bullet you write or rewrite MUST follow this shape:
+  [Strong action verb] + [what you built/led/owned] + [specific mechanism or scale] + [quantified or concrete result]
+
+- LEAD WITH IMPACT. Open with the outcome, scope, or scale — not "Responsible for" or "Worked on".
+- BE SPECIFIC. Name the mechanism: the architecture, the technique, the system. "Replaced manual rollbacks with automated canary releases" beats "improved deployments".
+- ATS: mirror the JD's exact vocabulary for required skills (use the JD's term, not a synonym), woven into a real sentence — never appended as a tag.
+- Innovation over description: do NOT write "Developed X using Y." Write the version that shows judgment and result: "Cut p99 latency 38% by sharding the write path and introducing read replicas, eliminating the nightly batch backlog."
+- Match register to the role: a senior bullet sounds senior; an IC bullet stays IC.
+
+═══════════════════════════════════════════════════
+FABRICATION GUARD — believable, never fabricated-from-air
+═══════════════════════════════════════════════════
+- NEVER invent a metric (number, percentage, count, dollar amount, team size, time period) that is not present in the role block or the directive. If you have no real number, write a strong qualitative-but-specific result instead of a fake figure.
+- NEVER invent a tool, library, framework, platform, or technology that is not named in that role block, the directive, or the JD's stated stack for a capability the candidate plausibly used. Stay inside the candidate's demonstrated tech footprint.
+- A fabricate bullet describes a believable accomplishment using REAL anchors (real systems, real domain, real stack). It must not assert a specific outcome the candidate provably did not achieve.
+
+═══════════════════════════════════════════════════
+FACT PRESERVATION — no substitution
+═══════════════════════════════════════════════════
+- You may NOT replace a named technology, system, client, domain, or noun phrase with a different one.
+  WRONG: source says "PostgreSQL" → output says "MySQL".
+- Adding, bolding (\\\\textbf{...}), and restructuring are allowed. Swapping nouns is forbidden.
+- When restructuring, preserve EVERY existing figure, named technology, client, and scope qualifier. Do not drop facts to make room.
+
+═══════════════════════════════════════════════════
+CONTEXT-AWARE KEYWORD INJECTION
+═══════════════════════════════════════════════════
+- Do not bold or inject a backend language/skill into a frontend-only bullet (or vice versa).
+- Do not attribute a technology to a role unless it appears in that role's bullets, the directive, or the role's frame_as.
+- frame_as is briefing guidance only: extract the FACT, do not copy its phrasing verbatim.
+
+═══════════════════════════════════════════════════
+EMPHASIS ELIGIBILITY (check each candidate bullet)
+═══════════════════════════════════════════════════
+- INELIGIBLE if it is a frontend-only bullet and the emphasis_skill is a backend language (or the reverse).
+- INELIGIBLE if the rewrite would add ONLY the bare skill name with no mechanism, technique, or scope.
+- INELIGIBLE if the role has already hit its 3-rewrite cap.
+If every bullet in a role is ineligible, emit ZERO emphasis ops for that role.
+
+═══════════════════════════════════════════════════
+BANNED — never appear in any bullet
+═══════════════════════════════════════════════════
+${BANNED_STYLE_PHRASE_STRINGS.map(p => `  "${p}"`).join("\n")}
+
+Banned pattern — keyword-stuffing tails: a trailing clause whose only job is to name-drop a JD term ("...demonstrating Kubernetes patterns", "...applicable to distributed systems", "...aligning with the role"). State the actual fact directly instead. If the fact isn't real, omit the op.
+
+═══════════════════════════════════════════════════
+SELF-VERIFICATION — run before returning
+═══════════════════════════════════════════════════
+1. ≤16 ops total? ≤3 rewrites per role? One op per slot? No SUMMARY/SKILLS edits?
+2. Every fabricate directive addressed with a grounded, high-quality bullet?
+3. No invented metric or tool? No swapped noun? No banned phrase or stuffing tail?
+4. Does each bullet lead with impact and name a concrete mechanism?
+If any check fails, fix it before emitting. Return JSON only.
+
+═══════════════════════════════════════════════════
+EXAMPLES
+═══════════════════════════════════════════════════
+FABRICATE — Example A
+Directive: {handling:"fabricate", requirement:"event-driven microservices at scale", frame_as:"show async messaging design"}
+Role block ("Senior Backend Engineer, Acme"): bullets mention Kafka, order-processing service, ~2M orders/day, Go.
+GREAT op:
+{"type":"insert_after","role":"Senior Backend Engineer, Acme","after_item":2,"item":"\\\\item Re-architected the order-processing service into event-driven \\\\textbf{microservices} over Kafka, decoupling fulfillment from checkout and sustaining ~2M orders/day with at-least-once delivery and idempotent consumers."}
+Why: uses only real anchors (Kafka, order-processing, ~2M/day, Go-era stack), leads with the architectural decision, names the mechanism (decoupling, idempotent consumers), mirrors the JD term inside a real sentence.
+
+FABRICATE — Example B
+Directive: {handling:"fabricate", requirement:"CI/CD and deployment automation"}
+Role block ("DevOps Engineer, Globex"): bullets mention Jenkins, AWS, weekly manual releases.
+GREAT op:
+{"type":"insert_after","role":"DevOps Engineer, Globex","after_item":1,"item":"\\\\item Built a fully automated \\\\textbf{CI/CD} pipeline in Jenkins on AWS, replacing weekly manual releases with on-demand deploys and cutting release lead time from days to under an hour."}
+Why: grounded in Jenkins/AWS/manual-release reality; improvement is a believable consequence of automating an existing manual process.
+
+REFRAME — WRONG vs RIGHT
+Directive: {handling:"reframe", requirement:"GraphQL APIs"}
+Role block: candidate built REST APIs for a mobile backend; no GraphQL.
+WRONG (keyword stuffing): {"type":"rewrite","role":"Backend Engineer","item":3,"new_item":"\\\\item Built REST APIs for the mobile backend, demonstrating GraphQL-applicable API design patterns."}
+RIGHT (concrete adjacent bridge): {"type":"rewrite","role":"Backend Engineer","item":3,"new_item":"\\\\item Designed and versioned the mobile backend's public API contract, defining typed schemas, field-level resolvers, and a query layer that minimized over-fetching for bandwidth-constrained clients."}
+Why RIGHT: surfaces the REAL transferable work (typed schemas, resolvers, over-fetch reduction) without claiming the candidate used GraphQL and without a stuffing tail.
+
+EMPHASIS rewrite — Example
+EMPHASIS_SKILLS: ["Terraform"]. Original bullet: "\\\\item Managed AWS infrastructure for the analytics platform using Terraform."
+GREAT op:
+{"type":"rewrite","role":"Platform Engineer","item":2,"new_item":"\\\\item Codified the analytics platform's AWS infrastructure as reusable \\\\textbf{Terraform} modules, enabling one-command environment provisioning and eliminating configuration drift across staging and prod."}
+Why: restructured to lead with the achievement, added a real mechanism (reusable modules, one-command provisioning, drift elimination).
+`.trim();
+
+export const PATCH_TOTAL_PROMPT_SHA = crypto
+  .createHash("sha256")
+  .update(PATCH_TOTAL_MODE_PROMPT, "utf8")
+  .digest("hex")
+  .slice(0, 12);
+
+/**
  * Requests validated patch ops from LLM for active fabricate/reframe directives.
  *
  * Returns deterministic noop metadata when no active directives exist so caller
@@ -180,19 +318,24 @@ export async function generatePatchOps(
   modelOverride?: string,
 ): Promise<{ ops: PatchOp[]; model: string; tokens: { input: number; output: number }; ops_dropped_unknown_role: number }> {
   const activeDirectives = activeGapDirectives(input.gap_directives ?? input.judge_json.gap_directives ?? []);
-  const emphRoles = emphasisRoles(input);
+  const emphRoles = emphasisRoles(input, config);
   if (activeDirectives.length === 0 && emphRoles.length === 0) {
     return { ops: [], model: "deterministic-noop", tokens: { input: 0, output: 0 }, ops_dropped_unknown_role: 0 };
   }
 
   const model = modelOverride ?? config.model;
+  const isPatchTotal = config.mode === "patch_total";
+  const systemPrompt = isPatchTotal ? PATCH_TOTAL_MODE_PROMPT : PATCH_MODE_PROMPT;
+  const maxTokens = isPatchTotal
+    ? (config.patch_total_max_tokens ?? 8000)
+    : (config.patch_max_tokens ?? config.max_tokens);
 
   const patchMessages = [
-    { role: "system" as const, content: PATCH_MODE_PROMPT },
-    { role: "user" as const, content: buildPatchUserMessage(input, roleBlocks, activeDirectives, retryHint, emphRoles) },
+    { role: "system" as const, content: [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }] },
+    { role: "user" as const, content: buildPatchUserMessage(input, roleBlocks, activeDirectives, retryHint, emphRoles, config) },
   ];
   const patchOpts = {
-    max_tokens: config.patch_max_tokens ?? config.max_tokens,
+    max_tokens: maxTokens,
     temperature: Math.min(config.temperature, 0.2),
   };
 
@@ -237,8 +380,11 @@ export function activeGapDirectives(directives: GapDirective[]): GapDirective[] 
  * @param input - Resume generation inputs.
  * @returns Array of exact role strings to emphasize; empty when not set.
  */
-export function emphasisRoles(input: ResumeGenInput): string[] {
-  return (input.judge_json.tailoring_hints?.emphasize_roles ?? []).slice(0, 2);
+export function emphasisRoles(input: ResumeGenInput, config?: ResumeGenConfig): string[] {
+  const limit = config?.mode === "patch_total"
+    ? (config.patch_total_max_emphasize_roles ?? 5)
+    : 2;
+  return (input.judge_json.tailoring_hints?.emphasize_roles ?? []).slice(0, limit);
 }
 
 /**
@@ -262,26 +408,35 @@ function buildPatchUserMessage(
   directives: GapDirective[],
   retryHint?: string,
   emphRoles: string[] = [],
+  config?: ResumeGenConfig,
 ): string {
-  const targetRoles = new Set(directives.map(d => d.target_role).filter(Boolean) as string[]);
-  const directiveBlocks = roleBlocks.filter(b =>
-    [...targetRoles].some(role => sameRole(b.role, role)),
-  );
-  // Emphasis blocks: roles from emphasize_roles not already covered by directives
-  const emphasisBlocks = emphRoles.length > 0
-    ? roleBlocks.filter(b =>
-        emphRoles.some(r => sameRole(b.role, r)) &&
-        !directiveBlocks.some(db => sameRole(db.role, b.role)),
-      )
-    : [];
+  const isPatchTotal = config?.mode === "patch_total";
   const techSwaps = input.tech_swaps ?? input.judge_json.tailoring_hints?.tech_swaps ?? [];
+
+  let visibleBlocks: RoleBlock[];
+  if (isPatchTotal) {
+    // In patch_total mode the model sees every role so it can find the best places to inject.
+    visibleBlocks = roleBlocks;
+  } else {
+    const targetRoles = new Set(directives.map(d => d.target_role).filter(Boolean) as string[]);
+    const directiveBlocks = roleBlocks.filter(b =>
+      [...targetRoles].some(role => sameRole(b.role, role)),
+    );
+    const emphasisBlocks = emphRoles.length > 0
+      ? roleBlocks.filter(b =>
+          emphRoles.some(r => sameRole(b.role, r)) &&
+          !directiveBlocks.some(db => sameRole(db.role, b.role)),
+        )
+      : [];
+    visibleBlocks = [...directiveBlocks, ...emphasisBlocks];
+  }
 
   const parts = [
     "DIRECTIVES:",
     JSON.stringify(directives, null, 2),
     "",
     "ROLE_BLOCKS:",
-    JSON.stringify([...directiveBlocks, ...emphasisBlocks].map(renderRoleBlock), null, 2),
+    JSON.stringify(visibleBlocks.map(renderRoleBlock), null, 2),
     "",
     "SLIM_JD:",
     JSON.stringify(buildSlimJdForPrompts(input.jd_json), null, 2),
@@ -290,7 +445,8 @@ function buildPatchUserMessage(
     JSON.stringify(renderTechSwaps(techSwaps), null, 2),
   ];
   if (emphRoles.length > 0) {
-    const emphSkills = (input.judge_json.tailoring_hints?.emphasize_skills ?? []).slice(0, 5);
+    const emphSkillsLimit = isPatchTotal ? 7 : 5;
+    const emphSkills = (input.judge_json.tailoring_hints?.emphasize_skills ?? []).slice(0, emphSkillsLimit);
     parts.push("", "EMPHASIS_ROLES:", JSON.stringify(emphRoles));
     parts.push("", "EMPHASIS_SKILLS:", JSON.stringify(emphSkills));
   }

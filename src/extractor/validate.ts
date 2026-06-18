@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { isTruncationError, repairTruncatedJson } from "@/shared/json-repair";
 
 const ImportanceSchema = z.enum(["required", "preferred", "nice_to_have"]);
 
@@ -64,8 +65,16 @@ export function validateExtraction(
   let parsed: unknown;
   try {
     parsed = JSON.parse(cleaned);
-  } catch (e) {
-    return { ok: false, error: `JSON parse failed: ${e}` };
+  } catch (e: any) {
+    if (isTruncationError(e)) {
+      try {
+        parsed = JSON.parse(repairTruncatedJson(cleaned));
+      } catch {
+        return { ok: false, error: `JSON parse failed: ${e}` };
+      }
+    } else {
+      return { ok: false, error: `JSON parse failed: ${e}` };
+    }
   }
 
   const result = ExtractedFieldsSchema.safeParse(parsed);

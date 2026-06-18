@@ -18,6 +18,7 @@ import { fileURLToPath } from "url";
 
 import { runEvals } from "@/evals/runner";
 import { writeBatchReport } from "@/evals/batch-report";
+import { stripLatex } from "@/cover-letter/resume";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -58,6 +59,7 @@ for (const metaFile of metaFiles) {
     const coverFlags  = meta.cover_letter?.flags ?? [];
     const coverWc     = meta.cover_letter?.word_count ?? 0;
     const coverSha    = meta.cover_letter?.prompt_sha ?? null;
+    const coverLetterText = readCoverLetterText(meta);
 
     const evals = runEvals({
       canonicalTex,
@@ -65,7 +67,7 @@ for (const metaFile of metaFiles) {
       patchOps,
       resumeFlags,
       patchPromptSha,
-      coverLetterText: undefined,
+      coverLetterText,
       coverFlags,
       coverWordCount:  coverWc,
       coverPromptSha:  coverSha,
@@ -93,4 +95,16 @@ function findMetaFiles(dir: string): string[] {
     else if (entry.name === "meta.json") results.push(full);
   }
   return results;
+}
+
+function readCoverLetterText(meta: Record<string, any>): string | undefined {
+  const texPath = meta.cover_letter?.tex_path;
+  if (typeof texPath !== "string" || !texPath.trim()) return undefined;
+
+  const texAbs = path.isAbsolute(texPath)
+    ? texPath
+    : path.resolve(repoRoot, texPath);
+  if (!fs.existsSync(texAbs)) return undefined;
+
+  return stripLatex(fs.readFileSync(texAbs, "utf8")).trim();
 }

@@ -52,6 +52,8 @@ export interface ResumeEval {
   /** All flags from patch result and diff-lint. */
   flags: string[];
   overall_quality: OverallQuality;
+  /** JD required skills absent from final patched resume (≥3 triggers warning). */
+  missing_jd_keywords?: string[];
 }
 
 export interface CoverLetterEval {
@@ -89,6 +91,8 @@ export interface BatchSummary {
   batch_id: string;
   run_at: string;
   total: number;
+  /** Jobs whose meta.json did not contain evals. */
+  missing_evals: number;
   pass: number;
   warn: number;
   fail: number;

@@ -689,6 +689,8 @@ This section gives the concrete “where and how” for each stage: file/functio
   - main: `src/extractor/extract.ts` → `extract(descriptionRaw, config)`
 - **Output**: `ExtractionResult` with `fields` (or `error`)
 - **Special**: quote substring verification (`verifyCitations`)
+- **Prompt caching**: the system prompt is sent as a content block with `cache_control: { type: "ephemeral" }` (`ChatMessage.content` accepts `string | ContentBlock[]` — see `src/extractor/client.ts`). `max_tokens` is 6000.
+- **JSON truncation recovery**: on a truncation `SyntaxError`, `validate.ts` retries the parse through `repairTruncatedJson()` (`src/shared/json-repair.ts`) before returning a failure.
 
 #### Stage 11 — Skill normalization
 
@@ -720,6 +722,8 @@ This section gives the concrete “where and how” for each stage: file/functio
   - main: `src/judge/judge.ts` → `judge(input, config)`
 - **Input**: structured job fields + score breakdown (not raw JD text)
 - **Output**: STRONG / MAYBE / WEAK + reasoning + concerns[].
+- **Prompt caching**: judge system prompt sent with `cache_control: { type: "ephemeral" }`. `max_tokens` is 7500.
+- **JSON truncation recovery**: `validate.ts` retries through `repairTruncatedJson()` on truncation errors.
 
 #### Stage 14 — Bucket routing
 
@@ -741,8 +745,16 @@ This section gives the concrete “where and how” for each stage: file/functio
 - **Cover-letter note**: the experience block is swap-aware using scoped `target_role` swaps, and transient API errors retry separately from content-quality failures.
 - **When**:
   - Always for bucket `COVER_LETTER`
-  - Also for `REVIEW_QUEUE` jobs with score ≥ `llm.cover_letter.review_queue_threshold` (default 0.60)
+  - Also for `REVIEW_QUEUE` jobs with score ≥ `llm.cover_letter.review_queue_threshold` (default 0.64)
 - **Output**: file `output/cover-letters/{run_id}/{bucketLabel}/{slug}_{job_id_prefix}.md`
+
+**Resume tailoring (`src/resume-generator/`)** runs alongside cover-letter generation for application-bucket jobs. The active mode is `patch_total` (set in `config.json` under `llm.resume_generator.mode`):
+
+- `patch_tailoring` — slim context, JSON ops only, 8-op / 2-emphasis-role budget.
+- `patch_total` (default) — all roles visible, 16-op budget, 3 emphasis rewrites/role, 5 emphasis roles, 8000-token cap. Uses `PATCH_TOTAL_MODE_PROMPT` (fabricate-first ladder: FABRICATE > REFRAME > EMPHASIS, "great bullet" formula, worked examples, banned-phrase list). Patch system prompt is cached (`cache_control: ephemeral`).
+- `full_regen` — sends the full canonical LaTeX for a complete rewrite.
+
+Judge directives with `handling: "acknowledge"` are excluded from ops but recorded in `patch.acknowledged_gaps[]`. `verifyPatchCoverage(tex, directives, ops)` checks op text to avoid false-positive coverage. If active directives produce zero ops, the orchestrator flags `resume_patch_no_ops`. The deterministic eval (`src/evals/runner.ts` → `runEvals`) also checks the final resume tex against required JD skills and flags `resume_missing_jd_keywords` when ≥3 are absent.
 
 #### Stage 16–19 — Persist + finish
 

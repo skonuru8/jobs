@@ -29,7 +29,7 @@ This file controls LLM model selection, throttling, scoring weights, and thresho
 | Key | Type | Meaning |
 |---|---|---|
 | `model` | string | OpenRouter model ID used for extraction |
-| `max_tokens` | number | Token cap for extraction response |
+| `max_tokens` | number | Token cap for extraction response. **Currently 6000** (raised from 4000 to reduce JSON truncation on long JDs). |
 | `temperature` | number | Extraction temperature (typically 0) |
 | `throttle_ms` | number | Courtesy delay between extractor calls in pipeline |
 | `reasoning` | object | OpenRouter “reasoning” config (typically disabled for speed) |
@@ -39,9 +39,13 @@ Extractor strict JSON mode:
 - Default: strict `response_format.type="json_schema"` with `src/extractor/schema.ts`
 - Fallback: set `EXTRACTOR_FORCE_JSON_OBJECT=1` to force `json_object` mode.
 
+**Prompt caching:** the extractor system prompt is sent as a content block with `cache_control: { type: "ephemeral" }` (`src/extractor/extract.ts`), reducing input token cost on repeated calls.
+
+**JSON truncation recovery:** on a truncation `SyntaxError`, `src/extractor/validate.ts` attempts `repairTruncatedJson()` (`src/shared/json-repair.ts`) before failing.
+
 #### `llm.judge`
 
-Same shape as extractor, but judge uses JSON object mode in `src/judge/client.ts` and `max_tokens` is smaller.
+Same shape as extractor, but judge uses JSON object mode in `src/judge/client.ts`. `max_tokens` is **currently 7500** (raised from 5000). The judge system prompt is sent with `cache_control: { type: "ephemeral" }` (`src/judge/judge.ts`), and `src/judge/validate.ts` runs `repairTruncatedJson()` on truncation errors before failing.
 
 #### `llm.cover_letter`
 
@@ -51,7 +55,7 @@ Same shape as extractor, but judge uses JSON object mode in `src/judge/client.ts
 | `max_tokens` | number | Token cap |
 | `temperature` | number | Higher than extraction (prose generation) |
 | `throttle_ms` | number | Courtesy delay between cover-letter calls |
-| `review_queue_threshold` | number | If a job is `REVIEW_QUEUE` but score ≥ this value, still generate a draft |
+| `review_queue_threshold` | number | If a job is `REVIEW_QUEUE` but score ≥ this value, still generate a draft. **Currently 0.64** (lowered from 0.70). |
 | `thinking` | object | Optional model thinking config (passed through to OpenRouter) |
 
 #### `llm.resume_generator`
@@ -60,11 +64,27 @@ Same shape as extractor, but judge uses JSON object mode in `src/judge/client.ts
 |---|---|---|
 | `model` | string | Primary model for all patch and full_regen generation. Currently `deepseek/deepseek-v4-pro`. Change this field to switch models — no code changes required. |
 | `fallback_model` | string | Model used on exception (timeout / empty content) in attempt-1 retry. Currently Flash. |
-| `mode` | string | `"patch_tailoring"` (default) or `"full_regen"` |
-| `max_tokens` | number | Token cap for full_regen path |
-| `patch_max_tokens` | number | Token cap for patch_tailoring path. Tune per model without touching code — Pro needs ~12000; Flash was fine at 6000. |
-| `patch_ops_warn_threshold` | number | Emit `resume_patch_ops_explosion` flag when op count exceeds this. Default: 12. Flash fallback over-edits on ~18% of jobs. |
+| `mode` | string | `"patch_tailoring"`, `"patch_total"` (current default), or `"full_regen"`. See mode table below. |
+| `max_tokens` | number | Token cap for full_regen path (currently 12000). |
+| `patch_max_tokens` | number | Token cap for `patch_tailoring` path. Tune per model without touching code — Pro needs ~12000; Flash was fine at 6000. |
+| `patch_total_max_ops` | number | `patch_total`: total op budget. Default **16**. |
+| `patch_total_max_emph_per_role` | number | `patch_total`: max emphasis rewrites per role. Default **3**. |
+| `patch_total_max_emphasize_roles` | number | `patch_total`: max number of roles that may receive emphasis. Default **5**. |
+| `patch_total_max_tokens` | number | `patch_total`: token cap for the patch call. Default **8000**. |
+| `patch_ops_warn_threshold` | number | Emit `resume_patch_ops_explosion` flag when op count exceeds this. Default **17** for `patch_total` (so the 16-op budget never trips it unless the fallback model over-generates). |
 | `temperature` | number | Temperature for generation |
+
+**Resume generation modes:**
+
+| Mode | What the LLM sees | Op budget | Strategy |
+|---|---|---|---|
+| `patch_tailoring` | slim context, JSON ops only | 8 ops, 2 emphasis roles | targeted patch ops |
+| `patch_total` (default) | all roles visible | 16 ops, 3/role, 5 emphasis roles | fabricate-first achievement prompt (`PATCH_TOTAL_MODE_PROMPT`) |
+| `full_regen` | full canonical LaTeX | n/a | full rewrite |
+
+`PATCH_TOTAL_MODE_PROMPT` (`src/resume-generator/patch/generator.ts`) uses a fabricate-first priority ladder (FABRICATE > REFRAME > EMPHASIS), a "great bullet" formula ([verb]+[what]+[mechanism]+[result]), worked examples, a self-verification checklist, and a banned-phrase section. The patch system prompt is sent with `cache_control: { type: "ephemeral" }`.
+
+**Coverage / observability:** judge directives with `handling: "acknowledge"` are excluded from ops but tracked in `patch.acknowledged_gaps[]`. `verifyPatchCoverage(tex, directives, ops)` checks op text (not canonical text) to avoid false-positive coverage. When active directives exist but zero ops are produced, the orchestrator emits a `resume_patch_no_ops` warning (surfaced as an eval `warning`).
 
 **Fallback behavior:** if attempt-0 of patch generation throws (e.g., OpenRouter timeout or empty content), attempt-1 uses `fallback_model` instead of the same model. Fallback is exception-only — normal quality failures do not trigger it. To change the primary or fallback model, update `config.json`; no code changes are needed.
 
@@ -314,8 +334,13 @@ Each row in `evals-history.jsonl` is keyed by `PATCH_PROMPT_SHA`. After every EM
 | Result | Meaning |
 |---|---|
 | `ok` | No info loss, no banned phrases, cover 350+ words |
-| `warning` | Attribution overrun, diff lint flags, or metric overclaim |
+| `warning` | Attribution overrun, diff lint flags, metric overclaim, `resume_patch_no_ops`, or `resume_missing_jd_keywords` |
 | `fail` | `resume_gen_failed`, any dropped key term (info loss), or banned phrase in cover |
+
+**Additional resume eval flags:**
+
+- `resume_missing_jd_keywords` — `runEvals` checks the final resume tex against required JD skills; if ≥3 required skills are absent it flags this (warning). The missing terms are recorded in `evals.resume.missing_jd_keywords[]`.
+- `resume_patch_no_ops` — emitted when active judge directives exist but zero patch ops were produced.
 
 ---
 

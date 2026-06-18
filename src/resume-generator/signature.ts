@@ -12,7 +12,7 @@ import * as crypto from "crypto";
 
 import type { ArtifactBundleOk } from "@/shared/artifact-bundle";
 
-import { PATCH_PROMPT_SHA } from "./patch/generator";
+import { PATCH_PROMPT_SHA, PATCH_TOTAL_PROMPT_SHA } from "./patch/generator";
 import { PROMPT_SHA } from "./prompt";
 import type { ResumeGenConfig, ResumeMode } from "./types";
 
@@ -54,7 +54,9 @@ export function buildResumeSignature(bundle: ArtifactBundleOk, config: ResumeGen
     canonical_sha: bundle.canonical_sha,
     directives_hash: stableHash(directivesPayload),
     tech_swaps_hash: stableHash(hints?.tech_swaps ?? []),
-    prompt_sha: resume_mode === "patch_tailoring" ? PATCH_PROMPT_SHA : PROMPT_SHA,
+    prompt_sha: resume_mode === "patch_tailoring" ? PATCH_PROMPT_SHA
+              : resume_mode === "patch_total"     ? PATCH_TOTAL_PROMPT_SHA
+              : PROMPT_SHA,
     resume_mode,
   };
 }

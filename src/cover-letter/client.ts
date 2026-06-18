@@ -9,9 +9,15 @@ import pLimit from "p-limit";
  * - <think>...</think> stripping: applied to all responses regardless of model
  */
 
+export interface ContentBlock {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral" };
+}
+
 export interface ChatMessage {
   role:    "system" | "user" | "assistant";
-  content: string;
+  content: string | ContentBlock[];
 }
 
 export interface ThinkingConfig {
@@ -79,6 +85,7 @@ async function _complete(opts: CompletionOptions): Promise<CompletionResult> {
     headers: {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type":  "application/json",
+      "anthropic-beta": "prompt-caching-2024-07-31",
       "HTTP-Referer":  "https://github.com/job-hunter",
       "X-Title":       "job-hunter-cover-letter",
     },

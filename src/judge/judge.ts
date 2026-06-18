@@ -10,7 +10,7 @@
  * Side effects: LLM API calls, retry delays, filesystem writes for bad payload capture
  */
 
-import { complete, ReasoningConfig } from "./client";
+import { complete, type ChatMessage, type ReasoningConfig } from "./client";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -57,9 +57,18 @@ export async function judge(
   const systemPrompt = buildSystemPrompt(profile, input.roles_list, input.canonical_skills, input.allowed_role_labels);
   const systemPromptSha = computeSystemPromptSha(systemPrompt);
 
-  const messages = [
-    { role: "system" as const, content: systemPrompt },
-    { role: "user" as const,   content: userPrompt },
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: [
+        {
+          type: "text",
+          text: systemPrompt,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+    },
+    { role: "user", content: userPrompt },
   ];
   const call = () => complete({
     model:       config.model,

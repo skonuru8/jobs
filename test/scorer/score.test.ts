@@ -63,8 +63,8 @@ describe("scoreSkills", () => {
     expect(scoreSkills(jobSkills, PROFILE_SKILLS)).toBe(0.85);
   });
 
-  it("no job skills → 1.0 (no bar)", () => {
-    expect(scoreSkills([], PROFILE_SKILLS)).toBe(1.0);
+  it("no job skills → 0.75 (benefit of doubt, not full bar)", () => {
+    expect(scoreSkills([], PROFILE_SKILLS)).toBe(0.75);
   });
 
   it("required skill missing → significant penalty", () => {
