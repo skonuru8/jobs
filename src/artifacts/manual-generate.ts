@@ -25,7 +25,7 @@ import type { JudgeConfig } from "@/judge/judge";
 import { getBucket } from "@/judge/judge";
 import { extractRolesFromCanonicalTex, extractSkillsSectionFromCanonical } from "@/judge/roles-extractor";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
-import { makeDateFolderName, makeStableManualFolderName } from "@/applications/run-folder";
+import { makeDateFolderName, makeStableManualFolderName, makeSafeJobId } from "@/applications/run-folder";
 import { fetchLatestJobSnapshotForArtifacts } from "@/storage/artifact-load";
 import {
   insertCoverLetterArtifact,
@@ -33,6 +33,7 @@ import {
   insertLedgerEntries,
   detectRegenerationReason,
   upsertJudgeVerdict,
+  fetchLatestArtifactMetaPath,
 } from "@/storage/persist";
 import { writeJobDescription } from "@/applications/job-description-writer";
 import { writeCombinedMeta } from "@/applications/combined-meta";
@@ -72,8 +73,8 @@ export async function manualGenerateArtifacts(
 ): Promise<ManualGenerateResult> {
   loadEnv({ path: path.join(repoRoot, ".env") });
   const generatedAt = new Date();
-  const runFolderName = makeStableManualFolderName(jobId);
-  const manualLog = createManualGenerationLog(repoRoot, jobId, runFolderName, generatedAt);
+  const logRunId = makeSafeJobId(jobId);
+  const manualLog = createManualGenerationLog(repoRoot, jobId, logRunId, generatedAt);
   manualLog(`start job_id=${jobId} force=${String(options?.force)}`);
 
   // Detect why this generation is being triggered (first-run vs. regeneration).
@@ -224,7 +225,19 @@ export async function manualGenerateArtifacts(
     mode: (config.llm.resume_generator?.mode ?? "patch_tailoring") as ResumeGenConfig["mode"],
   };
 
-  const jobFolderAbs = path.join(repoRoot, "output", "applications", runFolderName);
+  // Reuse the existing artifact folder when one already exists on disk.
+  // This keeps resume and cover letter co-located whether the first artifact
+  // came from a pipeline run or a prior manual generation.
+  const existingMetaPath = await fetchLatestArtifactMetaPath(jobId);
+  let jobFolderAbs: string;
+  if (existingMetaPath) {
+    const candidate = path.join(repoRoot, path.dirname(existingMetaPath));
+    jobFolderAbs = fs.existsSync(candidate)
+      ? candidate
+      : path.join(repoRoot, "output", "applications", makeStableManualFolderName(jobId));
+  } else {
+    jobFolderAbs = path.join(repoRoot, "output", "applications", makeStableManualFolderName(jobId));
+  }
   fs.mkdirSync(jobFolderAbs, { recursive: true });
   manualLog(`folder=${path.relative(repoRoot, jobFolderAbs)}`);
   manualLog(`models resume=${resumeGeneratorConfig.model} cover=${coverLetterConfig.model}`);

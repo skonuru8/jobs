@@ -936,3 +936,31 @@ export async function isSeenInDB(source: string, jobId: string): Promise<boolean
     return false;
   }
 }
+
+/**
+ * Returns the meta_path of the most recently generated artifact (resume or cover letter)
+ * for the given job, or null if none exists. Used by manual generation to reuse the
+ * existing artifact folder rather than creating a new one.
+ *
+ * @param jobId - Persisted job identifier.
+ * @returns Repo-relative meta_path string, or null.
+ */
+export async function fetchLatestArtifactMetaPath(jobId: string): Promise<string | null> {
+  try {
+    const result = await getPool().query(
+      `SELECT meta_path FROM (
+         SELECT meta_path, generated_at FROM tailored_resumes
+           WHERE job_id = $1 AND meta_path IS NOT NULL
+         UNION ALL
+         SELECT meta_path, generated_at FROM cover_letters
+           WHERE job_id = $1 AND meta_path IS NOT NULL
+       ) t
+       ORDER BY generated_at DESC NULLS LAST
+       LIMIT 1`,
+      [jobId],
+    );
+    return (result.rows[0]?.meta_path as string | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
