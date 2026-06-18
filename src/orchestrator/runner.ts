@@ -110,7 +110,6 @@ export async function spawnRun(config: RunConfig): Promise<number> {
     EXTRACT:      "1",
     SCORE:        "1",
     JUDGE:        "1",
-    COVER:        "1",
     // RUN_ID is set so the pipeline uses the same ID the orchestrator registered
     // run-pipeline.ts must respect this env var if set, rather than generating its own
     RUN_ID:       runId,
