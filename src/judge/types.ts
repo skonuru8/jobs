@@ -67,6 +67,16 @@ export interface JudgeScoreInput {
     /** Location compatibility score after filter normalization. */
     location:  number;
   };
+  /** Weights actually used to compute the composite (effective weights after semantic redistribution). Optional for back-compat; falls back to config defaults in the prompt. */
+  weights?: {
+    skills:    number;
+    semantic:  number;
+    yoe:       number;
+    seniority: number;
+    location:  number;
+  };
+  /** Gate threshold actually used for the gate decision. Optional for back-compat; falls back to config default in the prompt. */
+  threshold?: number;
 }
 
 export interface JudgeInput {

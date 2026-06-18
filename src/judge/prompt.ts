@@ -18,7 +18,7 @@ import type { JudgeInput } from "./types";
  * Schema version for judge prompt contract and expected JSON response shape.
  * Bump only when prompt semantics or output fields change in a nontrivial way.
  */
-export const PROMPT_VERSION = "v6";
+export const PROMPT_VERSION = "v7";
 
 /**
  * Converts profile object into compact narrative block judge can reason over.
@@ -87,7 +87,7 @@ export function buildSystemPrompt(
 ${candidateSection}${rolesSection}${skillsSection}
 
 CONTEXT:
-A deterministic hard filter and scorer (threshold 0.55) already confirmed this job is worth reviewing.
+A deterministic hard filter and scorer (gate threshold shown in the user message) already confirmed this job is worth reviewing.
 Your task: decide if it is genuinely worth the candidate's time to apply, and produce structured guidance
 for the resume + cover letter generators that run downstream.
 
@@ -119,8 +119,10 @@ SCORING GUIDE (context only — do not re-score):
 - skills >= 0.70: strong match on required technologies
 - skills 0.50-0.69: partial match, some technology gaps
 - skills < 0.50: significant skill gap (semantic may have compensated)
+- skills < 0.40: candidate is missing 60%+ of required technologies — cannot confidently apply
+- skills >= 0.80 with fewer than 6 extracted skills: score is capped at 0.85 due to thin extraction — treat as uncertain, not a strong match
 - yoe < 0.80: candidate is underqualified by more than 2 years relative to the requirement
-- skills = 1.00 with 0 extracted skills: extraction failed or no skills listed — treat as unknown, not perfect match
+- skills = 0.75 with 0 extracted skills (flag skills_extraction_empty): this is the default benefit-of-the-doubt score, NOT a measured match — treat technical fit as UNKNOWN, never as a strong signal
 
 RULES:
 1. Return valid JSON only. No markdown, no explanation, no preamble.
@@ -130,7 +132,8 @@ RULES:
 5. third_party_contract flag alone is NOT a downgrade trigger. Only downgrade when paired with another concern (poor skills match, YOE gap, niche stack, or no end client AND no clear technology requirements).
 6. Do not hallucinate requirements not in the job data.
 7. reasoning: 1-3 sentences. concerns: list of strings (empty list if none).
-8. If skills = 1.00 and skills_required = "none extracted", note it as a concern but do NOT use it as a STRONG signal — treat technical fit as unknown.
+8. HARD RULE — empty skill extraction: if flags include "skills_extraction_empty" (or skills_required = "none extracted"), the skills sub-score (typically 0.75) is a default placeholder, NOT a measured match. The verdict MUST be MAYBE or WEAK — never STRONG. Note the missing extraction as a concern and treat technical fit as unknown.
+9. HARD RULE — low skill match: if the skills sub-score < 0.40, the verdict MUST be MAYBE or WEAK regardless of YOE, seniority, semantic, or location — a candidate missing 60%+ of required technologies cannot confidently apply.
 
 WEAK TRIGGERS FOR IMPOSSIBLE RESTRICTIONS:
 - Prior-employer restrictions the candidate cannot meet are hard WEAK. Examples:
@@ -390,6 +393,13 @@ export function buildJudgePrompt(input: JudgeInput): string {
 
   const fmt = (n: number) => n.toFixed(2);
 
+  // Derive weight/threshold display from the real ScoreResult values (effective
+  // weights after semantic redistribution). Fall back to config defaults if a
+  // caller did not populate them.
+  const w = score.weights ?? { skills: 0.35, semantic: 0.25, yoe: 0.15, seniority: 0.15, location: 0.10 };
+  const pct = (n: number) => `${Math.round(n * 100)}% weight`;
+  const gateThreshold = fmt(score.threshold ?? 0.5);
+
   return `Evaluate this job for the candidate described in the system prompt.
 
 JOB:
@@ -405,12 +415,12 @@ JOB:
   Responsibilities: ${respText}
   Flags:            ${flagsText}
 
-SCORE BREAKDOWN (total: ${fmt(score.total)}, gate threshold: 0.55):
-  Skills     ${fmt(score.components.skills)}   (40% weight)
-  Semantic   ${fmt(score.components.semantic)}   (10% weight)
-  YOE        ${fmt(score.components.yoe)}   (25% weight)
-  Seniority  ${fmt(score.components.seniority)}   (15% weight)
-  Location   ${fmt(score.components.location)}   (10% weight)
+SCORE BREAKDOWN (total: ${fmt(score.total)}, gate threshold: ${gateThreshold}):
+  Skills     ${fmt(score.components.skills)}   (${pct(w.skills)})
+  Semantic   ${fmt(score.components.semantic)}   (${pct(w.semantic)})
+  YOE        ${fmt(score.components.yoe)}   (${pct(w.yoe)})
+  Seniority  ${fmt(score.components.seniority)}   (${pct(w.seniority)})
+  Location   ${fmt(score.components.location)}   (${pct(w.location)})
 
 Return JSON exactly matching the OUTPUT FORMAT in the system prompt (no markdown fences).`;
 }

@@ -160,6 +160,8 @@ export async function manualGenerateArtifacts(
           score: {
             total:      snapshot.scoreResult.score,
             components: snapshot.scoreResult.components,
+            weights:    snapshot.scoreResult.weights,
+            threshold:  snapshot.scoreResult.threshold,
           },
           run_id:              snapshot.run_id,
           job_id:              jobId,

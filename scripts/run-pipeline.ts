@@ -946,6 +946,8 @@ async function processJobs(
             seniority: scoreResult.components.seniority,
             location:  scoreResult.components.location,
           },
+          weights:    scoreResult.weights,
+          threshold:  scoreResult.threshold,
         },
         profile:             profile as Profile,
         roles_list:          rolesList || undefined,
