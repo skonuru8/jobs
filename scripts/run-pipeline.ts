@@ -105,8 +105,8 @@ const DO_JUDGE       = DO_EXTRACT || parseBoolEnv(process.env.JUDGE);  // auto w
 const DO_COVER       = DO_EXTRACT || parseBoolEnv(process.env.COVER);  // auto when extract runs
 /** When false, skip tailored resume LLM+PDF (default: enabled). */
 const DO_RESUME_ARTIFACT = parseBoolEnv(process.env.DO_RESUME, true);
-/** When false, skip cover letter LLM+PDF (default: enabled). */
-const DO_COVER_ARTIFACT = parseBoolEnv(process.env.DO_COVER, true);
+/** When false (default), skip cover letter LLM+PDF in pipeline. Cover letters are generated from the UI on demand. Opt in with DO_COVER=true. */
+const DO_COVER_ARTIFACT = parseBoolEnv(process.env.DO_COVER, false);
 const SAVE_FIXTURES  = parseBoolEnv(process.env.SAVE_FIXTURES); // save real extraction fixtures
 const SKIP_DEDUP     = parseBoolEnv(process.env.SKIP_DEDUP);    // bypass Redis + pgvector dedup
 const SKIP_PERSIST   = parseBoolEnv(process.env.SKIP_PERSIST);  // bypass Postgres persistence

@@ -68,3 +68,29 @@ export function makeManualRunLabel(generatedAt: Date): string {
 export function makeManualFolderName(generatedAt: Date): string {
   return `${makeDateFolderName(generatedAt)}/${makeManualRunLabel(generatedAt)}`;
 }
+
+/**
+ * Sanitizes a job identifier for safe use as a single filesystem folder segment.
+ *
+ * Keeps only `[a-zA-Z0-9_-]`, truncates to 64 characters, and falls back to
+ * `"unknown"` when nothing usable remains.
+ *
+ * @param jobId - Raw persisted job identifier.
+ * @returns Filesystem-safe folder segment derived from the job id.
+ */
+export function makeSafeJobId(jobId: string): string {
+  return jobId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || "unknown";
+}
+
+/**
+ * Builds the stable relative folder for manual generation, keyed by job id only.
+ *
+ * Unlike pipeline and timestamped-manual layouts, this folder is reused across
+ * regenerations so each job has exactly one manual output directory.
+ *
+ * @param jobId - Raw persisted job identifier.
+ * @returns Relative folder path `manual/{safeId}` under `output/applications/`.
+ */
+export function makeStableManualFolderName(jobId: string): string {
+  return `manual/${makeSafeJobId(jobId)}`;
+}

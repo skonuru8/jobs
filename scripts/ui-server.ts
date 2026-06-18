@@ -19,6 +19,7 @@ import { config as loadEnv } from 'dotenv';
 import { getPool } from '../src/storage/db.js';
 import { manualGenerateArtifacts } from '../src/artifacts/manual-generate.js';
 import { makeJobSlug } from '../src/shared/slug.js';
+import { makeSafeJobId } from '../src/applications/run-folder.js';
 import { loadRiskMap } from '../src/risk-map/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -92,6 +93,18 @@ function resolveJobDescriptionPath(job: {
     const candidate = path.join(REPO_ROOT, path.dirname(metaPath), 'job_description.md');
     if (fs.existsSync(candidate)) return candidate;
   }
+
+  // Stable manual folder (output/applications/manual/{safeId}/job_description.md)
+  // keyed by job id only; overwritten in place on each regenerate.
+  const manualCandidate = path.join(
+    REPO_ROOT,
+    'output',
+    'applications',
+    'manual',
+    makeSafeJobId(job.job_id),
+    'job_description.md',
+  );
+  if (fs.existsSync(manualCandidate)) return manualCandidate;
 
   const postedIso = job.posted_at ? new Date(job.posted_at).toISOString() : null;
   const slug = makeJobSlug(

@@ -25,8 +25,7 @@ import type { JudgeConfig } from "@/judge/judge";
 import { getBucket } from "@/judge/judge";
 import { extractRolesFromCanonicalTex, extractSkillsSectionFromCanonical } from "@/judge/roles-extractor";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
-import { makeJobSlug } from "@/shared/slug";
-import { makeDateFolderName, makeManualFolderName } from "@/applications/run-folder";
+import { makeDateFolderName, makeStableManualFolderName } from "@/applications/run-folder";
 import { fetchLatestJobSnapshotForArtifacts } from "@/storage/artifact-load";
 import {
   insertCoverLetterArtifact,
@@ -73,7 +72,7 @@ export async function manualGenerateArtifacts(
 ): Promise<ManualGenerateResult> {
   loadEnv({ path: path.join(repoRoot, ".env") });
   const generatedAt = new Date();
-  const runFolderName = makeManualFolderName(generatedAt);
+  const runFolderName = makeStableManualFolderName(jobId);
   const manualLog = createManualGenerationLog(repoRoot, jobId, runFolderName, generatedAt);
   manualLog(`start job_id=${jobId} force=${String(options?.force)}`);
 
@@ -225,16 +224,8 @@ export async function manualGenerateArtifacts(
     mode: (config.llm.resume_generator?.mode ?? "patch_tailoring") as ResumeGenConfig["mode"],
   };
 
-  const jobSlug = makeJobSlug(
-    {
-      title:     bundle.job.title,
-      company:   bundle.job.company.name,
-      posted_at: bundle.job.meta.posted_at,
-    },
-    jobId,
-  );
-  const runDir = path.join(repoRoot, "output", "applications", runFolderName);
-  const jobFolderAbs = path.join(runDir, jobSlug);
+  const jobFolderAbs = path.join(repoRoot, "output", "applications", runFolderName);
+  fs.mkdirSync(jobFolderAbs, { recursive: true });
   manualLog(`folder=${path.relative(repoRoot, jobFolderAbs)}`);
   manualLog(`models resume=${resumeGeneratorConfig.model} cover=${coverLetterConfig.model}`);
 
