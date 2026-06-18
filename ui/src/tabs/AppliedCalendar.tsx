@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { getAppliedJobs, getStats } from '../api';
+import { getAppliedJobs, getStats, postArchiveRun } from '../api';
 import type { ApplyQueueRow, Stats } from '../api';
 import { JobCard } from '../components/JobCard';
 
@@ -11,6 +11,12 @@ export function AppliedCalendar({ onStatsUpdate, refreshKey }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [day, setDay] = useState<string>('all');
+  const [archiving, setArchiving] = useState(false);
+  const [archiveLog, setArchiveLog] = useState<string[]>([]);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   useEffect(() => {
     setLoading(true); setError(null);
@@ -36,6 +42,26 @@ export function AppliedCalendar({ onStatsUpdate, refreshKey }: Props) {
     if (diff === 1) return 'Yesterday';
     return new Date(`${k}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   };
+
+  async function handleArchive(dryRun: boolean) {
+    if (archiving) return;
+    setArchiving(true);
+    setArchiveLog([]);
+    setArchiveError(null);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    try {
+      await postArchiveRun(dryRun, {
+        onLine: l => setArchiveLog(p => [...p.slice(-199), l]),
+        onDone: () => setArchiving(false),
+        onError: e => { setArchiveError(e.message); setArchiving(false); },
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      setArchiveError((e as Error).message);
+      setArchiving(false);
+    }
+  }
 
   if (loading) return <div className="loading">Loading…</div>;
   if (error) return <div className="tab-error">Error: {error}</div>;
@@ -66,6 +92,23 @@ export function AppliedCalendar({ onStatsUpdate, refreshKey }: Props) {
           </div>
         </div>
       ))}
+      <div className="d-sec" style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--line-2)' }}>
+        <div className="d-head">Archive to Google Drive</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <button className="gen-btn" disabled={archiving} onClick={() => void handleArchive(true)}>
+            {archiving ? 'Running…' : 'Dry run'}
+          </button>
+          <button className="gen-btn" disabled={archiving} onClick={() => void handleArchive(false)}>
+            {archiving ? 'Archiving…' : 'Archive now'}
+          </button>
+        </div>
+        {archiveError && <div style={{ color: 'var(--neg)', fontSize: 12 }}>{archiveError}</div>}
+        {archiveLog.length > 0 && (
+          <pre style={{ fontSize: 11, color: 'var(--ink-2)', background: 'var(--bg-2)', padding: 10, borderRadius: 6, maxHeight: 240, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+            {archiveLog.join('\n')}
+          </pre>
+        )}
+      </div>
     </div>
   );
 }

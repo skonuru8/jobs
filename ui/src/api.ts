@@ -313,6 +313,22 @@ export async function streamOrchestratorLog(h: StreamHandlers): Promise<void> {
   await readSseStream(res.body, h);
 }
 
+export async function postArchiveRun(dryRun = false, h: StreamHandlers): Promise<void> {
+  const res = await fetch('/api/archive/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dryRun }),
+    signal: h.signal,
+  });
+  if (res.status === 409) throw new Error('An archive run is already in progress.');
+  if (res.status === 400) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error((j as { detail?: string }).detail ?? 'Archive not configured.');
+  }
+  if (!res.ok || !res.body) throw new Error(`archive run failed: ${res.status}`);
+  await readSseStream(res.body, h);
+}
+
 // Streams a saved run log file (text/plain) line by line into the same pane.
 export async function streamRunLog(runId: string, h: StreamHandlers): Promise<void> {
   const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/log`, { signal: h.signal });

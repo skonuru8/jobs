@@ -24,6 +24,7 @@
  * exit_code=-1, sets finished_at=NOW(), and releases their Redis lock.
  */
 
+import path from "path";
 import cron from "node-cron";
 import pg from "pg";
 import { randomUUID } from "crypto";
@@ -31,6 +32,12 @@ import { randomUUID } from "crypto";
 import { spawnRun } from "./runner.js";
 import { releaseLock } from "./lock.js";
 import { appendReaperLog, appendOrchestratorLog } from "./monitor.js";
+import { fileURLToPath } from "url";
+import { runArchive } from "../archive/archive-applied.js";
+import { getPool as getArchivePool } from "../storage/db.js";
+
+const _schedulerDir = path.dirname(fileURLToPath(import.meta.url));
+const SCHEDULER_REPO_ROOT = path.resolve(_schedulerDir, "../..");
 
 const { Pool } = pg;
 
@@ -228,6 +235,28 @@ export function registerSchedules(): ScheduledTask[] {
       max:          30,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
+    });
+  });
+
+  // ── Google Drive archival (daily at 03:00) ───────────────────────────────
+  schedule("0 3 * * *", "drive-archive", async () => {
+    const keyPath  = process.env.GDRIVE_SERVICE_ACCOUNT_KEY;
+    const folderId = process.env.GDRIVE_ARCHIVE_FOLDER_ID;
+    if (!keyPath || !folderId) {
+      appendOrchestratorLog("[drive-archive] skipped — GDRIVE_SERVICE_ACCOUNT_KEY or GDRIVE_ARCHIVE_FOLDER_ID not set");
+      return;
+    }
+    const PROJECT_ROOT = process.env.PROJECT_ROOT ?? SCHEDULER_REPO_ROOT;
+    const ageDays      = Number(process.env.GDRIVE_ARCHIVE_AGE_DAYS ?? 14);
+    const logRetention = Number(process.env.GDRIVE_LOG_RETENTION_DAYS ?? 30);
+    await runArchive(getArchivePool(), {
+      execute:          true,
+      ageDays,
+      pruneLogs:        true,
+      logRetentionDays: logRetention,
+      repoRoot:         PROJECT_ROOT,
+      rootFolderId:     folderId,
+      onLog:            appendOrchestratorLog,
     });
   });
 

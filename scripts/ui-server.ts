@@ -21,6 +21,7 @@ import { manualGenerateArtifacts } from '../src/artifacts/manual-generate.js';
 import { makeJobSlug } from '../src/shared/slug.js';
 import { makeSafeJobId } from '../src/applications/run-folder.js';
 import { loadRiskMap } from '../src/risk-map/index.js';
+import { runArchive } from '../src/archive/archive-applied.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, '..');
@@ -127,6 +128,7 @@ const ORCH_LOG    = path.join(REPO_ROOT, 'output', 'logs', 'orchestrator.log');
 let orchestratorChild: ChildProcess | null = null;
 let orchestratorStartedAt: string | null = null;
 let pipelineRunning = false;
+let archiveRunning  = false;
 
 // Strips ANSI CSI sequences (SGR color codes like \x1b[32m plus cursor/erase
 // codes), so no raw escape sequence reaches the browser terminal pane.
@@ -215,6 +217,7 @@ async function main() {
     '009_cover_letter_artifact_columns.sql',
     '010_ledger_run_id_text.sql',
     '011_ledger_truth_distance_numeric.sql',
+    '013_drive_archival.sql',
   ]) {
     const migrationPath = path.join(REPO_ROOT, 'migrations', mig);
     if (fs.existsSync(migrationPath)) {
@@ -991,6 +994,64 @@ async function main() {
         pipelineRunning = false;
       }
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/archive/run  (text/event-stream)
+  // -------------------------------------------------------------------------
+  // Runs Drive archival in-process and streams progress as SSE.
+  // Body: { dryRun?: boolean } — defaults to execute=true (safe because the
+  // UI button is an explicit user action; CLI defaults to dry-run).
+  app.post('/api/archive/run', async (req, res) => {
+    if (archiveRunning) {
+      res.status(409).json({ error: 'archive_in_flight', detail: 'An archive run is already in progress.' });
+      return;
+    }
+
+    const b = (req.body ?? {}) as { dryRun?: boolean };
+    const execute = b.dryRun !== true;
+
+    const keyPath  = process.env.GDRIVE_SERVICE_ACCOUNT_KEY;
+    const folderId = process.env.GDRIVE_ARCHIVE_FOLDER_ID;
+    if (!keyPath || !folderId) {
+      res.status(400).json({ error: 'not_configured', detail: 'GDRIVE_SERVICE_ACCOUNT_KEY or GDRIVE_ARCHIVE_FOLDER_ID not set.' });
+      return;
+    }
+
+    archiveRunning = true;
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders?.();
+
+    const send = (line: string) => {
+      try { res.write(`data: ${JSON.stringify(stripAnsi(line))}\n\n`); } catch { /* client gone */ }
+    };
+
+    try {
+      const ageDays      = Number(process.env.GDRIVE_ARCHIVE_AGE_DAYS ?? 14);
+      const logRetention = Number(process.env.GDRIVE_LOG_RETENTION_DAYS ?? 30);
+      await runArchive(pool, {
+        execute,
+        ageDays,
+        pruneLogs:        true,
+        logRetentionDays: logRetention,
+        repoRoot:         REPO_ROOT,
+        rootFolderId:     folderId,
+        onLog:            send,
+      });
+    } catch (e) {
+      send(`[drive-archive] fatal error: ${(e as Error).message}`);
+    } finally {
+      archiveRunning = false;
+      try {
+        res.write(`event: done\ndata: ${JSON.stringify({ exitCode: 0 })}\n\n`);
+        res.end();
+      } catch { /* client gone */ }
+    }
   });
 
   // -------------------------------------------------------------------------
