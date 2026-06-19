@@ -7,9 +7,9 @@ import { CardList } from '../components/CardList';
 
 type StatusFilter = 'all' | 'unreviewed' | 'reviewed';
 
-interface Props { onStatsUpdate: (s: Stats) => void; refreshKey?: number; searchQuery: string; }
+interface Props { onStatsUpdate: (s: Stats) => void; refreshKey?: number; searchQuery: string; sortBy?: 'time' | 'score'; sortDir?: 'asc' | 'desc'; }
 
-export function SoftRejections({ onStatsUpdate, refreshKey, searchQuery }: Props) {
+export function SoftRejections({ onStatsUpdate, refreshKey, searchQuery, sortBy, sortDir }: Props) {
   const [rows, setRows] = useState<SoftRejectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export function SoftRejections({ onStatsUpdate, refreshKey, searchQuery }: Props
         <div className="fgroup"><span className="fgroup-lbl">Source</span><Segmented value={src} options={sourceOpts} onChange={setSrc} /></div>
       </div>
       <div className="count-line"><span className="count-num">{filtered.length}</span><span className="count-word">scored below threshold</span></div>
-      <CardList rows={filtered} mode="soft-reject" searchQuery={searchQuery} onStatsUpdate={onStatsUpdate} onDataChange={reload} swapKey={`${status}|${src}`} emptyHint="No soft rejections match this filter." />
+      <CardList rows={filtered} mode="soft-reject" searchQuery={searchQuery} onStatsUpdate={onStatsUpdate} onDataChange={reload} swapKey={`${status}|${src}`} emptyHint="No soft rejections match this filter." sortBy={sortBy} sortDir={sortDir} />
     </div>
   );
 }

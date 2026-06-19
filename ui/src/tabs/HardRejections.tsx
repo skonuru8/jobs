@@ -7,9 +7,9 @@ import { CardList } from '../components/CardList';
 
 type StatusFilter = 'all' | 'unreviewed' | 'reviewed';
 
-interface Props { onStatsUpdate: (s: Stats) => void; refreshKey?: number; searchQuery: string; }
+interface Props { onStatsUpdate: (s: Stats) => void; refreshKey?: number; searchQuery: string; sortBy?: 'time' | 'score'; sortDir?: 'asc' | 'desc'; }
 
-export function HardRejections({ onStatsUpdate, refreshKey, searchQuery }: Props) {
+export function HardRejections({ onStatsUpdate, refreshKey, searchQuery, sortBy, sortDir }: Props) {
   const [rows, setRows] = useState<HardRejectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export function HardRejections({ onStatsUpdate, refreshKey, searchQuery }: Props
         <div className="fgroup"><span className="fgroup-lbl">Status</span><Segmented value={status} options={opts} onChange={setStatus} /></div>
       </div>
       <div className="count-line"><span className="count-num">{filtered.length}</span><span className="count-word">filtered before scoring</span></div>
-      <CardList rows={filtered} mode="hard-reject" searchQuery={searchQuery} onStatsUpdate={onStatsUpdate} onDataChange={reload} swapKey={status} emptyHint="No rejections match this filter." />
+      <CardList rows={filtered} mode="hard-reject" searchQuery={searchQuery} onStatsUpdate={onStatsUpdate} onDataChange={reload} swapKey={status} emptyHint="No rejections match this filter." sortBy={sortBy} sortDir={sortDir} />
     </div>
   );
 }

@@ -23,6 +23,8 @@ function Shell() {
   const [search, setSearch] = useState('');
   const [scope, setScope] = useState<'total' | 'today'>('total');
   const [collapsed, setCollapsed] = useState(false);
+  const [sortBy, setSortBy] = useState<'time' | 'score'>('time');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const searchRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -56,27 +58,42 @@ function Shell() {
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     let tx = 50, ty = 30, cx = 50, cy = 30, raf = 0;
+    let isScrolling = false;
+    let scrollTimer: ReturnType<typeof setTimeout> | undefined;
     const onMove = (e: MouseEvent) => {
       tx = (e.clientX / window.innerWidth) * 100;
       ty = (e.clientY / window.innerHeight) * 100;
     };
+    const onScroll = () => {
+      isScrolling = true;
+      if (scrollTimer) clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => { isScrolling = false; }, 200);
+    };
     const tick = () => {
-      cx += (tx - cx) * 0.04;
-      cy += (ty - cy) * 0.04;
-      const w = window.innerWidth, h = window.innerHeight;
-      const ax = (((cx / 100) - .5) * w * .42).toFixed(1);
-      const ay = (((cy / 100) - .5) * h * .42).toFixed(1);
-      const bx = (-((cx / 100) - .5) * w * .28).toFixed(1);
-      const by = (-((cy / 100) - .5) * h * .28).toFixed(1);
-      document.documentElement.style.setProperty('--ax', `${ax}px`);
-      document.documentElement.style.setProperty('--ay', `${ay}px`);
-      document.documentElement.style.setProperty('--bx', `${bx}px`);
-      document.documentElement.style.setProperty('--by', `${by}px`);
+      if (!isScrolling) {
+        cx += (tx - cx) * 0.04;
+        cy += (ty - cy) * 0.04;
+        const w = window.innerWidth, h = window.innerHeight;
+        const ax = (((cx / 100) - .5) * w * .42).toFixed(1);
+        const ay = (((cy / 100) - .5) * h * .42).toFixed(1);
+        const bx = (-((cx / 100) - .5) * w * .28).toFixed(1);
+        const by = (-((cy / 100) - .5) * h * .28).toFixed(1);
+        document.documentElement.style.setProperty('--ax', `${ax}px`);
+        document.documentElement.style.setProperty('--ay', `${ay}px`);
+        document.documentElement.style.setProperty('--bx', `${bx}px`);
+        document.documentElement.style.setProperty('--by', `${by}px`);
+      }
       raf = requestAnimationFrame(tick);
     };
     window.addEventListener('mousemove', onMove, { passive: true });
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
     raf = requestAnimationFrame(tick);
-    return () => { window.removeEventListener('mousemove', onMove); cancelAnimationFrame(raf); };
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions);
+      if (scrollTimer) clearTimeout(scrollTimer);
+      cancelAnimationFrame(raf);
+    };
   }, []);
 
   const meta = TABS.find(t => t.id === activeTab)!;
@@ -108,14 +125,21 @@ function Shell() {
               {search && <button className="clear" onClick={() => setSearch('')} aria-label="Clear">×</button>}
             </div>
           )}
+          {showSearch && (
+            <div className="sort-controls" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <button className={`btn btn-ghost${sortBy === 'time' ? ' active' : ''}`} onClick={() => setSortBy('time')} title="Sort by time">Time</button>
+              <button className={`btn btn-ghost${sortBy === 'score' ? ' active' : ''}`} onClick={() => setSortBy('score')} title="Sort by score">Score</button>
+              <button className="btn btn-icon btn-ghost" onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} title={sortDir === 'asc' ? 'Ascending' : 'Descending'}>{sortDir === 'asc' ? '↑' : '↓'}</button>
+            </div>
+          )}
           <SettingsMenu />
         </header>
 
         <div className="content" ref={contentRef}>
           <div className="tab-swap" key={activeTab}>
-            {activeTab === 'apply' && <ApplyQueue onStatsUpdate={handleStatsUpdate} refreshKey={refreshKeys.apply} searchQuery={search} />}
-            {activeTab === 'hard' && <HardRejections onStatsUpdate={handleStatsUpdate} refreshKey={refreshKeys.hard} searchQuery={search} />}
-            {activeTab === 'soft' && <SoftRejections onStatsUpdate={handleStatsUpdate} refreshKey={refreshKeys.soft} searchQuery={search} />}
+            {activeTab === 'apply' && <ApplyQueue onStatsUpdate={handleStatsUpdate} refreshKey={refreshKeys.apply} searchQuery={search} sortBy={sortBy} sortDir={sortDir} />}
+            {activeTab === 'hard' && <HardRejections onStatsUpdate={handleStatsUpdate} refreshKey={refreshKeys.hard} searchQuery={search} sortBy={sortBy} sortDir={sortDir} />}
+            {activeTab === 'soft' && <SoftRejections onStatsUpdate={handleStatsUpdate} refreshKey={refreshKeys.soft} searchQuery={search} sortBy={sortBy} sortDir={sortDir} />}
             {activeTab === 'applied' && <AppliedCalendar onStatsUpdate={handleStatsUpdate} refreshKey={refreshKeys.applied} />}
             {activeTab === 'history' && <RunHistory refreshKey={refreshKeys.history} />}
             {activeTab === 'pipeline' && <PipelineControl refreshKey={refreshKeys.pipeline} />}

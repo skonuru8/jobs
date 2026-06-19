@@ -67,6 +67,7 @@ export interface JobRecord {
   judge_bucket?:    string | null;
   judge_reasoning?: string | null;
   judge_concerns?:  string[];
+  judge_concern_answers?: Array<{ concern: string; answer: string; status: string }>;
   judge_model?:               string | null;
   judge_confidence?:          number | null;
   judge_key_matches?:         unknown;

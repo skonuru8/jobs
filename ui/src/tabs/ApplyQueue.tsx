@@ -12,6 +12,8 @@ interface Props {
   onStatsUpdate: (s: Stats) => void;
   refreshKey?: number;
   searchQuery: string;
+  sortBy?: 'time' | 'score';
+  sortDir?: 'asc' | 'desc';
 }
 
 const SL: Record<StatusFilter, string> = { pending: 'Pending', apply_later: 'Later', applied: 'Applied', not_applied: 'Not applied', all: 'All' };
@@ -28,7 +30,7 @@ function SourceDropdown({ value, options, onChange }: { value: string; options: 
   );
 }
 
-export function ApplyQueue({ onStatsUpdate, refreshKey, searchQuery }: Props) {
+export function ApplyQueue({ onStatsUpdate, refreshKey, searchQuery, sortBy, sortDir }: Props) {
   const [rows, setRows] = useState<ApplyQueueRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +109,7 @@ export function ApplyQueue({ onStatsUpdate, refreshKey, searchQuery }: Props) {
 
       <div className="count-line"><span className="count-num">{finalRows.length}</span><span className="count-word">role{finalRows.length !== 1 ? 's' : ''} in view</span></div>
 
-      <CardList rows={finalRows} mode="apply" searchQuery={searchQuery} onStatsUpdate={onStatsUpdate} onDataChange={reload} swapKey={`${status}|${bucket}|${src}|${day}`} emptyHint="No roles match this filter." />
+      <CardList rows={finalRows} mode="apply" searchQuery={searchQuery} onStatsUpdate={onStatsUpdate} onDataChange={reload} swapKey={`${status}|${bucket}|${src}|${day}`} emptyHint="No roles match this filter." sortBy={sortBy} sortDir={sortDir} />
     </div>
   );
 }

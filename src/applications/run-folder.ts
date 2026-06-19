@@ -94,3 +94,11 @@ export function makeSafeJobId(jobId: string): string {
 export function makeStableManualFolderName(jobId: string): string {
   return `manual/${makeSafeJobId(jobId)}`;
 }
+
+/**
+ * Builds a date-bucketed stable manual folder for jobs with no existing pipeline
+ * artifact. Layout: `{YYYY-MM-DD}/manual/{safeId}` (relative to output/applications/).
+ */
+export function makeDatedManualFolderName(jobId: string, generatedAt: Date): string {
+  return `${makeDateFolderName(generatedAt)}/manual/${makeSafeJobId(jobId)}`;
+}

@@ -102,32 +102,10 @@ export async function judge(
   }
 
   const allowedLabels = input.allowed_role_labels;
-  let validation = validateJudge(raw, allowedLabels);
+  const validation = validateJudge(raw, allowedLabels);
 
   if (!validation.ok) {
-    await new Promise(r => setTimeout(r, 2000));
-    try {
-      const r2 = await _withHttpRetry(call);
-      raw   = r2.content;
-      model = r2.model;
-      totalInputTokens  += r2.input_tokens  ?? 0;
-      totalOutputTokens += r2.output_tokens ?? 0;
-    } catch (e: any) {
-      return {
-        status:            "error",
-        fields:            null,
-        verdict:           null,
-        model:             config.model,
-        prompt_version:    PROMPT_VERSION,
-        system_prompt_sha: systemPromptSha,
-        judged_at,
-        error:             `LLM call failed (retry): ${e?.message ?? e}`,
-      };
-    }
-    validation = validateJudge(raw, allowedLabels);
-  }
-
-  if (!validation.ok) {
+    console.warn(`[judge] judge_parse_failed: ${validation.error}`);
     writeJudgeFailurePayload(input, raw, validation.error);
     return {
       status:            "error",
@@ -137,7 +115,7 @@ export async function judge(
       prompt_version:    PROMPT_VERSION,
       system_prompt_sha: systemPromptSha,
       judged_at,
-      error:             validation.error,
+      error:             `parse_failed: ${validation.error}`,
       input_tokens:      totalInputTokens  || undefined,
       output_tokens:     totalOutputTokens || undefined,
     };

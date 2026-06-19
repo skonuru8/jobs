@@ -22,6 +22,7 @@ import { PROMPT_SHA } from "./prompt";
 import { buildResumeSignature, signatureMeta } from "./signature";
 import { writeTexAndCompile } from "./saver";
 import type { ResumeGenConfig, ResumeGenInput } from "./types";
+import { computeAtsScore } from "./ats-score";
 
 export interface ResumeArtifactOutcome {
   /** Absolute `.tex` artifact path, or `null` when generation or save failed. */
@@ -132,6 +133,16 @@ export async function generateAndSaveResume(
     flags.push("tex_malformed");
   }
 
+  const atsRequiredSkills = (bundle.job.required_skills ?? [])
+    .filter((s: { importance: string }) => s.importance === "required")
+    .map((s: { name: string }) => s.name);
+  const ats = computeAtsScore(tex, atsRequiredSkills);
+  const atsThreshold = config.ats_threshold ?? 0.75;
+  const atsBelowThreshold = ats.score < atsThreshold;
+  if (atsBelowThreshold) {
+    flags.push("ats_below_threshold");
+  }
+
   let saved;
   try {
     saved = await writeTexAndCompile(tex, jobFolderAbs, config.compile_pdf !== false);
@@ -189,6 +200,9 @@ export async function generateAndSaveResume(
     input_tokens:    gen.tokens.input,
     output_tokens:   gen.tokens.output,
     word_count:      wc,
+    ats_score:            ats.score,
+    ats_missing_keywords: ats.missing,
+    ats_below_threshold:  atsBelowThreshold,
     compile_status:  saved.pdf_path ? "ok" : "failed",
     flags,
     score:           bundle.score.total,

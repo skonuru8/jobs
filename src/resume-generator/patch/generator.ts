@@ -50,6 +50,7 @@ Core:
 - Return only valid JSON. No markdown.
 - Apply fabricate and reframe directives AND EMPHASIS_ROLES rewrites.
 - Never delete bullets.
+- Never remove or unwrap existing \\textbf{...} — do not de-bold terms that are already bolded in the canonical resume.
 - Never edit SUMMARY or SKILLS.
 - Keep every op scoped to the directive target_role or an EMPHASIS_ROLES role.
 - Use role names exactly as provided in ROLE_BLOCKS.

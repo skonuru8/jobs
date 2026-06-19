@@ -25,7 +25,8 @@ import type { JudgeConfig } from "@/judge/judge";
 import { getBucket } from "@/judge/judge";
 import { extractRolesFromCanonicalTex, extractSkillsSectionFromCanonical } from "@/judge/roles-extractor";
 import { buildArtifactBundle } from "@/shared/artifact-bundle";
-import { makeDateFolderName, makeStableManualFolderName, makeSafeJobId } from "@/applications/run-folder";
+import { makeDateFolderName, makeStableManualFolderName, makeSafeJobId, makeDatedManualFolderName } from "@/applications/run-folder";
+import { answerConcerns } from "@/judge/answer-concerns";
 import { fetchLatestJobSnapshotForArtifacts } from "@/storage/artifact-load";
 import {
   insertCoverLetterArtifact,
@@ -85,6 +86,7 @@ export async function manualGenerateArtifacts(
 
   const wantResume = (options?.artifactType ?? 'both') !== 'cover';
   const wantCover  = (options?.artifactType ?? 'both') !== 'resume';
+  manualLog(`artifactType=${options?.artifactType ?? 'both'} wantResume=${String(wantResume)} wantCover=${String(wantCover)}`);
 
   if (!isRiskMapLoaded()) {
     loadRiskMap(repoRoot);
@@ -128,7 +130,7 @@ export async function manualGenerateArtifacts(
   // artifacts so changes to the judge prompt (e.g. fabricate vs reframe logic)
   // take effect immediately without requiring a full pipeline re-run.
   let activeJudgeResult = snapshot.judgeResult;
-  if (options?.force === true) {
+  if (options?.force === true && wantResume === true) {
     manualLog("rejudge start");
     try {
       const judgeConfig: JudgeConfig = {
@@ -174,7 +176,14 @@ export async function manualGenerateArtifacts(
       );
       if (freshJudge.status === "ok" && freshJudge.verdict) {
         const newBucket = getBucket(freshJudge, snapshot.scoreResult.score);
-        await upsertJudgeVerdict(jobId, snapshot.run_id, freshJudge, newBucket);
+        const freshAnswers = freshJudge.fields?.concerns?.length
+          ? answerConcerns(
+              freshJudge.fields.concerns,
+              { skills: profile.skills?.map((s: any) => typeof s === 'string' ? s : s.name) ?? [], years_experience: profile.years_experience, work_authorization: profile.work_authorization },
+              { required_skills: (snapshot.job as any).required_skills ?? [], years_experience: (snapshot.job as any).years_experience?.min ?? null, visa_sponsorship: (snapshot.job as any).visa_sponsorship ?? null, compensation_min: null, compensation_max: null },
+            )
+          : [];
+        await upsertJudgeVerdict(jobId, snapshot.run_id, freshJudge, newBucket, freshAnswers);
         activeJudgeResult = freshJudge;
         manualLog(`rejudge ok verdict=${freshJudge.verdict} bucket=${newBucket}`);
       } else {
@@ -227,18 +236,22 @@ export async function manualGenerateArtifacts(
     mode: (config.llm.resume_generator?.mode ?? "patch_tailoring") as ResumeGenConfig["mode"],
   };
 
-  // Reuse the existing artifact folder when one already exists on disk.
-  // This keeps resume and cover letter co-located whether the first artifact
-  // came from a pipeline run or a prior manual generation.
+  // Resolve the manual-output folder.
+  // - If an existing artifact folder is on disk, write into `{folder}/manual/`
+  //   so we never overwrite the originals. Guard against manual/manual nesting.
+  // - Otherwise fall back to a date-bucketed stable manual folder.
   const existingMetaPath = await fetchLatestArtifactMetaPath(jobId);
   let jobFolderAbs: string;
   if (existingMetaPath) {
     const candidate = path.join(repoRoot, path.dirname(existingMetaPath));
-    jobFolderAbs = fs.existsSync(candidate)
-      ? candidate
-      : path.join(repoRoot, "output", "applications", makeStableManualFolderName(jobId));
+    if (fs.existsSync(candidate)) {
+      const baseManual = path.basename(candidate) === "manual" ? candidate : path.join(candidate, "manual");
+      jobFolderAbs = baseManual;
+    } else {
+      jobFolderAbs = path.join(repoRoot, "output", "applications", makeDatedManualFolderName(jobId, generatedAt));
+    }
   } else {
-    jobFolderAbs = path.join(repoRoot, "output", "applications", makeStableManualFolderName(jobId));
+    jobFolderAbs = path.join(repoRoot, "output", "applications", makeDatedManualFolderName(jobId, generatedAt));
   }
   fs.mkdirSync(jobFolderAbs, { recursive: true });
   manualLog(`folder=${path.relative(repoRoot, jobFolderAbs)}`);
@@ -262,14 +275,14 @@ export async function manualGenerateArtifacts(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const _skip: any = { tex_path: null, pdf_path: null, flags: [] as string[], word_count: 0, meta: {} as Record<string, unknown> };
+  const makeSkip = (): any => ({ tex_path: null, pdf_path: null, flags: [] as string[], word_count: 0, meta: {} as Record<string, unknown> });
   const [resumeOutcome, coverOutcome] = await Promise.all([
     wantResume
       ? (cachedResumeOutcome ?? generateAndSaveResume(bundle, resumeGeneratorConfig, repoRoot, jobFolderAbs, ctx))
-      : Promise.resolve(_skip),
+      : Promise.resolve(makeSkip()),
     wantCover
       ? generateAndSaveCoverLetter(bundle, coverLetterConfig, repoRoot, jobFolderAbs, ctx)
-      : Promise.resolve(_skip),
+      : Promise.resolve(makeSkip()),
   ]);
   manualLog(
     `resume tex=${resumeOutcome.tex_path ? "yes" : "no"} flags=${resumeOutcome.flags.join(",") || "(none)"} ` +

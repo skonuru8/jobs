@@ -383,9 +383,10 @@ export async function saveJob(job: JobRecord): Promise<void> {
       await client.query(
         `INSERT INTO judge_verdicts
            (job_id, run_id, verdict, bucket, reasoning, concerns, model, judged_at,
-            confidence, key_matches, gaps, why_apply, tailoring_hints, system_prompt_sha)
+            confidence, key_matches, gaps, why_apply, tailoring_hints, system_prompt_sha,
+            concern_answers)
          VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7, NOW(),
-            $8, $9::jsonb, $10::jsonb, $11, $12::jsonb, $13)
+            $8, $9::jsonb, $10::jsonb, $11, $12::jsonb, $13, $14::jsonb)
          ON CONFLICT (job_id, run_id) DO UPDATE
            SET verdict   = EXCLUDED.verdict,
                bucket    = EXCLUDED.bucket,
@@ -397,7 +398,8 @@ export async function saveJob(job: JobRecord): Promise<void> {
                gaps = EXCLUDED.gaps,
                why_apply = EXCLUDED.why_apply,
                tailoring_hints = EXCLUDED.tailoring_hints,
-               system_prompt_sha = EXCLUDED.system_prompt_sha`,
+               system_prompt_sha = EXCLUDED.system_prompt_sha,
+               concern_answers = EXCLUDED.concern_answers`,
         [
           job.job_id, job.run_id,
           job.judge_verdict,
@@ -411,6 +413,7 @@ export async function saveJob(job: JobRecord): Promise<void> {
           job.judge_why_apply ?? null,
           JSON.stringify(job.judge_tailoring_hints ?? {}),
           job.judge_system_prompt_sha ?? null,
+          JSON.stringify(job.judge_concern_answers ?? []),
         ],
       );
     }
@@ -881,6 +884,7 @@ export async function upsertJudgeVerdict(
   runId: string,
   judgeResult: import("../judge/types.js").JudgeResult,
   bucket: string,
+  concernAnswers?: Array<{ concern: string; answer: string; status: string }>,
 ): Promise<void> {
   if (_disabled) return;
   try {
@@ -888,9 +892,10 @@ export async function upsertJudgeVerdict(
     await getPool().query(
       `INSERT INTO judge_verdicts
          (job_id, run_id, verdict, bucket, reasoning, concerns, model, judged_at,
-          confidence, key_matches, gaps, why_apply, tailoring_hints, system_prompt_sha)
+          confidence, key_matches, gaps, why_apply, tailoring_hints, system_prompt_sha,
+          concern_answers)
        VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7, NOW(),
-          $8, $9::jsonb, $10::jsonb, $11, $12::jsonb, $13)
+          $8, $9::jsonb, $10::jsonb, $11, $12::jsonb, $13, $14::jsonb)
        ON CONFLICT (job_id, run_id) DO UPDATE
          SET verdict           = EXCLUDED.verdict,
              bucket            = EXCLUDED.bucket,
@@ -902,7 +907,8 @@ export async function upsertJudgeVerdict(
              gaps              = EXCLUDED.gaps,
              why_apply         = EXCLUDED.why_apply,
              tailoring_hints   = EXCLUDED.tailoring_hints,
-             system_prompt_sha = EXCLUDED.system_prompt_sha`,
+             system_prompt_sha = EXCLUDED.system_prompt_sha,
+             concern_answers   = EXCLUDED.concern_answers`,
       [
         jobId, runId,
         judgeResult.verdict,
@@ -916,6 +922,7 @@ export async function upsertJudgeVerdict(
         f?.why_apply ?? null,
         JSON.stringify(f?.tailoring_hints ?? {}),
         judgeResult.system_prompt_sha ?? null,
+        JSON.stringify(concernAnswers ?? []),
       ],
     );
   } catch (e) {

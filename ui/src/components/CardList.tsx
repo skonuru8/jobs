@@ -16,19 +16,32 @@ interface Props {
   /** Changes only on filter/tab change (not search) so the list replays its entrance. */
   swapKey?: string;
   emptyHint?: string;
+  sortBy?: 'time' | 'score';
+  sortDir?: 'asc' | 'desc';
 }
 
-export function CardList({ rows, mode, searchQuery, onStatsUpdate, onDataChange, swapKey, emptyHint }: Props) {
+export function CardList({ rows, mode, searchQuery, onStatsUpdate, onDataChange, swapKey, emptyHint, sortBy = 'time', sortDir = 'desc' }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [kb, setKb] = useState<number>(-1);
+  const [visibleCount, setVisibleCount] = useState<number>(50);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return rows.filter(r => !q || r.title.toLowerCase().includes(q) || r.company.toLowerCase().includes(q));
-  }, [rows, searchQuery]);
+    const out = rows.filter(r => !q || r.title.toLowerCase().includes(q) || r.company.toLowerCase().includes(q));
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const keyOf = (r: Row): number => {
+      if (sortBy === 'score') {
+        const v = (r as { score_total?: number }).score_total;
+        return typeof v === 'number' ? v : -Infinity;
+      }
+      const t = Date.parse((r as any).scraped_at);
+      return Number.isNaN(t) ? -Infinity : t;
+    };
+    return [...out].sort((a, b) => (keyOf(a) - keyOf(b)) * dir);
+  }, [rows, searchQuery, sortBy, sortDir]);
 
-  useEffect(() => { setKb(filtered.length ? 0 : -1); refs.current = []; }, [filtered.length, searchQuery, swapKey]);
+  useEffect(() => { setKb(filtered.length ? 0 : -1); refs.current = []; setVisibleCount(50); }, [filtered.length, searchQuery, swapKey, sortBy, sortDir]);
 
   useEffect(() => {
     async function labelFocused(l: 'yes' | 'maybe' | 'no', status?: 'applied' | 'skipped' | 'apply_later' | null) {
@@ -69,9 +82,10 @@ export function CardList({ rows, mode, searchQuery, onStatsUpdate, onDataChange,
     );
   }
 
+  const visible = filtered.slice(0, visibleCount);
   return (
     <div className="cards" key={swapKey}>
-      {filtered.map((row, i) => (
+      {visible.map((row, i) => (
         <JobCard
           key={`${row.job_id}-${row.run_id}`}
           row={row}
@@ -85,6 +99,15 @@ export function CardList({ rows, mode, searchQuery, onStatsUpdate, onDataChange,
           cardRef={el => { refs.current[i] = el; }}
         />
       ))}
+      {filtered.length > visibleCount && (
+        <button
+          className="btn btn-ghost"
+          style={{ margin: '12px auto', display: 'block' }}
+          onClick={() => setVisibleCount(c => c + 50)}
+        >
+          Load 50 more ({filtered.length - visibleCount} remaining)
+        </button>
+      )}
     </div>
   );
 }
