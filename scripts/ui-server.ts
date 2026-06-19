@@ -218,6 +218,7 @@ async function main() {
     '010_ledger_run_id_text.sql',
     '011_ledger_truth_distance_numeric.sql',
     '013_drive_archival.sql',
+    '014_concern_answers.sql',
   ]) {
     const migrationPath = path.join(REPO_ROOT, 'migrations', mig);
     if (fs.existsSync(migrationPath)) {
@@ -248,7 +249,7 @@ async function main() {
           j.scraped_at, j.posted_at,
           CASE WHEN j.source = 'jobright_api' THEN j.meta->>'job_id' ELSE NULL END AS jobright_id,
           s.total AS score_total, s.skills, s.semantic, s.yoe, s.seniority, s.location,
-          jv.verdict AS judge_verdict, jv.bucket, jv.reasoning, jv.concerns,
+          jv.verdict AS judge_verdict, jv.bucket, jv.reasoning, jv.concerns, jv.concern_answers,
           cl.content AS cover_letter,
           cl.file_path AS cover_letter_path,
           tr.pdf_path AS resume_pdf_path,

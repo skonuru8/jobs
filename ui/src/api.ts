@@ -29,6 +29,7 @@ export interface ApplyQueueRow {
   applied_at: string | null;
   required_skills_with_risk?: any[] | null;
   judge_concerns?: string[] | null;
+  concern_answers?: Array<{ concern: string; answer: string; status: string }>;
   /** Link to saved job_description.md under output/applications/<slug>/ */
   job_description_url?: string | null;
   resume_risk_summary?:  RiskSummary | null;

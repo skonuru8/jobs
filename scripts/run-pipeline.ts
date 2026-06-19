@@ -34,6 +34,7 @@ import type { ScoringWeights, ScoreResult } from "@/scorer/types";
 
 import { judge, getBucket } from "@/judge/judge";
 import type { JudgeInput, JudgeResult, FinalBucket } from "@/judge/types";
+import { answerConcerns } from "@/judge/answer-concerns";
 
 import { generateAndSaveCoverLetter } from "@/cover-letter/saver";
 import { loadCanonicalResumeMaster, loadResume } from "@/cover-letter/resume";
@@ -900,6 +901,7 @@ async function processJobs(
     // Stage 13–14 — LLM judge + routing (GATE_PASS only)
     // Judge decides STRONG/MAYBE/WEAK verdict → FinalBucket. ARCHIVE jobs skip here entirely.
     let judgeResult: JudgeResult | undefined;
+    let concernAnswers: ReturnType<typeof answerConcerns> = [];
     let bucket: FinalBucket | undefined = routing.isArchived ? "ARCHIVE" : undefined;
     let finalVerdict = routing.isArchived ? "ARCHIVE" : routing.gateVerdict;
 
@@ -969,6 +971,23 @@ async function processJobs(
       } else {
         log(`[${n}]  Judge error: ${judgeResult.error} → ${bucket}`);
         allFlags.push("judge_failed");
+      }
+      if (judgeResult.fields?.concerns?.length) {
+        concernAnswers = answerConcerns(
+          judgeResult.fields.concerns,
+          {
+            skills: (profile as any).skills?.map((s: any) => typeof s === 'string' ? s : s.name) ?? [],
+            years_experience: (profile as any).years_experience,
+            work_authorization: (profile as any).work_authorization,
+          },
+          {
+            required_skills: (sanitized as any).required_skills ?? [],
+            years_experience: (sanitized as any).years_experience?.min ?? (sanitized as any).years_experience ?? null,
+            visa_sponsorship: (sanitized as any).visa_sponsorship ?? null,
+            compensation_min: (sanitized as any).compensation?.min ?? null,
+            compensation_max: (sanitized as any).compensation?.max ?? null,
+          },
+        );
       }
     }
 
@@ -1218,6 +1237,7 @@ async function processJobs(
         judge_bucket:    bucket                          ?? null,
         judge_reasoning: judgeResult?.fields?.reasoning  ?? null,
         judge_concerns:  judgeResult?.fields?.concerns   ?? [],
+        judge_concern_answers: concernAnswers,
         judge_model:               judgeResult?.model ?? null,
         judge_confidence:          judgeResult?.fields?.confidence ?? null,
         judge_key_matches:         judgeResult?.fields?.key_matches ?? null,

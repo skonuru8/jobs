@@ -130,4 +130,5 @@ export interface ResumeGenConfig {
   word_count_min?: number;
   /** Flag `resume_too_long` if final word count exceeds this. Default: 2500. */
   word_count_max?: number;
+  ats_threshold?: number;
 }

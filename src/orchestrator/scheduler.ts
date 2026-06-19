@@ -160,7 +160,7 @@ export function registerSchedules(): ScheduledTask[] {
     await spawnRun({
       source:       "dice",
       postedWithin: "ONE",
-      max:          50,
+      max:          38,
       runId:        newRunId(),
       lockTtlSecs:  14_400,   // 4h
     });
@@ -171,7 +171,7 @@ export function registerSchedules(): ScheduledTask[] {
     await spawnRun({
       source:       "dice",
       postedWithin: "SEVEN",
-      max:          100,
+      max:          75,
       runId:        newRunId(),
       lockTtlSecs:  21_600,   // 6h — backfill can take longer
     });
@@ -182,7 +182,7 @@ export function registerSchedules(): ScheduledTask[] {
     await spawnRun({
       source:       "dice",
       postedWithin: "ONE",
-      max:          50,
+      max:          38,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
     });
@@ -193,12 +193,12 @@ export function registerSchedules(): ScheduledTask[] {
   // - Fetches structured JSON instead of scraping JS-rendered SPA
   // - Synthesizes description_raw from API fields (no separate fetch needed)
   // - Eliminates ATS 403/empty-body failure class for Jobright source
-  // - Capped at MAX=40 to stay well under Jobright's ~30-40 rate limit
+  // - Capped at MAX=30 to stay well under Jobright's ~30-40 rate limit
   schedule("0 9,13,17,21 * * 1-6", "jobright-api-daily", async () => {
     await spawnRun({
       source:       "jobright_api",
       postedWithin: "",      // Jobright API doesn't take posted_within
-      max:          40,
+      max:          30,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
     });
@@ -209,7 +209,7 @@ export function registerSchedules(): ScheduledTask[] {
     await spawnRun({
       source:       "jobright_api",
       postedWithin: "",
-      max:          40,
+      max:          30,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
     });
@@ -221,7 +221,7 @@ export function registerSchedules(): ScheduledTask[] {
     await spawnRun({
       source:       "linkedin",
       postedWithin: "",        // no recency filter for LinkedIn
-      max:          30,
+      max:          22,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
     });
@@ -232,7 +232,7 @@ export function registerSchedules(): ScheduledTask[] {
     await spawnRun({
       source:       "linkedin",
       postedWithin: "",
-      max:          30,
+      max:          22,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
     });

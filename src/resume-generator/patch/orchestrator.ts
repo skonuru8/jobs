@@ -52,30 +52,33 @@ export async function generatePatchedResumeTex(
   let totalOutput = 0;
   let model = config.model;
   let retryCount = 0;
-  let prevMissed: string[] = [];
-  let prevLintViolations: string[] = [];
   let totalDroppedUnknownRole = 0;
   let modelOverride: string | undefined;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const missedPart = prevMissed.length > 0
-      ? `Previously missed directives: ${prevMissed.map(r => `"${r}"`).join(", ")}. For each, add or rewrite a bullet at the directive's target_role.`
-      : "";
-    const lintPart = prevLintViolations.length > 0
-      ? ` Lint violations to fix: ${prevLintViolations.join("; ")}.`
-      : "";
-    const retryHint = (missedPart || lintPart) ? `${missedPart}${lintPart}` : undefined;
-    let generated;
-    try {
-      generated = await generatePatchOps(input, config, roleBlocks, retryHint, modelOverride);
-    } catch (e) {
-      if (attempt === 0) {
-        retryCount += 1;
-        if (config.fallback_model) {
-          modelOverride = config.fallback_model;
-        }
-        continue;
+  // Single attempt only. No coverage-driven re-plan. A thrown LLM error gets one
+  // fallback-model retry; coverage misses / zero-ops are reported as flags, not retried.
+  let generated;
+  try {
+    generated = await generatePatchOps(input, config, roleBlocks, undefined, modelOverride);
+  } catch (e) {
+    if (config.fallback_model && modelOverride === undefined) {
+      retryCount += 1;
+      modelOverride = config.fallback_model;
+      try {
+        generated = await generatePatchOps(input, config, roleBlocks, undefined, modelOverride);
+      } catch (e2) {
+        return {
+          status: "error",
+          tex: null,
+          model,
+          prompt_sha: PATCH_PROMPT_SHA,
+          word_count: 0,
+          tokens: { input: totalInput, output: totalOutput },
+          generated_at,
+          error: `patch op generation failed: ${String(e2).slice(0, 500)}`,
+        };
       }
+    } else {
       return {
         status: "error",
         tex: null,
@@ -87,96 +90,81 @@ export async function generatePatchedResumeTex(
         error: `patch op generation failed: ${String(e).slice(0, 500)}`,
       };
     }
-    allOps = enforceOpCaps(
-      dedupRewriteOps(
-        dropSubstancelessInjections(
-          validateBoldTermSources(
-            dropNoopRewrites(
-              stripBannedPhraseOps(sanitizePatchOps(generated.ops)),
-              roleBlocks,
-            ),
-            roleBlocks, directives, emphSkills,
-          ),
-          roleBlocks, directives,
-        ),
-      ),
-      directives,
-      config,
-    );
-    totalInput += generated.tokens.input;
-    totalOutput += generated.tokens.output;
-    model = generated.model;
-    totalDroppedUnknownRole += generated.ops_dropped_unknown_role;
-
-    const tex = applyPatchOps(input.canonical_resume_tex, allOps);
-    const coverage = verifyPatchCoverage(tex, directives, allOps);
-    const allDirectives = input.gap_directives ?? input.judge_json.gap_directives ?? [];
-    const lintResult = runDiffLint(tex, allOps, allDirectives, config.word_count_min, config.word_count_max);
-
-    const acknowledgedGaps = allDirectives
-      .filter(d => d.handling === "acknowledge")
-      .map(d => d.jd_requirement);
-
-    if (coverage.missed.length === 0 || attempt === 1) {
-      if (allOps.length === 0 && coverage.missed.length > 0) {
-        return {
-          status: "error",
-          tex: null,
-          model,
-          prompt_sha: patchSha,
-          word_count: 0,
-          tokens: { input: totalInput, output: totalOutput },
-          generated_at,
-          error: `patch produced no valid ops; missed: ${coverage.missed.join("; ")}`,
-        };
-      }
-
-      const hadActiveWork = directives.length > 0 || (input.judge_json.tailoring_hints?.emphasize_roles ?? []).length > 0;
-
-      const warnings: string[] = [];
-      if (coverage.missed.length > 0) warnings.push("resume_patch_coverage_failed");
-      if (allOps.length === 0 && hadActiveWork) warnings.push("resume_patch_no_ops");
-      if (findBannedStylePhrases(tex).length > 0) warnings.push("banned_phrase_in_output");
-      if (!latexStructureOk(tex)) warnings.push("tex_malformed");
-      for (const flag of lintResult.flags) warnings.push(flag);
-      const opsWarn = config.patch_ops_warn_threshold ?? 12;
-      if (allOps.length > opsWarn) warnings.push("resume_patch_ops_explosion");
-
-      return {
-        status: "ok",
-        tex,
-        model,
-        prompt_sha: PATCH_PROMPT_SHA,
-        word_count: countWordsTex(tex),
-        tokens: { input: totalInput, output: totalOutput },
-        generated_at,
-        warnings,
-        patch: {
-          ops: allOps,
-          coverage,
-          retry_count: retryCount,
-          failed_directives: coverage.missed,
-          prompt_sha: patchSha,
-          ops_dropped_unknown_role: totalDroppedUnknownRole,
-          acknowledged_gaps: acknowledgedGaps.length > 0 ? acknowledgedGaps : undefined,
-        },
-      } as ResumeGenResult;
-    }
-    prevMissed = coverage.missed;
-    prevLintViolations = lintResult.violations;
-    retryCount += 1;
   }
 
+  allOps = enforceOpCaps(
+    dedupRewriteOps(
+      dropSubstancelessInjections(
+        validateBoldTermSources(
+          dropNoopRewrites(
+            stripBannedPhraseOps(sanitizePatchOps(generated.ops)),
+            roleBlocks,
+          ),
+          roleBlocks, directives, emphSkills,
+        ),
+        roleBlocks, directives,
+      ),
+    ),
+    directives,
+    config,
+  );
+  totalInput += generated.tokens.input;
+  totalOutput += generated.tokens.output;
+  model = generated.model;
+  totalDroppedUnknownRole += generated.ops_dropped_unknown_role;
+
+  const tex = applyPatchOps(input.canonical_resume_tex, allOps);
+  const coverage = verifyPatchCoverage(tex, directives, allOps);
+  const allDirectives = input.gap_directives ?? input.judge_json.gap_directives ?? [];
+  const lintResult = runDiffLint(tex, allOps, allDirectives, config.word_count_min, config.word_count_max);
+
+  const acknowledgedGaps = allDirectives
+    .filter(d => d.handling === "acknowledge")
+    .map(d => d.jd_requirement);
+
+  if (allOps.length === 0 && coverage.missed.length > 0) {
+    return {
+      status: "error",
+      tex: null,
+      model,
+      prompt_sha: patchSha,
+      word_count: 0,
+      tokens: { input: totalInput, output: totalOutput },
+      generated_at,
+      error: `patch produced no valid ops; missed: ${coverage.missed.join("; ")}`,
+    };
+  }
+
+  const hadActiveWork = directives.length > 0 || (input.judge_json.tailoring_hints?.emphasize_roles ?? []).length > 0;
+
+  const warnings: string[] = [];
+  if (coverage.missed.length > 0) warnings.push("resume_patch_coverage_failed");
+  if (allOps.length === 0 && hadActiveWork) warnings.push("resume_patch_no_ops");
+  if (findBannedStylePhrases(tex).length > 0) warnings.push("banned_phrase_in_output");
+  if (!latexStructureOk(tex)) warnings.push("tex_malformed");
+  for (const flag of lintResult.flags) warnings.push(flag);
+  const opsWarn = config.patch_ops_warn_threshold ?? 12;
+  if (allOps.length > opsWarn) warnings.push("resume_patch_ops_explosion");
+
   return {
-    status: "error",
-    tex: null,
+    status: "ok",
+    tex,
     model,
     prompt_sha: PATCH_PROMPT_SHA,
-    word_count: 0,
+    word_count: countWordsTex(tex),
     tokens: { input: totalInput, output: totalOutput },
     generated_at,
-    error: "patch coverage failed",
-  };
+    warnings,
+    patch: {
+      ops: allOps,
+      coverage,
+      retry_count: retryCount,
+      failed_directives: coverage.missed,
+      prompt_sha: patchSha,
+      ops_dropped_unknown_role: totalDroppedUnknownRole,
+      acknowledged_gaps: acknowledgedGaps.length > 0 ? acknowledgedGaps : undefined,
+    },
+  } as ResumeGenResult;
 }
 
 /**

@@ -247,7 +247,21 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
               {concerns.length > 0 && (
                 <div className="d-sec">
                   <div className="d-head">Concerns</div>
-                  <ul className="concerns">{concerns.map((c, i) => <li key={i}>{c}</li>)}</ul>
+                  <ul className="concerns">{concerns.map((c, i) => {
+                    const ans = applyRow?.concern_answers?.find(a => a.concern === c);
+                    const icon = ans?.status === 'resolved' ? '✓' : ans?.status === 'confirmed_gap' ? '✗' : '?';
+                    const color = ans?.status === 'resolved' ? 'var(--pos)' : ans?.status === 'confirmed_gap' ? 'var(--neg)' : 'var(--ink-3)';
+                    return (
+                      <li key={i}>
+                        {c}
+                        {ans && (
+                          <span style={{ display: 'block', marginTop: 2, fontSize: 11, color: 'var(--ink-3)' }}>
+                            <span style={{ color, fontWeight: 700, marginRight: 4 }}>{icon}</span>{ans.answer}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}</ul>
                 </div>
               )}
               {hardRow?.flags && Object.keys(hardRow.flags).length > 0 && (
