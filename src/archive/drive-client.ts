@@ -1,15 +1,3 @@
-/**
- * drive-client.ts — thin googleapis wrapper for Google Drive uploads.
- *
- * Auth: service account JSON key at GDRIVE_SERVICE_ACCOUNT_KEY.
- * Scope: drive.file (only sees files/folders it created or that are shared with it).
- *
- * IMPORTANT: service accounts have zero Drive storage quota.
- * All uploads must target a folder owned by a human Google account and
- * shared with the service account as Editor. Supply that folder's ID via
- * GDRIVE_ARCHIVE_FOLDER_ID in .env.
- */
-
 import * as fs from "fs";
 import * as path from "path";
 import { google } from "googleapis";
@@ -22,27 +10,41 @@ let _drive: drive_v3.Drive | null = null;
 export function getDriveClient(): drive_v3.Drive {
   if (_drive) return _drive;
 
-  const keyPath = process.env.GDRIVE_SERVICE_ACCOUNT_KEY;
-  if (!keyPath) throw new Error("GDRIVE_SERVICE_ACCOUNT_KEY is not set");
+  const clientPath = process.env.GDRIVE_OAUTH_CLIENT_PATH;
+  const tokenPath  = process.env.GDRIVE_OAUTH_TOKEN_PATH;
 
-  const absKey = path.resolve(keyPath);
-  if (!fs.existsSync(absKey)) {
-    throw new Error(`Service account key not found: ${absKey}`);
+  if (!clientPath || !tokenPath) {
+    throw new Error(
+      "GDRIVE_OAUTH_CLIENT_PATH or GDRIVE_OAUTH_TOKEN_PATH not set — run: npx tsx scripts/gdrive-auth.ts",
+    );
   }
 
-  const auth = new google.auth.GoogleAuth({
-    keyFile: absKey,
-    scopes: SCOPES,
+  const absClient = path.resolve(clientPath);
+  const absToken  = path.resolve(tokenPath);
+
+  if (!fs.existsSync(absClient)) throw new Error(`OAuth client file not found: ${absClient}`);
+  if (!fs.existsSync(absToken)) {
+    throw new Error(`OAuth token not found: ${absToken} — run: npx tsx scripts/gdrive-auth.ts`);
+  }
+
+  const { client_id, client_secret, redirect_uris } =
+    JSON.parse(fs.readFileSync(absClient, "utf-8")).installed;
+
+  const oAuth2 = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
+  oAuth2.setCredentials(JSON.parse(fs.readFileSync(absToken, "utf-8")));
+
+  // Persist refreshed tokens automatically so the session never expires.
+  oAuth2.on("tokens", (newTokens) => {
+    try {
+      const current = JSON.parse(fs.readFileSync(absToken, "utf-8"));
+      fs.writeFileSync(absToken, JSON.stringify({ ...current, ...newTokens }, null, 2));
+    } catch { /* best-effort */ }
   });
 
-  _drive = google.drive({ version: "v3", auth });
+  _drive = google.drive({ version: "v3", auth: oAuth2 });
   return _drive;
 }
 
-/**
- * Finds or creates a subfolder by name under the given parent folder ID.
- * Returns the subfolder's Drive file ID.
- */
 export async function ensureSubfolder(
   drive: drive_v3.Drive,
   parentId: string,
@@ -77,10 +79,6 @@ export interface UploadResult {
   bytes: number;
 }
 
-/**
- * Uploads a local file to the given Drive parent folder.
- * Returns the Drive file ID and byte count.
- */
 export async function uploadFile(
   drive: drive_v3.Drive,
   localPath: string,
@@ -88,7 +86,7 @@ export async function uploadFile(
   name: string,
 ): Promise<UploadResult> {
   const bytes = fs.statSync(localPath).size;
-  const ext = path.extname(name).toLowerCase();
+  const ext   = path.extname(name).toLowerCase();
 
   const mimeMap: Record<string, string> = {
     ".pdf":  "application/pdf",
@@ -100,14 +98,8 @@ export async function uploadFile(
   const mimeType = mimeMap[ext] ?? "application/octet-stream";
 
   const res = await drive.files.create({
-    requestBody: {
-      name,
-      parents: [parentId],
-    },
-    media: {
-      mimeType,
-      body: fs.createReadStream(localPath),
-    },
+    requestBody: { name, parents: [parentId] },
+    media: { mimeType, body: fs.createReadStream(localPath) },
     fields: "id",
   });
 

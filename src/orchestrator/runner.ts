@@ -75,6 +75,7 @@ export interface RunConfig {
   max:          number;
   runId:        string;
   lockTtlSecs:  number;    // 14400 (4h) daily, 21600 (6h) backfill
+  hoursOld?:    number;    // LinkedIn-only recency window passed as HOURS_OLD
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +89,7 @@ export interface RunConfig {
  * Never throws — all errors are caught and logged.
  */
 export async function spawnRun(config: RunConfig): Promise<number> {
-  const { source, postedWithin, max, runId, lockTtlSecs } = config;
+  const { source, postedWithin, max, runId, lockTtlSecs, hoursOld } = config;
   const startedAt = new Date();
 
   // Ensure log directories exist
@@ -117,6 +118,10 @@ export async function spawnRun(config: RunConfig): Promise<number> {
 
   if (postedWithin) {
     childEnv.POSTED_WITHIN = postedWithin;
+  }
+
+  if (hoursOld != null && source === "linkedin") {
+    childEnv.HOURS_OLD = String(hoursOld);
   }
 
   // Open per-run log file

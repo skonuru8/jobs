@@ -99,6 +99,7 @@ export interface Stats {
   pending: number;
   applyLater: number;
   applied: number;
+  archived: number;
   hardRejectionsUnreviewed: number;
   softRejectionsUnreviewed: number;
 }
@@ -163,6 +164,24 @@ export async function getAppliedJobs(): Promise<ApplyQueueRow[]> {
   const res = await fetch('/api/applied-jobs');
   if (!res.ok) throw new Error(`applied-jobs failed: ${res.status}`);
   return res.json();
+}
+
+export interface ArchivedJobRow {
+  job_id:          string;
+  title:           string;
+  company:         string;
+  archived_at:     string;
+  archived_source: string | null;
+  applied_at:      string | null;
+  drive_folder_id: string | null;
+  artifact_count:  number;
+}
+
+export async function getArchivedJobs(): Promise<ArchivedJobRow[]> {
+  const res = await fetch('/api/archived-jobs');
+  if (!res.ok) throw new Error(`archived-jobs failed: ${res.status}`);
+  const rows = await res.json() as Array<ArchivedJobRow & { artifact_count: string }>;
+  return rows.map(r => ({ ...r, artifact_count: Number(r.artifact_count) }));
 }
 
 export async function getResumeTex(jobId: string): Promise<{ tailored: string; canonical: string } | null> {
@@ -316,11 +335,11 @@ export async function streamOrchestratorLog(h: StreamHandlers): Promise<void> {
   await readSseStream(res.body, h);
 }
 
-export async function postArchiveRun(dryRun = false, h: StreamHandlers, ageDays?: number): Promise<void> {
+export async function postArchiveRun(dryRun = false, h: StreamHandlers, ageDays?: number, jobIds?: string[]): Promise<void> {
   const res = await fetch('/api/archive/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dryRun, ...(ageDays !== undefined ? { ageDays } : {}) }),
+    body: JSON.stringify({ dryRun, ...(ageDays !== undefined ? { ageDays } : {}), ...(jobIds ? { jobIds } : {}) }),
     signal: h.signal,
   });
   if (res.status === 409) throw new Error('An archive run is already in progress.');

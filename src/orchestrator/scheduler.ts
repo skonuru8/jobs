@@ -3,13 +3,14 @@
  *
  * Schedule (all times local to the machine running the orchestrator):
  *
- *   Dice daily (Mon–Sat):   0 9,13,17,21 * * 1-6   POSTED_WITHIN=ONE   MAX=50
- *   Dice backfill (Sun):    0 9 * * 0               POSTED_WITHIN=SEVEN MAX=100  TTL=6h
- *   Dice Sun afternoons:    0 13,17,21 * * 0        POSTED_WITHIN=ONE   MAX=50
- *   Jobright API (Mon–Sat): 0 9,13,17,21 * * 1-6    MAX=40
- *   Jobright API (Sun):     0 13,17,21 * * 0        MAX=40
- *   LinkedIn (Mon–Sat):     0 9,13,17,21 * * 1-6    (no POSTED_WITHIN)  MAX=30
- *   LinkedIn (Sun):         0 13,17,21 * * 0        (no POSTED_WITHIN)  MAX=30
+ *   Dice daily (Mon–Sat):      0 8,11,14,17 * * 1-6   POSTED_WITHIN=ONE   MAX=40
+ *   Dice backfill (Sun):       0 8 * * 0               POSTED_WITHIN=SEVEN MAX=75  TTL=6h
+ *   Dice Sun afternoons:       0 11,14,17 * * 0        POSTED_WITHIN=ONE   MAX=40
+ *   Jobright API (Mon–Sat):    0 8,11,14,17 * * 1-6    MAX=40
+ *   Jobright API (Sun):        0 11,14,17 * * 0        MAX=40
+ *   LinkedIn morning (Mon–Sat):0 8 * * 1-6             HOURS_OLD=15        MAX=40
+ *   LinkedIn daytime (Mon–Sat):0 11,14,17 * * 1-6      (no HOURS_OLD)      MAX=40
+ *   LinkedIn (Sun):            0 11,14,17 * * 0        (no HOURS_OLD)      MAX=40
  *   Ghost reaper:           *\/10 * * * *           sweeps stale runs (every 10 minutes)
  *
  * Jobright and LinkedIn are offset from Dice by 1h to avoid hitting
@@ -156,18 +157,18 @@ export function registerSchedules(): ScheduledTask[] {
   }
 
   // ── Dice daily (Mon–Sat) ─────────────────────────────────────────────────
-  schedule("0 9,13,17,21 * * 1-6", "dice-daily", async () => {
+  schedule("0 8,11,14,17 * * 1-6", "dice-daily", async () => {
     await spawnRun({
       source:       "dice",
       postedWithin: "ONE",
-      max:          38,
+      max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,   // 4h
     });
   });
 
-  // ── Dice backfill (Sunday 9am only) ─────────────────────────────────────
-  schedule("0 9 * * 0", "dice-backfill", async () => {
+  // ── Dice backfill (Sunday 8am only) ─────────────────────────────────────
+  schedule("0 8 * * 0", "dice-backfill", async () => {
     await spawnRun({
       source:       "dice",
       postedWithin: "SEVEN",
@@ -178,61 +179,72 @@ export function registerSchedules(): ScheduledTask[] {
   });
 
   // ── Dice Sunday afternoons (not dark after backfill) ─────────────────────
-  schedule("0 13,17,21 * * 0", "dice-sunday", async () => {
+  schedule("0 11,14,17 * * 0", "dice-sunday", async () => {
     await spawnRun({
       source:       "dice",
       postedWithin: "ONE",
-      max:          38,
+      max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
     });
   });
 
-  // ── Jobright API (Mon–Sat, 4×/day matching Dice cadence) ─────────────────
-  // Replaces the Playwright HTML scraper. The API path:
+  // ── Jobright API (Mon–Sat, 4×/day) ───────────────────────────────────────
   // - Fetches structured JSON instead of scraping JS-rendered SPA
   // - Synthesizes description_raw from API fields (no separate fetch needed)
   // - Eliminates ATS 403/empty-body failure class for Jobright source
-  // - Capped at MAX=30 to stay well under Jobright's ~30-40 rate limit
-  schedule("0 9,13,17,21 * * 1-6", "jobright-api-daily", async () => {
+  schedule("0 8,11,14,17 * * 1-6", "jobright-api-daily", async () => {
     await spawnRun({
       source:       "jobright_api",
       postedWithin: "",      // Jobright API doesn't take posted_within
-      max:          30,
+      max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
     });
   });
 
   // ── Jobright API Sunday afternoons ───────────────────────────────────────
-  schedule("0 13,17,21 * * 0", "jobright-api-sunday", async () => {
+  schedule("0 11,14,17 * * 0", "jobright-api-sunday", async () => {
     await spawnRun({
       source:       "jobright_api",
       postedWithin: "",
-      max:          30,
+      max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
     });
   });
 
-  // ── LinkedIn (Mon–Sat, matching Dice cadence) ────────────────────────────
-  // LinkedIn does not support POSTED_WITHIN — JobSpy doesn't expose it
-  schedule("0 9,13,17,21 * * 1-6", "linkedin-daily", async () => {
+  // ── LinkedIn morning (Mon–Sat, 8am) ─────────────────────────────────────
+  // hoursOld=15 covers yesterday 5pm → today 8am so no overnight gap.
+  schedule("0 8 * * 1-6", "linkedin-morning", async () => {
     await spawnRun({
       source:       "linkedin",
-      postedWithin: "",        // no recency filter for LinkedIn
-      max:          22,
+      postedWithin: "",
+      max:          40,
+      runId:        newRunId(),
+      lockTtlSecs:  14_400,
+      hoursOld:     15,
+    });
+  });
+
+  // ── LinkedIn daytime (Mon–Sat, 11am / 2pm / 5pm) ────────────────────────
+  // No hours filter — let JobSpy use its config default for daytime runs.
+  schedule("0 11,14,17 * * 1-6", "linkedin-daytime", async () => {
+    await spawnRun({
+      source:       "linkedin",
+      postedWithin: "",
+      max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
     });
   });
 
   // ── LinkedIn Sunday afternoons ────────────────────────────────────────────
-  schedule("0 13,17,21 * * 0", "linkedin-sunday", async () => {
+  schedule("0 11,14,17 * * 0", "linkedin-sunday", async () => {
     await spawnRun({
       source:       "linkedin",
       postedWithin: "",
-      max:          22,
+      max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
     });
@@ -240,14 +252,13 @@ export function registerSchedules(): ScheduledTask[] {
 
   // ── Google Drive archival (daily at 03:00) ───────────────────────────────
   schedule("0 3 * * *", "drive-archive", async () => {
-    const keyPath  = process.env.GDRIVE_SERVICE_ACCOUNT_KEY;
     const folderId = process.env.GDRIVE_ARCHIVE_FOLDER_ID;
-    if (!keyPath || !folderId) {
-      appendOrchestratorLog("[drive-archive] skipped — GDRIVE_SERVICE_ACCOUNT_KEY or GDRIVE_ARCHIVE_FOLDER_ID not set");
+    if (!process.env.GDRIVE_OAUTH_CLIENT_PATH || !process.env.GDRIVE_OAUTH_TOKEN_PATH || !folderId) {
+      appendOrchestratorLog("[drive-archive] skipped — GDRIVE_OAUTH_CLIENT_PATH, GDRIVE_OAUTH_TOKEN_PATH, or GDRIVE_ARCHIVE_FOLDER_ID not set");
       return;
     }
     const PROJECT_ROOT = process.env.PROJECT_ROOT ?? SCHEDULER_REPO_ROOT;
-    const ageDays      = Number(process.env.GDRIVE_ARCHIVE_AGE_DAYS ?? 14);
+    const ageDays      = Number(process.env.GDRIVE_ARCHIVE_AGE_DAYS ?? 7);
     const logRetention = Number(process.env.GDRIVE_LOG_RETENTION_DAYS ?? 30);
     await runArchive(getArchivePool(), {
       execute:          true,

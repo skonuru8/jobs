@@ -10,6 +10,7 @@
     "ui-server": "tsx scripts/ui-server.ts",
     "clean-slate": "tsx scripts/clean-slate.ts",
     "archive:drive": "tsx scripts/archive-drive.ts",
+    "gdrive:auth": "tsx scripts/gdrive-auth.ts",
     "audit:artifacts": "tsx scripts/audit-artifacts.ts",
     "test": "vitest run",
     "test:watch": "vitest",

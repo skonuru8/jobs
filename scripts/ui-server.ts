@@ -407,7 +407,7 @@ async function main() {
       const labeledToday = today ? 'AND l.labeled_at >= CURRENT_DATE' : '';
       const appliedToday = today ? 'AND l.applied_at >= CURRENT_DATE' : '';
 
-      const [pendingRes, applyLaterRes, appliedRes, hardUnreviewedRes, softUnreviewedRes] = await Promise.all([
+      const [pendingRes, applyLaterRes, appliedRes, archivedRes, hardUnreviewedRes, softUnreviewedRes] = await Promise.all([
         pool.query(`
           SELECT COUNT(*) FROM judge_verdicts jv
           JOIN jobs j ON j.job_id = jv.job_id AND j.run_id = jv.run_id
@@ -424,7 +424,12 @@ async function main() {
         pool.query(`
           SELECT COUNT(*) FROM labels l
           WHERE l.application_status = 'applied'
+            AND l.archived_at IS NULL
             ${appliedToday}
+        `),
+        pool.query(`
+          SELECT COUNT(*) FROM labels l
+          WHERE l.archived_at IS NOT NULL
         `),
         pool.query(`
           SELECT COUNT(*) FROM filter_results fr
@@ -446,6 +451,7 @@ async function main() {
         pending: parseInt(pendingRes.rows[0].count, 10),
         applyLater: parseInt(applyLaterRes.rows[0].count, 10),
         applied: parseInt(appliedRes.rows[0].count, 10),
+        archived: parseInt(archivedRes.rows[0].count, 10),
         hardRejectionsUnreviewed: parseInt(hardUnreviewedRes.rows[0].count, 10),
         softRejectionsUnreviewed: parseInt(softUnreviewedRes.rows[0].count, 10),
       });
@@ -615,6 +621,7 @@ async function main() {
         JOIN labels l ON l.job_id = j.job_id AND l.run_id = j.run_id
         WHERE l.application_status = 'applied'
           AND l.applied_at IS NOT NULL
+          AND l.archived_at IS NULL
         ORDER BY l.applied_at DESC
         LIMIT 500
       `);
@@ -661,6 +668,37 @@ async function main() {
       res.json(rows);
     } catch (err) {
       console.error('[ui-server] /api/applied-jobs error:', err);
+      res.status(500).json({ error: 'db_error', detail: (err as Error).message });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/archived-jobs
+  // -------------------------------------------------------------------------
+  app.get('/api/archived-jobs', async (_req, res) => {
+    try {
+      const result = await pool.query<{
+        job_id: string; title: string; company: string;
+        archived_at: string; archived_source: string | null;
+        applied_at: string | null; drive_folder_id: string | null;
+        artifact_count: string;
+      }>(`
+        SELECT j.job_id, j.title, j.company,
+               l.archived_at, l.archived_source, l.applied_at,
+               aa.drive_folder_id,
+               COUNT(aa2.id)::text AS artifact_count
+          FROM labels l
+          JOIN jobs j ON j.job_id = l.job_id AND j.run_id = l.run_id
+          LEFT JOIN LATERAL (
+            SELECT drive_folder_id FROM archived_artifacts WHERE job_id = j.job_id LIMIT 1
+          ) aa ON true
+          LEFT JOIN archived_artifacts aa2 ON aa2.job_id = j.job_id
+         WHERE l.archived_at IS NOT NULL
+         GROUP BY j.job_id, j.title, j.company, l.archived_at, l.archived_source, l.applied_at, aa.drive_folder_id
+         ORDER BY l.archived_at DESC
+      `);
+      res.json(result.rows);
+    } catch (err) {
       res.status(500).json({ error: 'db_error', detail: (err as Error).message });
     }
   });
@@ -1015,14 +1053,14 @@ async function main() {
       return;
     }
 
-    const b = (req.body ?? {}) as { dryRun?: boolean; ageDays?: number };
+    const b = (req.body ?? {}) as { dryRun?: boolean; ageDays?: number; jobIds?: string[] };
     const execute = b.dryRun !== true;
     const ageDays = typeof b.ageDays === 'number' ? b.ageDays : Number(process.env.GDRIVE_ARCHIVE_AGE_DAYS ?? 14);
+    const jobIds  = Array.isArray(b.jobIds) && b.jobIds.length > 0 ? b.jobIds : undefined;
 
-    const keyPath  = process.env.GDRIVE_SERVICE_ACCOUNT_KEY;
     const folderId = process.env.GDRIVE_ARCHIVE_FOLDER_ID;
-    if (!keyPath || !folderId) {
-      res.status(400).json({ error: 'not_configured', detail: 'GDRIVE_SERVICE_ACCOUNT_KEY or GDRIVE_ARCHIVE_FOLDER_ID not set.' });
+    if (!process.env.GDRIVE_OAUTH_CLIENT_PATH || !process.env.GDRIVE_OAUTH_TOKEN_PATH || !folderId) {
+      res.status(400).json({ error: 'not_configured', detail: 'GDRIVE_OAUTH_CLIENT_PATH, GDRIVE_OAUTH_TOKEN_PATH, or GDRIVE_ARCHIVE_FOLDER_ID not set.' });
       return;
     }
 
@@ -1044,6 +1082,7 @@ async function main() {
       await runArchive(pool, {
         execute,
         ageDays,
+        jobIds,
         pruneLogs:        true,
         logRetentionDays: logRetention,
         repoRoot:         REPO_ROOT,
@@ -1072,10 +1111,9 @@ async function main() {
     const jobId = req.params.job_id;
     const force = Boolean((req.body as any)?.force);
 
-    const keyPath  = process.env.GDRIVE_SERVICE_ACCOUNT_KEY;
     const folderId = process.env.GDRIVE_ARCHIVE_FOLDER_ID;
-    if (!keyPath || !folderId) {
-      res.status(400).json({ error: 'not_configured', detail: 'GDRIVE_SERVICE_ACCOUNT_KEY or GDRIVE_ARCHIVE_FOLDER_ID not set.' });
+    if (!process.env.GDRIVE_OAUTH_CLIENT_PATH || !process.env.GDRIVE_OAUTH_TOKEN_PATH || !folderId) {
+      res.status(400).json({ error: 'not_configured', detail: 'GDRIVE_OAUTH_CLIENT_PATH, GDRIVE_OAUTH_TOKEN_PATH, or GDRIVE_ARCHIVE_FOLDER_ID not set.' });
       return;
     }
 

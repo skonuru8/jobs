@@ -1,5 +1,5 @@
 import type { Stats } from '../api';
-import { Briefcase, XCircle, Wave, Check, Clock, Panel, Terminal } from '../icons';
+import { Briefcase, XCircle, Wave, Check, Clock, Panel, Terminal, CloudUpload } from '../icons';
 import type { SVGProps } from 'react';
 
 export const BRAND = { mark: 'J', a: 'jo', b: 'bs', sub: 'job copilot', name: 'jobs' };
@@ -16,12 +16,13 @@ export const TABS: NavTab[] = [
   { id: 'hard', label: 'Hard Rejections', title: 'Hard Rejections', sub: 'Roles filtered out before scoring — audit for false negatives' },
   { id: 'soft', label: 'Soft Rejections', title: 'Soft Rejections', sub: 'Scored below threshold — second-look queue' },
   { id: 'applied', label: 'Applied', title: 'Applied', sub: 'Everything you have sent out, by day' },
+  { id: 'archived', label: 'Archived', title: 'Archived', sub: 'Jobs backed up to Google Drive' },
   { id: 'history', label: 'Run History', title: 'Run History', sub: 'Scrape & score pipeline runs' },
   { id: 'pipeline', label: 'Run Pipeline', title: 'Pipeline Control', sub: 'Launch runs, toggle orchestrator, stream live output' },
 ];
 
 const ICONS: Record<string, (p: SVGProps<SVGSVGElement>) => JSX.Element> = {
-  apply: Briefcase, hard: XCircle, soft: Wave, applied: Check, history: Clock, pipeline: Terminal,
+  apply: Briefcase, hard: XCircle, soft: Wave, applied: Check, archived: CloudUpload, history: Clock, pipeline: Terminal,
 };
 
 interface Props {
@@ -36,11 +37,12 @@ interface Props {
 
 export function Sidebar({ activeTab, onChange, stats, scope, onToggleScope, collapsed, onCollapse }: Props) {
   const counts: Record<string, number | null> = {
-    apply: stats?.pending ?? null,
-    hard: stats?.hardRejectionsUnreviewed ?? null,
-    soft: stats?.softRejectionsUnreviewed ?? null,
-    applied: stats?.applied ?? null,
-    history: null,
+    apply:    stats?.pending ?? null,
+    hard:     stats?.hardRejectionsUnreviewed ?? null,
+    soft:     stats?.softRejectionsUnreviewed ?? null,
+    applied:  stats?.applied ?? null,
+    archived: stats?.archived ?? null,
+    history:  null,
     pipeline: null,
   };
   const spark = [5, 8, 6, 11, 7, 9, 14, 10, 12, 8];

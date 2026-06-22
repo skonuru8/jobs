@@ -22,6 +22,7 @@ import {
   Copy as PhCopy,
   Eraser as PhEraser,
   ArrowLineDown as PhArrowLineDown,
+  CloudArrowUp as PhCloudArrowUp,
 } from '@phosphor-icons/react';
 
 type P = SVGProps<SVGSVGElement>;
@@ -53,4 +54,5 @@ export const Terminal  = wrap(PhTerminal);
 export const Power     = wrap(PhPower);
 export const Copy      = wrap(PhCopy);
 export const Eraser    = wrap(PhEraser);
-export const ScrollDown = wrap(PhArrowLineDown);
+export const ScrollDown  = wrap(PhArrowLineDown);
+export const CloudUpload = wrap(PhCloudArrowUp);
