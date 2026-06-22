@@ -218,6 +218,7 @@ async function main() {
     '010_ledger_run_id_text.sql',
     '011_ledger_truth_distance_numeric.sql',
     '013_drive_archival.sql',
+    '014_manual_archive.sql',
     '014_concern_answers.sql',
   ]) {
     const migrationPath = path.join(REPO_ROOT, 'migrations', mig);
@@ -594,7 +595,8 @@ async function main() {
           cl.flags AS cover_flags,
           cl.meta_path AS cover_meta_path,
           l.label, l.notes AS label_notes,
-          l.application_status, l.applied_at
+          l.application_status, l.applied_at, l.archived_at,
+          aa.drive_folder_id
         FROM jobs j
         LEFT JOIN scores         s  ON s.job_id  = j.job_id AND s.run_id  = j.run_id
         LEFT JOIN judge_verdicts jv ON jv.job_id = j.job_id AND jv.run_id = j.run_id
@@ -606,6 +608,10 @@ async function main() {
           SELECT pdf_path, word_count, flags, meta_path
           FROM cover_letters WHERE job_id = j.job_id ORDER BY generated_at DESC NULLS LAST LIMIT 1
         ) cl ON true
+        LEFT JOIN LATERAL (
+          SELECT drive_folder_id
+          FROM archived_artifacts WHERE job_id = j.job_id LIMIT 1
+        ) aa ON true
         JOIN labels l ON l.job_id = j.job_id AND l.run_id = j.run_id
         WHERE l.application_status = 'applied'
           AND l.applied_at IS NOT NULL
@@ -1039,6 +1045,61 @@ async function main() {
         execute,
         ageDays,
         pruneLogs:        true,
+        logRetentionDays: logRetention,
+        repoRoot:         REPO_ROOT,
+        rootFolderId:     folderId,
+        onLog:            send,
+      });
+    } catch (e) {
+      send(`[drive-archive] fatal error: ${(e as Error).message}`);
+    } finally {
+      archiveRunning = false;
+      try {
+        res.write(`event: done\ndata: ${JSON.stringify({ exitCode: 0 })}\n\n`);
+        res.end();
+      } catch { /* client gone */ }
+    }
+  });
+
+  app.post('/api/jobs/:job_id/archive', async (req, res) => {
+    if (archiveRunning) {
+      res.status(409).json({ error: 'archive_in_flight', detail: 'An archive run is already in progress.' });
+      return;
+    }
+
+    const b = (req.body ?? {}) as { dryRun?: boolean };
+    const execute = b.dryRun !== true;
+    const jobId = req.params.job_id;
+    const force = Boolean((req.body as any)?.force);
+
+    const keyPath  = process.env.GDRIVE_SERVICE_ACCOUNT_KEY;
+    const folderId = process.env.GDRIVE_ARCHIVE_FOLDER_ID;
+    if (!keyPath || !folderId) {
+      res.status(400).json({ error: 'not_configured', detail: 'GDRIVE_SERVICE_ACCOUNT_KEY or GDRIVE_ARCHIVE_FOLDER_ID not set.' });
+      return;
+    }
+
+    archiveRunning = true;
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders?.();
+
+    const send = (line: string) => {
+      try { res.write(`data: ${JSON.stringify(stripAnsi(line))}\n\n`); } catch { /* client gone */ }
+    };
+
+    try {
+      const logRetention = Number(process.env.GDRIVE_LOG_RETENTION_DAYS ?? 30);
+      await runArchive(pool, {
+        execute,
+        ageDays:          0,
+        jobId,
+        force,
+        pruneLogs:        false,
         logRetentionDays: logRetention,
         repoRoot:         REPO_ROOT,
         rootFolderId:     folderId,

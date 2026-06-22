@@ -20,6 +20,8 @@ import { getDriveClient, ensureSubfolder, uploadFile } from "./drive-client.js";
 export interface ArchiveOptions {
   execute:          boolean;
   ageDays:          number;
+  jobId?:           string;
+  force?:           boolean;
   pruneLogs:        boolean;
   logRetentionDays: number;
   repoRoot:         string;
@@ -72,12 +74,54 @@ async function findEligibleJobs(pool: Pool, ageDays: number): Promise<EligibleJo
   return result.rows;
 }
 
+async function findJobById(pool: Pool, jobId: string): Promise<EligibleJob[]> {
+  const result = await pool.query<EligibleJob>(
+    `SELECT j.job_id, j.run_id, j.title, j.company,
+            tr.pdf_path  AS resume_pdf,
+            tr.tex_path  AS resume_tex,
+            tr.meta_path AS resume_meta,
+            cl.pdf_path  AS cover_pdf,
+            cl.tex_path  AS cover_tex
+       FROM jobs j
+       LEFT JOIN LATERAL (
+         SELECT pdf_path, tex_path, meta_path
+           FROM tailored_resumes
+          WHERE job_id = j.job_id
+          ORDER BY generated_at DESC NULLS LAST
+          LIMIT 1
+       ) tr ON true
+       LEFT JOIN LATERAL (
+         SELECT pdf_path, tex_path
+           FROM cover_letters
+          WHERE job_id = j.job_id
+          ORDER BY generated_at DESC NULLS LAST
+          LIMIT 1
+       ) cl ON true
+      WHERE j.job_id = $1
+      LIMIT 1`,
+    [jobId],
+  );
+  return result.rows;
+}
+
 async function alreadyArchivedKinds(pool: Pool, jobId: string): Promise<Set<string>> {
   const result = await pool.query<{ artifact_kind: string }>(
     `SELECT artifact_kind FROM archived_artifacts WHERE job_id = $1`,
     [jobId],
   );
   return new Set(result.rows.map(r => r.artifact_kind));
+}
+
+async function existingDriveFolderId(pool: Pool, jobId: string): Promise<string | null> {
+  const result = await pool.query<{ drive_folder_id: string | null }>(
+    `SELECT drive_folder_id
+       FROM archived_artifacts
+      WHERE job_id = $1
+        AND drive_folder_id IS NOT NULL
+      LIMIT 1`,
+    [jobId],
+  );
+  return result.rows[0]?.drive_folder_id ?? null;
 }
 
 interface ArtifactSpec {
@@ -132,17 +176,26 @@ export async function runArchive(
   pool: Pool,
   opts: ArchiveOptions,
 ): Promise<ArchiveSummary> {
-  const { execute, ageDays, pruneLogs, logRetentionDays, repoRoot, rootFolderId, onLog } = opts;
+  const { execute, ageDays, jobId, force, pruneLogs, logRetentionDays, repoRoot, rootFolderId, onLog } = opts;
 
   const summary: ArchiveSummary = {
     eligible: 0, succeeded: 0, failed: 0, skipped: 0, prunedLogs: 0, errors: [],
   };
 
-  const jobs = await findEligibleJobs(pool, ageDays);
+  const jobs = jobId
+    ? await findJobById(pool, jobId)
+    : await findEligibleJobs(pool, ageDays);
   summary.eligible = jobs.length;
 
-  if (jobs.length === 0) {
+  if (jobId && jobs.length === 0) {
+    onLog(`[drive-archive] Job ${jobId} not found.`);
+    return summary;
+  }
+
+  if (!jobId && jobs.length === 0) {
     onLog("[drive-archive] No eligible jobs found.");
+  } else if (jobId) {
+    onLog(`[drive-archive] Found job ${jobId}.`);
   } else {
     onLog(`[drive-archive] Found ${jobs.length} eligible job(s) (applied_at > ${ageDays} days ago, not yet archived).`);
   }
@@ -168,11 +221,17 @@ export async function runArchive(
     try {
       const alreadyDone = await alreadyArchivedKinds(pool, job.job_id);
       const specs = buildArtifactSpecs(job, repoRoot);
-      const toUpload = specs.filter(s => !alreadyDone.has(s.kind));
+      const toUpload = force ? specs : specs.filter(s => !alreadyDone.has(s.kind));
 
       if (specs.length === 0) {
         // No artifacts exist on disk — mark archived so this job stops re-qualifying.
-        await pool.query(`UPDATE labels SET archived_at = NOW() WHERE job_id = $1`, [job.job_id]);
+        await pool.query(
+          `UPDATE labels
+              SET archived_at = NOW(),
+                  archived_source = $2
+            WHERE job_id = $1`,
+          [job.job_id, jobId ? "manual" : "auto"],
+        );
         onLog(`  [skip] no artifacts on disk for ${job.job_id} — marked archived`);
         summary.skipped++;
         continue;
@@ -184,10 +243,12 @@ export async function runArchive(
         continue;
       }
 
-      // Mirror: rootFolder / YYYY-MM-DD / job_id
-      const dateStr      = new Date().toISOString().slice(0, 10);
-      const dateFolderId = await ensureSubfolder(drive, rootFolderId, dateStr);
-      const jobFolderId  = await ensureSubfolder(drive, dateFolderId, job.job_id);
+      let jobFolderId = await existingDriveFolderId(pool, job.job_id);
+      if (!jobFolderId) {
+        const dateStr      = new Date().toISOString().slice(0, 10);
+        const dateFolderId = await ensureSubfolder(drive, rootFolderId, dateStr);
+        jobFolderId = await ensureSubfolder(drive, dateFolderId, job.job_id);
+      }
 
       for (const spec of toUpload) {
         const absPath  = path.join(repoRoot, spec.repoRel!);
@@ -214,8 +275,11 @@ export async function runArchive(
       const allKinds = specs.map(s => s.kind);
       if (allKinds.every(k => nowDone.has(k))) {
         await pool.query(
-          `UPDATE labels SET archived_at = NOW() WHERE job_id = $1`,
-          [job.job_id],
+          `UPDATE labels
+              SET archived_at = NOW(),
+                  archived_source = $2
+            WHERE job_id = $1`,
+          [job.job_id, jobId ? "manual" : "auto"],
         );
         onLog(`  [done] ${job.job_id} fully archived`);
       }

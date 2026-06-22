@@ -27,7 +27,9 @@ export interface ApplyQueueRow {
   label_notes: string | null;
   application_status: 'applied' | 'skipped' | 'apply_later' | null;
   applied_at: string | null;
-  required_skills_with_risk?: any[] | null;
+  archived_at: string | null;
+  drive_folder_id: string | null;
+  required_skills_with_risk?: unknown[] | null;
   judge_concerns?: string[] | null;
   concern_answers?: Array<{ concern: string; answer: string; status: string }>;
   /** Link to saved job_description.md under output/applications/<slug>/ */
@@ -316,6 +318,22 @@ export async function streamOrchestratorLog(h: StreamHandlers): Promise<void> {
 
 export async function postArchiveRun(dryRun = false, h: StreamHandlers): Promise<void> {
   const res = await fetch('/api/archive/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dryRun }),
+    signal: h.signal,
+  });
+  if (res.status === 409) throw new Error('An archive run is already in progress.');
+  if (res.status === 400) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error((j as { detail?: string }).detail ?? 'Archive not configured.');
+  }
+  if (!res.ok || !res.body) throw new Error(`archive run failed: ${res.status}`);
+  await readSseStream(res.body, h);
+}
+
+export async function postJobArchive(jobId: string, dryRun = false, h: StreamHandlers): Promise<void> {
+  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/archive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ dryRun }),

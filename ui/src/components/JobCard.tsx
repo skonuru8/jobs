@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { CSSProperties } from 'react';
-import { postLabel, postGenerateArtifacts, getStats } from '../api';
+import { postLabel, postGenerateArtifacts, postJobArchive, getStats } from '../api';
 import type { ApplyQueueRow, HardRejectionRow, SoftRejectionRow, Stats, RiskSummary } from '../api';
 import { timeAgo, renderMarkdownPreview } from '../utils';
 import { Chevron, Ext, Doc, Spark, Warn, Check } from '../icons';
@@ -79,6 +79,8 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
   const [resumeProgress, setResumeProgress] = useState<number | null>(null);
   const [coverProgress, setCoverProgress] = useState<number | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
+  const [archiveLog, setArchiveLog] = useState('');
   const genTimers = useRef<{ resume?: ReturnType<typeof setInterval>; cover?: ReturnType<typeof setInterval> }>({});
   const [diffOpen, setDiffOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -173,6 +175,32 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, row.job_id, applyRow?.resume_pdf_url, applyRow?.cover_pdf_url, onDataChange, onStatsUpdate]);
 
+  const appendArchiveLog = useCallback((line: string) => {
+    setArchiveLog(prev => prev ? `${prev}\n${line}` : line);
+  }, []);
+
+  const runJobArchive = useCallback(async () => {
+    if (mode !== 'apply') return;
+    let completed = false;
+    setArchiving(true);
+    setArchiveLog('');
+    try {
+      await postJobArchive(row.job_id, false, {
+        onLine: appendArchiveLog,
+        onDone: () => { completed = true; },
+        onError: err => appendArchiveLog(`[drive-archive] ${err.message}`),
+      });
+      if (completed) {
+        onDataChange?.();
+        onStatsUpdate(await getStats());
+      }
+    } catch (e) {
+      appendArchiveLog((e as Error).message);
+    } finally {
+      setArchiving(false);
+    }
+  }, [appendArchiveLog, mode, row.job_id, onDataChange, onStatsUpdate]);
+
   useEffect(() => {
     const timers = genTimers.current;
     return () => { clearInterval(timers.resume); clearInterval(timers.cover); };
@@ -196,6 +224,21 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
             {isApplied && <span className="status-pill applied"><Check style={{ width: 11, height: 11 }} />Applied</span>}
             {isLater && <span className="status-pill later">Later</span>}
             {isSkipped && !isApplied && <span className="status-pill notapplied">Not applied</span>}
+            {applyRow?.archived_at && (
+              applyRow.drive_folder_id ? (
+                <a
+                  className="status-pill applied"
+                  href={`https://drive.google.com/drive/folders/${applyRow.drive_folder_id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={e => e.stopPropagation()}
+                >
+                  ☁ Archived
+                </a>
+              ) : (
+                <span className="status-pill applied">☁ Archived</span>
+              )
+            )}
           </div>
           <div className="j-meta">
             <span className="j-company">{row.company}</span>
@@ -337,6 +380,12 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
                     {coverProgress != null ? `Cover ${coverProgress}%` : applyRow?.cover_pdf_url ? 'Regen cover' : 'Generate cover'}
                     {coverProgress != null && <span className="gen-fill" style={{ width: `${coverProgress}%` }} />}
                   </button>
+                  <button
+                    className={`gen-btn${archiving ? ' busy' : ''}`}
+                    onClick={() => void runJobArchive()}
+                    disabled={archiving}>
+                    {archiving ? 'Archiving…' : applyRow?.archived_at ? 'Re-archive' : 'Archive to Drive'}
+                  </button>
                 </div>
                 {applyRow?.resume_pdf_url && <a className="alink" href={applyRow.resume_pdf_url} target="_blank" rel="noopener noreferrer"><Doc />Résumé PDF</a>}
                 {applyRow?.cover_pdf_url && <a className="alink" href={applyRow.cover_pdf_url} target="_blank" rel="noopener noreferrer"><Doc />Cover letter PDF</a>}
@@ -345,6 +394,7 @@ export function JobCard({ row, mode, expanded, onToggle, kbFocus, index, onStats
               </div>
               {(resumeProgress != null || coverProgress != null) && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 9 }}>Tailoring, usually 1-2 min. Keep this tab open.</div>}
               {genError && <div className="card-error" style={{ color: 'var(--neg)', fontSize: 12, marginTop: 8 }}>{genError} <button onClick={() => void runGenerate('resume')} style={{ background: 'none', border: 'none', color: 'var(--info)', textDecoration: 'underline', cursor: 'pointer', marginRight: 6 }}>Retry résumé</button><button onClick={() => void runGenerate('cover')} style={{ background: 'none', border: 'none', color: 'var(--info)', textDecoration: 'underline', cursor: 'pointer' }}>Retry cover</button></div>}
+              {archiveLog && <pre className="card-error" style={{ color: 'var(--ink-3)', fontSize: 12, marginTop: 8, whiteSpace: 'pre-wrap', maxHeight: 140, overflow: 'auto' }}>{archiveLog}</pre>}
             </div>
           )}
 

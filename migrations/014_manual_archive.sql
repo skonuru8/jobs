@@ -1,0 +1,1 @@
+ALTER TABLE labels ADD COLUMN IF NOT EXISTS archived_source TEXT;
