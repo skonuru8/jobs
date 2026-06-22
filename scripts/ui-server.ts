@@ -1015,8 +1015,9 @@ async function main() {
       return;
     }
 
-    const b = (req.body ?? {}) as { dryRun?: boolean };
+    const b = (req.body ?? {}) as { dryRun?: boolean; ageDays?: number };
     const execute = b.dryRun !== true;
+    const ageDays = typeof b.ageDays === 'number' ? b.ageDays : Number(process.env.GDRIVE_ARCHIVE_AGE_DAYS ?? 14);
 
     const keyPath  = process.env.GDRIVE_SERVICE_ACCOUNT_KEY;
     const folderId = process.env.GDRIVE_ARCHIVE_FOLDER_ID;
@@ -1039,7 +1040,6 @@ async function main() {
     };
 
     try {
-      const ageDays      = Number(process.env.GDRIVE_ARCHIVE_AGE_DAYS ?? 14);
       const logRetention = Number(process.env.GDRIVE_LOG_RETENTION_DAYS ?? 30);
       await runArchive(pool, {
         execute,

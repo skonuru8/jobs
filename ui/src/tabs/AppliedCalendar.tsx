@@ -56,7 +56,7 @@ export function AppliedCalendar({ onStatsUpdate, refreshKey }: Props) {
         onDone: () => setArchiving(false),
         onError: e => { setArchiveError(e.message); setArchiving(false); },
         signal: ctrl.signal,
-      });
+      }, 0);
     } catch (e) {
       setArchiveError((e as Error).message);
       setArchiving(false);

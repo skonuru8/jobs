@@ -316,11 +316,11 @@ export async function streamOrchestratorLog(h: StreamHandlers): Promise<void> {
   await readSseStream(res.body, h);
 }
 
-export async function postArchiveRun(dryRun = false, h: StreamHandlers): Promise<void> {
+export async function postArchiveRun(dryRun = false, h: StreamHandlers, ageDays?: number): Promise<void> {
   const res = await fetch('/api/archive/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dryRun }),
+    body: JSON.stringify({ dryRun, ...(ageDays !== undefined ? { ageDays } : {}) }),
     signal: h.signal,
   });
   if (res.status === 409) throw new Error('An archive run is already in progress.');
