@@ -102,3 +102,14 @@ export function makeStableManualFolderName(jobId: string): string {
 export function makeDatedManualFolderName(jobId: string, generatedAt: Date): string {
   return `${makeDateFolderName(generatedAt)}/manual/${makeSafeJobId(jobId)}`;
 }
+
+/**
+ * Builds the shared per-tick folder name. All sources that fire at the same
+ * scheduler tick pass the same tickStartedAt and produce the same folder:
+ * {YYYY-MM-DD}/{YYYY-MM-DDTHH-MM} (minute-truncated, colon-free).
+ */
+export function makeTickFolderName(tickStartedAt: Date): string {
+  const date = makeDateFolderName(tickStartedAt);
+  const stamp = tickStartedAt.toISOString().slice(0, 16).replace(/:/g, "-");
+  return `${date}/${stamp}`;
+}

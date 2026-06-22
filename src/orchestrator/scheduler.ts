@@ -35,6 +35,7 @@ import { releaseLock } from "./lock.js";
 import { appendReaperLog, appendOrchestratorLog } from "./monitor.js";
 import { fileURLToPath } from "url";
 import { runArchive } from "../archive/archive-applied.js";
+import { makeTickFolderName } from "../applications/run-folder.js";
 import { getPool as getArchivePool } from "../storage/db.js";
 
 const _schedulerDir = path.dirname(fileURLToPath(import.meta.url));
@@ -158,34 +159,40 @@ export function registerSchedules(): ScheduledTask[] {
 
   // ── Dice daily (Mon–Sat) ─────────────────────────────────────────────────
   schedule("0 8,11,14,17 * * 1-6", "dice-daily", async () => {
+    const runFolderName = makeTickFolderName(new Date());
     await spawnRun({
       source:       "dice",
       postedWithin: "ONE",
       max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,   // 4h
+      runFolderName,
     });
   });
 
   // ── Dice backfill (Sunday 8am only) ─────────────────────────────────────
   schedule("0 8 * * 0", "dice-backfill", async () => {
+    const runFolderName = makeTickFolderName(new Date());
     await spawnRun({
       source:       "dice",
       postedWithin: "SEVEN",
       max:          75,
       runId:        newRunId(),
       lockTtlSecs:  21_600,   // 6h — backfill can take longer
+      runFolderName,
     });
   });
 
   // ── Dice Sunday afternoons (not dark after backfill) ─────────────────────
   schedule("0 11,14,17 * * 0", "dice-sunday", async () => {
+    const runFolderName = makeTickFolderName(new Date());
     await spawnRun({
       source:       "dice",
       postedWithin: "ONE",
       max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
+      runFolderName,
     });
   });
 
@@ -194,29 +201,34 @@ export function registerSchedules(): ScheduledTask[] {
   // - Synthesizes description_raw from API fields (no separate fetch needed)
   // - Eliminates ATS 403/empty-body failure class for Jobright source
   schedule("0 8,11,14,17 * * 1-6", "jobright-api-daily", async () => {
+    const runFolderName = makeTickFolderName(new Date());
     await spawnRun({
       source:       "jobright_api",
       postedWithin: "",      // Jobright API doesn't take posted_within
       max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
+      runFolderName,
     });
   });
 
   // ── Jobright API Sunday afternoons ───────────────────────────────────────
   schedule("0 11,14,17 * * 0", "jobright-api-sunday", async () => {
+    const runFolderName = makeTickFolderName(new Date());
     await spawnRun({
       source:       "jobright_api",
       postedWithin: "",
       max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
+      runFolderName,
     });
   });
 
   // ── LinkedIn morning (Mon–Sat, 8am) ─────────────────────────────────────
   // hoursOld=15 covers yesterday 5pm → today 8am so no overnight gap.
   schedule("0 8 * * 1-6", "linkedin-morning", async () => {
+    const runFolderName = makeTickFolderName(new Date());
     await spawnRun({
       source:       "linkedin",
       postedWithin: "",
@@ -224,29 +236,34 @@ export function registerSchedules(): ScheduledTask[] {
       runId:        newRunId(),
       lockTtlSecs:  14_400,
       hoursOld:     15,
+      runFolderName,
     });
   });
 
   // ── LinkedIn daytime (Mon–Sat, 11am / 2pm / 5pm) ────────────────────────
   // No hours filter — let JobSpy use its config default for daytime runs.
   schedule("0 11,14,17 * * 1-6", "linkedin-daytime", async () => {
+    const runFolderName = makeTickFolderName(new Date());
     await spawnRun({
       source:       "linkedin",
       postedWithin: "",
       max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
+      runFolderName,
     });
   });
 
   // ── LinkedIn Sunday afternoons ────────────────────────────────────────────
   schedule("0 11,14,17 * * 0", "linkedin-sunday", async () => {
+    const runFolderName = makeTickFolderName(new Date());
     await spawnRun({
       source:       "linkedin",
       postedWithin: "",
       max:          40,
       runId:        newRunId(),
       lockTtlSecs:  14_400,
+      runFolderName,
     });
   });
 

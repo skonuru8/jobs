@@ -76,6 +76,7 @@ export interface RunConfig {
   runId:        string;
   lockTtlSecs:  number;    // 14400 (4h) daily, 21600 (6h) backfill
   hoursOld?:    number;    // LinkedIn-only recency window passed as HOURS_OLD
+  runFolderName?: string;   // shared per-tick folder, overrides child-derived name
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +90,7 @@ export interface RunConfig {
  * Never throws — all errors are caught and logged.
  */
 export async function spawnRun(config: RunConfig): Promise<number> {
-  const { source, postedWithin, max, runId, lockTtlSecs, hoursOld } = config;
+  const { source, postedWithin, max, runId, lockTtlSecs, hoursOld, runFolderName } = config;
   const startedAt = new Date();
 
   // Ensure log directories exist
@@ -122,6 +123,10 @@ export async function spawnRun(config: RunConfig): Promise<number> {
 
   if (hoursOld != null && source === "linkedin") {
     childEnv.HOURS_OLD = String(hoursOld);
+  }
+
+  if (runFolderName) {
+    childEnv.RUN_FOLDER_NAME = runFolderName;
   }
 
   // Open per-run log file

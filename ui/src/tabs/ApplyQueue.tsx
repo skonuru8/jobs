@@ -83,6 +83,23 @@ export function ApplyQueue({ onStatsUpdate, refreshKey, searchQuery, sortBy, sor
     return filtered.filter(r => r.applied_at && new Date(r.applied_at).toISOString().slice(0, 10) === day);
   }, [filtered, status, day]);
 
+  const withResume = useMemo(
+    () => finalRows.filter(r => !!r.resume_pdf_url),
+    [finalRows],
+  );
+
+  const noResumeBrackets = useMemo(() => {
+    const noResume = finalRows.filter(r => !r.resume_pdf_url);
+    const inRange = (r: ApplyQueueRow, lo: number, hi: number) =>
+      r.score_total >= lo && r.score_total < hi;
+    return [
+      { key: '70+',   label: '70%+ (no résumé)', rows: noResume.filter(r => r.score_total >= 0.70) },
+      { key: '65-70', label: '65–70%',           rows: noResume.filter(r => inRange(r, 0.65, 0.70)) },
+      { key: '60-65', label: '60–65%',           rows: noResume.filter(r => inRange(r, 0.60, 0.65)) },
+      { key: 'lt60',  label: 'Below 60%',        rows: noResume.filter(r => r.score_total < 0.60) },
+    ].filter(b => b.rows.length > 0);
+  }, [finalRows]);
+
   if (loading) return <div className="loading">Loading…</div>;
   if (error) return <div className="tab-error">Error: {error}</div>;
 
@@ -107,9 +124,50 @@ export function ApplyQueue({ onStatsUpdate, refreshKey, searchQuery, sortBy, sor
         </div>
       )}
 
-      <div className="count-line"><span className="count-num">{finalRows.length}</span><span className="count-word">role{finalRows.length !== 1 ? 's' : ''} in view</span></div>
+      <div className="count-line">
+        <span className="count-num">{withResume.length}</span>
+        <span className="count-word">role{withResume.length !== 1 ? 's' : ''} with résumé</span>
+      </div>
 
-      <CardList rows={finalRows} mode="apply" searchQuery={searchQuery} onStatsUpdate={onStatsUpdate} onDataChange={reload} swapKey={`${status}|${bucket}|${src}|${day}`} emptyHint="No roles match this filter." sortBy={sortBy} sortDir={sortDir} />
+      <CardList
+        rows={withResume}
+        mode="apply"
+        searchQuery={searchQuery}
+        onStatsUpdate={onStatsUpdate}
+        onDataChange={reload}
+        swapKey={`${status}|${bucket}|${src}|${day}|resume`}
+        emptyHint="No roles with a generated résumé in this filter."
+        sortBy={sortBy}
+        sortDir={sortDir}
+      />
+
+      {noResumeBrackets.length > 0 && (
+        <div className="score-brackets" style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-3)', marginBottom: 8 }}>
+            No résumé yet — by score
+          </div>
+          {noResumeBrackets.map(b => (
+            <details key={b.key} style={{ borderTop: '1px solid var(--line-2)' }}>
+              <summary style={{ cursor: 'pointer', padding: '10px 2px', fontWeight: 600, listStyle: 'none' }}>
+                {b.label} <span style={{ color: 'var(--ink-3)', fontWeight: 500 }}>{b.rows.length}</span>
+              </summary>
+              <div style={{ padding: '4px 0 12px' }}>
+                <CardList
+                  rows={b.rows}
+                  mode="apply"
+                  searchQuery={searchQuery}
+                  onStatsUpdate={onStatsUpdate}
+                  onDataChange={reload}
+                  swapKey={`${status}|${bucket}|${src}|${day}|noresume|${b.key}`}
+                  emptyHint="None in this range."
+                  sortBy={sortBy}
+                  sortDir={sortDir}
+                />
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

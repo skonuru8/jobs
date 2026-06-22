@@ -135,7 +135,9 @@ const FIXTURES_DIR   = path.join(REPO_ROOT, "fixtures", "extractor");
 const CONFIG_DIR     = path.join(REPO_ROOT, "config");
 const RUN_ID = process.env.RUN_ID ?? randomUUID();
 const RUN_STARTED_AT = new Date();
-const RUN_FOLDER_NAME = makeRunFolderName(RUN_STARTED_AT, RUN_ID);
+const RUN_FOLDER_NAME = process.env.RUN_FOLDER_NAME
+  ? process.env.RUN_FOLDER_NAME
+  : makeRunFolderName(RUN_STARTED_AT, RUN_ID);
 const RUN_LOG_PATH = installRunLog(REPO_ROOT, SOURCE, RUN_ID, RUN_STARTED_AT);
 
 // ---------------------------------------------------------------------------
@@ -1036,14 +1038,14 @@ async function processJobs(
         log(`[${n}]  Skipping artifact gen: ${bundle.reason}`);
         allFlags.push("artifact_bundle_invalid");
       } else {
-        const jobSlug = makeJobSlug(
+        const jobSlug = `${SOURCE}_${makeJobSlug(
           {
             title:      bundle.job.title,
             company:    bundle.job.company.name,
             posted_at:  bundle.job.meta.posted_at,
           },
           jobId,
-        );
+        )}`;
         const runDir = path.join(repoRoot, "output", "applications", runFolderName);
         const jobFolderAbs = path.join(runDir, jobSlug);
 
